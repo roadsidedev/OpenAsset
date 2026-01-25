@@ -1,5 +1,9 @@
 import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-chai-matchers";
+import "@typechain/hardhat";
+import "hardhat-gas-reporter";
+import "solidity-coverage";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -18,7 +22,6 @@ const config: HardhatUserConfig = {
     hardhat: {
       chainId: 31337,
     },
-    // Add other networks here (sepolia, base-sepolia, etc.)
   },
   paths: {
     sources: "./src",

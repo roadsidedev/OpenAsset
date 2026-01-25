@@ -35,7 +35,7 @@ export class MarketController extends BaseController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       const market = await this.service.getMarketById(id);
       if (!market) {
         res.status(404).json({ success: false, error: 'Market not found' });

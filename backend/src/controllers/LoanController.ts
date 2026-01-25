@@ -45,7 +45,7 @@ export class LoanController extends BaseController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       const loan = await this.service.getLoanById(id);
       if (!loan) {
         res.status(404).json({ success: false, error: 'Loan not found' });
