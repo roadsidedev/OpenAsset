@@ -1,0 +1,184 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// User preferences and profile
+model User {
+    address        String   @id
+    email          String?
+    emailVerified  Boolean  @default(false)
+    sms            String?
+    smsVerified    Boolean  @default(false)
+    pushEnabled    Boolean  @default(false)
+    emailAllAlerts Boolean  @default(false)
+    createdAt      DateTime @default(now())
+    updatedAt      DateTime @updatedAt
+
+    loans   Loan[]
+    markets Market[] @relation("LPMarkets")
+    alerts  Alert[]
+
+    @@map("users")
+}
+
+// Lending Market configuration and state
+model Market {
+    id              String    @id @default(uuid())
+    address         String    @unique // Contract address
+    lpAddress       String
+    collateralAsset String // Address of collateral token
+    assetType       AssetType
+
+    // Terms
+    ltvBasisPoints   Int
+    aprBasisPoints   Int
+    durationSeconds  Int
+    gracePeriodHours Int
+
+    // Risk Controls
+    enableHealthFactor    Boolean
+    healthFactorThreshold Int?
+
+    // Configuration
+    oracleType        OracleType
+    primaryOracle     String
+    twapPeriodSeconds Int
+
+    // Circuit Breaker
+    circuitBreakerEnabled Boolean
+    pauseThresholdBps     Int?
+    lookbackPeriodSeconds Int?
+    resumeThresholdBps    Int?
+    cooldownSeconds       Int?
+
+    // State
+    status             MarketStatus @default(ACTIVE)
+    pausedAt           DateTime?
+    totalLiquidity     String       @default("0") // Store as string for BigInt
+    availableLiquidity String       @default("0")
+    totalBorrowed      String       @default("0")
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    owner        User           @relation("LPMarkets", fields: [lpAddress], references: [address])
+    loans        Loan[]
+    priceHistory PriceHistory[]
+
+    @@index([lpAddress])
+    @@index([collateralAsset])
+    @@index([status])
+    @@map("markets")
+}
+
+// Individual Loans
+model Loan {
+    id              String @id @default(uuid())
+    contractLoanId  String // ID on smart contract
+    marketAddress   String
+    borrowerAddress String
+
+    // Amounts
+    collateralAmount String  @default("0")
+    tokenId          String? // For NFTs
+    principal        String  @default("0")
+    repaidAmount     String?
+
+    // Timing
+    startTime  DateTime
+    expiryTime DateTime
+
+    // Status
+    status LoanStatus @default(ACTIVE)
+
+    // Health (Updated via monitoring service)
+    healthFactor    Float?
+    lastHealthCheck DateTime?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    market   Market  @relation(fields: [marketAddress], references: [address])
+    borrower User    @relation(fields: [borrowerAddress], references: [address])
+    alerts   Alert[]
+
+    @@unique([marketAddress, contractLoanId])
+    @@index([borrowerAddress])
+    @@index([status])
+    @@map("loans")
+}
+
+// Historical Prices for Volatility/Circuit Breaker
+model PriceHistory {
+    id            String   @id @default(uuid())
+    marketAddress String
+    price         String // Stored as string to preserve precision
+    source        String // "TWAP", "SPOT"
+    timestamp     DateTime @default(now())
+
+    market Market @relation(fields: [marketAddress], references: [address])
+
+    @@index([marketAddress, timestamp])
+    @@map("price_history")
+}
+
+// Notification Logs
+model Alert {
+    id      String     @id @default(uuid())
+    userId  String
+    loanId  String?
+    type    AlertType
+    level   AlertLevel
+    message String
+    sentVia String[] // ["email", "sms", "push"]
+    sentAt  DateTime   @default(now())
+
+    user User  @relation(fields: [userId], references: [address])
+    loan Loan? @relation(fields: [loanId], references: [id])
+
+    @@index([userId])
+    @@map("alerts")
+}
+
+enum AssetType {
+    ERC20
+    ERC721
+    ERC1155
+}
+
+enum OracleType {
+    UNISWAP_V3_TWAP
+    CHAINLINK
+    MANUAL
+}
+
+enum MarketStatus {
+    ACTIVE
+    PAUSED_VOLATILITY
+    PAUSED_MANUAL
+}
+
+enum LoanStatus {
+    ACTIVE
+    REPAID
+    LIQUIDATED
+    GRACE_PERIOD
+}
+
+enum AlertType {
+    HEALTH_FACTOR
+    LIQUIDATION_RISK
+    MARKET_PAUSED
+    LOAN_EXPIRING
+}
+
+enum AlertLevel {
+    WATCH
+    WARNING
+    CRITICAL
+}
