@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 
 export const getNonce = async (req: Request, res: Response) => {
   try {
-    const { address } = req.params;
+    const address = req.params.address as string;
     if (!address) {
       res.status(400).json({ error: 'Address required' });
       return;
@@ -31,7 +31,8 @@ export const getNonce = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { address, signature } = req.body;
+    const address = req.body.address as string;
+    const { signature } = req.body;
 
     if (!address || !signature) {
       res.status(400).json({ error: 'Address and signature required' });

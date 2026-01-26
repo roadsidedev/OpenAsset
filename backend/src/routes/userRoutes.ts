@@ -2,13 +2,13 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import {
   getUser,
-  getNonce,
   updateUser,
   requestEmailVerification,
   confirmEmailVerification,
   requestSmsVerification,
   confirmSmsVerification,
 } from '../controllers/UserController';
+import { getNonce } from '../controllers/AuthController';
 
 const router = Router();
 
