@@ -1,4 +1,5 @@
-import app, { logger } from './app';
+import app from './app';
+import { logger } from './utils/logger';
 import { config } from './config/unifiedConfig';
 
 const server = app.listen(config.port, () => {

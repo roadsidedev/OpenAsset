@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { ZodError } from 'zod';
-import { logger } from '../app';
+import { logger } from '../utils/logger';
 
 export abstract class BaseController {
   protected handleSuccess<T>(res: Response, data: T, statusCode = 200): void {

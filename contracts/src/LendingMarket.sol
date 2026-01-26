@@ -123,6 +123,16 @@ contract LendingMarket is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
+     * @notice Calculate total debt (Principal + Interest)
+     */
+    function calculateDebt(uint256 loanId) public view returns (uint256) {
+        Loan memory loan = loans[loanId];
+        // MVP: Flat interest fee based on rate BPS (e.g. 10% flat fee)
+        uint256 interest = (loan.principalAmount * interestRateBps) / 10000;
+        return loan.principalAmount + interest;
+    }
+
+    /**
      * @notice Repay loan and reclaim collateral
      */
     function repayLoan(uint256 loanId) external nonReentrant {
@@ -130,12 +140,7 @@ contract LendingMarket is ReentrancyGuard, Ownable, Pausable {
         require(loan.active, "Loan not active");
         require(block.timestamp <= loan.expiryTime, "Loan expired");
         
-        // Calculate repayment amount (simplified interest for MVP: fixed rate for duration)
-        // Interest = Principal * Rate * (Duration / Year)
-        // Here assuming simplified flat fee for the period or per-second.
-        // Let's implement full repayment: Principal + Interest
-        uint256 interest = (loan.principalAmount * interestRateBps) / 10000;
-        uint256 totalRepayment = loan.principalAmount + interest;
+        uint256 totalRepayment = calculateDebt(loanId);
 
         // EFFECTS
         loan.active = false;
@@ -164,5 +169,69 @@ contract LendingMarket is ReentrancyGuard, Ownable, Pausable {
     function emergencyWithdrawLiquidity(uint256 amount) external onlyOwner nonReentrant {
         require(amount <= loanAsset.balanceOf(address(this)), "Insufficient balance");
         loanAsset.safeTransfer(msg.sender, amount);
+    }
+
+    /**
+     * @notice Withdraw available liquidity (LP only)
+     */
+    function withdrawLiquidity(uint256 amount) external onlyOwner nonReentrant {
+        require(amount <= loanAsset.balanceOf(address(this)), "Insufficient liquidity");
+        loanAsset.safeTransfer(msg.sender, amount);
+        emit LiquidityWithdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @notice Check if a loan is liquidatable
+     */
+    function isLiquidatable(uint256 loanId) public view returns (bool) {
+        Loan memory loan = loans[loanId];
+        if (!loan.active) return false;
+
+        // Condition 1: Expired
+        if (block.timestamp > loan.expiryTime) return true;
+
+        // Condition 2: Undercollateralized (Health Factor < 1)
+        // Collateral Value < Principal
+        uint256 price = oracle.getPrice(address(collateralAsset));
+        uint256 collateralValue = (loan.collateralAmount * price) / 1e18;
+        
+        // Simple check: if value drops below principal (or some threshold)
+        // For MVP, strictly below principal means bad debt risk
+        if (collateralValue < loan.principalAmount) return true;
+
+        return false;
+    }
+
+    /**
+     * @notice Liquidate a loan (Gradual Liquidation)
+     * @dev Seizes only necessary collateral + penalty, returns surplus to borrower
+     */
+    function liquidateLoan(uint256 loanId) external nonReentrant whenNotPaused {
+        require(isLiquidatable(loanId), "Loan not liquidatable");
+        
+        Loan storage loan = loans[loanId];
+        loan.active = false;
+
+        uint256 totalDebt = calculateDebt(loanId);
+        // 5% Liquidation Penalty
+        uint256 penalty = (totalDebt * 500) / 10000; 
+        uint256 totalOwedValue = totalDebt + penalty;
+
+        uint256 price = oracle.getPrice(address(collateralAsset));
+        
+        // Calculate collateral needed: (TotalOwed / Price) * 1e18
+        // e.g. Owed $100, Price $10 -> 10 Tokens
+        uint256 collateralToSeize = (totalOwedValue * 1e18) / price;
+
+        if (collateralToSeize >= loan.collateralAmount) {
+            // Seize all (Underwater or exact)
+            collateralAsset.safeTransfer(owner(), loan.collateralAmount);
+        } else {
+            // Gradual: Seize needed + penalty, return rest
+            collateralAsset.safeTransfer(owner(), collateralToSeize);
+            collateralAsset.safeTransfer(loan.borrower, loan.collateralAmount - collateralToSeize);
+        }
+
+        emit Liquidated(loanId, msg.sender);
     }
 }

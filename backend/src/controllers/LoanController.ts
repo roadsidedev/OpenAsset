@@ -17,17 +17,7 @@ export class LoanController extends BaseController {
   create = async (req: Request, res: Response): Promise<void> => {
     try {
       const validatedData = createLoanSchema.parse(req.body);
-      const loan = await this.service.createLoan({
-        ...validatedData,
-        startTime: new Date(validatedData.startTime),
-        expiryTime: new Date(validatedData.expiryTime),
-        // Ensure relations are connected properly if needed, usually simplified here
-        market: { connect: { address: validatedData.marketAddress } },
-        borrower: { connectOrCreate: { 
-            where: { address: validatedData.borrowerAddress }, 
-            create: { address: validatedData.borrowerAddress } 
-        } }  
-      });
+      const loan = await this.service.createLoan(validatedData);
       this.handleSuccess(res, loan, 201);
     } catch (error) {
       this.handleError(error, res, 'LoanController.create');
