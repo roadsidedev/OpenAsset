@@ -1,0 +1,385 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.20;
+
+import "forge-std/Test.sol";
+import "../../contracts/NewContracts/MarketFactory.sol";
+import "../../contracts/NewContracts/LendingMarket.sol";
+import "../../contracts/NewContracts/LoanContract.sol";
+import "../../contracts/NewContracts/NFTOracle.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+
+/**
+ * @title LendingLifecycleTest
+ * @notice Comprehensive integration tests for Red Chips lending protocol
+ * @dev Tests full lifecycle: market creation → deposit → borrow → repay/liquidate
+ */
+contract LendingLifecycleTest is Test {
+    
+    // ============ Contracts ============
+    
+    MarketFactory factory;
+    LoanContract loanImplementation;
+    NFTOracle nftOracle;
+    USDC usdcToken;
+    MockERC20 collateralToken;
+    MockERC721 nftToken;
+    
+    // ============ Actors ============
+    
+    address admin = address(0x1);
+    address treasury = address(0x2);
+    address lpProvider = address(0x3);
+    address borrower = address(0x4);
+    address liquidator = address(0x5);
+    
+    // ============ Constants ============
+    
+    uint256 constant INITIAL_LIQUIDITY = 10_000e6; // 10k USDC
+    uint256 constant LTV_BPS = 7500; // 75%
+    uint256 constant APR_BPS = 1000; // 10%
+    uint256 constant HEALTH_FACTOR = 12000; // 120%
+    
+    // ============ Setup ============
+    
+    function setUp() public {
+        vm.startPrank(admin);
+        
+        // Deploy tokens
+        usdcToken = new USDC();
+        collateralToken = new MockERC20("Collateral", "COL", 18);
+        nftToken = new MockERC721("NFT Collection", "NFT");
+        
+        // Deploy contracts
+        loanImplementation = new LoanContract();
+        factory = new MarketFactory(admin, treasury, address(loanImplementation));
+        nftOracle = new NFTOracle(admin, address(0)); // Mock chainlink feed
+        
+        // Whitelist USDC (6 decimals)
+        factory.addStablecoin(address(usdcToken), 6);
+        
+        // Setup NFT oracle
+        nftOracle.addCollection(address(nftToken));
+        nftOracle.authorizeUpdater(admin);
+        
+        vm.stopPrank();
+        
+        // Fund actors
+        usdcToken.mint(lpProvider, 100_000e6);
+        usdcToken.mint(borrower, 10_000e6);
+        usdcToken.mint(liquidator, 50_000e6);
+        collateralToken.mint(borrower, 1000e18);
+    }
+    
+    // ============ Test 1: Full Loan Lifecycle - ERC20 Collateral ============
+    
+    function test_FullLifecycle_ERC20_Success() public {
+        // 1. LP creates market
+        vm.startPrank(lpProvider);
+        usdcToken.approve(address(factory), INITIAL_LIQUIDITY);
+        
+        address market = factory.createMarket(
+            address(collateralToken),
+            address(usdcToken),
+            ILendingMarket.AssetType.ERC20,
+            OracleType.CHAINLINK, // Mock oracle
+            address(0x123), // Mock price feed
+            address(0),
+            LTV_BPS,
+            APR_BPS,
+            30 days,
+            INITIAL_LIQUIDITY
+        );
+        vm.stopPrank();
+        
+        assertGt(market, address(0), "Market not created");
+        
+        LendingMarket lendingMarket = LendingMarket(market);
+        
+        // 2. Borrower requests loan
+        vm.startPrank(borrower);
+        uint256 collateralAmount = 100e18;
+        collateralToken.approve(market, collateralAmount);
+        
+        address loanContract = lendingMarket.requestLoan(
+            collateralAmount,
+            0, // tokenId (not used for ERC20)
+            0  // erc1155Amount (not used)
+        );
+        vm.stopPrank();
+        
+        assertGt(loanContract, address(0), "Loan not created");
+        
+        LoanContract loan = LoanContract(loanContract);
+        
+        // Verify loan details
+        (
+            address _borrower,
+            uint256 principal,
+            uint256 interestAmount,
+            ,
+            ,
+            ,
+            uint256 expiryTime,
+            ILoanContract.LoanStatus status,
+            uint256 healthFactor
+        ) = loan.getLoanDetails();
+        
+        assertEq(_borrower, borrower, "Wrong borrower");
+        assertGt(principal, 0, "No principal");
+        assertGt(interestAmount, 0, "No interest");
+        assertEq(uint(status), uint(ILoanContract.LoanStatus.ACTIVE), "Not active");
+        assertGt(healthFactor, HEALTH_FACTOR, "Unhealthy loan");
+        
+        // 3. Borrower repays loan
+        vm.startPrank(borrower);
+        uint256 totalRepayment = principal + interestAmount;
+        usdcToken.approve(address(loan), totalRepayment);
+        
+        loan.repay();
+        vm.stopPrank();
+        
+        // Verify loan repaid
+        (, , , , , , , ILoanContract.LoanStatus newStatus, ) = loan.getLoanDetails();
+        assertEq(uint(newStatus), uint(ILoanContract.LoanStatus.REPAID), "Not repaid");
+        
+        // Verify collateral returned
+        assertEq(collateralToken.balanceOf(borrower), 1000e18, "Collateral not returned");
+    }
+    
+    // ============ Test 2: Liquidation - Underwater Loan ============
+    
+    function test_Liquidation_UnderwaterLoan() public {
+        // Setup market
+        vm.startPrank(lpProvider);
+        usdcToken.approve(address(factory), INITIAL_LIQUIDITY);
+        
+        address market = factory.createMarket(
+            address(collateralToken),
+            address(usdcToken),
+            ILendingMarket.AssetType.ERC20,
+            OracleType.CHAINLINK,
+            address(0x123),
+            address(0),
+            LTV_BPS,
+            APR_BPS,
+            30 days,
+            INITIAL_LIQUIDITY
+        );
+        vm.stopPrank();
+        
+        LendingMarket lendingMarket = LendingMarket(market);
+        
+        // Create loan
+        vm.startPrank(borrower);
+        uint256 collateralAmount = 100e18;
+        collateralToken.approve(market, collateralAmount);
+        address loanContract = lendingMarket.requestLoan(collateralAmount, 0, 0);
+        vm.stopPrank();
+        
+        LoanContract loan = LoanContract(loanContract);
+        
+        // Simulate price drop (oracle would return lower price)
+        // For this test, we'll expire the loan instead
+        vm.warp(block.timestamp + 31 days);
+        
+        // Verify loan is liquidatable
+        assertTrue(loan.isLiquidatable(), "Loan not liquidatable");
+        
+        // Liquidator liquidates
+        vm.startPrank(liquidator);
+        (uint256 principal, uint256 interestAmount, , , , , , , ) = loan.getLoanDetails();
+        uint256 totalDebt = principal + interestAmount;
+        
+        usdcToken.approve(address(loan), totalDebt);
+        loan.liquidate();
+        vm.stopPrank();
+        
+        // Verify liquidation
+        (, , , , , , , ILoanContract.LoanStatus status, ) = loan.getLoanDetails();
+        assertEq(uint(status), uint(ILoanContract.LoanStatus.LIQUIDATED), "Not liquidated");
+        
+        // Verify liquidator received collateral
+        assertGt(collateralToken.balanceOf(liquidator), 0, "No collateral seized");
+    }
+    
+    // ============ Test 3: NFT Collateral Loan ============
+    
+    function test_NFTLoan_Success() public {
+        // Update NFT floor price
+        vm.prank(admin);
+        nftOracle.updatePrice(address(nftToken), 5 ether, 100 ether, 10);
+        
+        // Create NFT market
+        vm.startPrank(lpProvider);
+        usdcToken.approve(address(factory), INITIAL_LIQUIDITY);
+        
+        address market = factory.createMarket(
+            address(nftToken),
+            address(usdcToken),
+            ILendingMarket.AssetType.ERC721,
+            OracleType.NFT_ORACLE,
+            address(nftOracle),
+            address(nftOracle),
+            LTV_BPS,
+            APR_BPS,
+            30 days,
+            INITIAL_LIQUIDITY
+        );
+        vm.stopPrank();
+        
+        LendingMarket lendingMarket = LendingMarket(market);
+        
+        // Mint NFT to borrower
+        vm.prank(address(nftToken));
+        nftToken.mint(borrower, 1);
+        
+        // Borrower requests NFT loan
+        vm.startPrank(borrower);
+        nftToken.approve(market, 1);
+        
+        address loanContract = lendingMarket.requestLoan(
+            0,   // collateralAmount (not used for NFT)
+            1,   // tokenId
+            0    // erc1155Amount
+        );
+        vm.stopPrank();
+        
+        assertGt(loanContract, address(0), "NFT loan not created");
+        
+        // Verify NFT escrowed
+        assertEq(nftToken.ownerOf(1), loanContract, "NFT not escrowed");
+    }
+    
+    // ============ Test 4: Circuit Breaker Trigger ============
+    
+    function test_CircuitBreaker_PausesOnVolatility() public {
+        // Setup market
+        vm.startPrank(lpProvider);
+        usdcToken.approve(address(factory), INITIAL_LIQUIDITY);
+        
+        address market = factory.createMarket(
+            address(collateralToken),
+            address(usdcToken),
+            ILendingMarket.AssetType.ERC20,
+            OracleType.CHAINLINK,
+            address(0x123),
+            address(0),
+            LTV_BPS,
+            APR_BPS,
+            30 days,
+            INITIAL_LIQUIDITY
+        );
+        vm.stopPrank();
+        
+        LendingMarket lendingMarket = LendingMarket(market);
+        
+        // Manually trigger circuit breaker
+        vm.prank(lpProvider); // Market owner
+        lendingMarket.triggerCircuitBreaker();
+        
+        assertTrue(lendingMarket.isCircuitBreakerTriggered(), "CB not triggered");
+        
+        // Try to request loan (should fail)
+        vm.startPrank(borrower);
+        collateralToken.approve(market, 100e18);
+        
+        vm.expectRevert();
+        lendingMarket.requestLoan(100e18, 0, 0);
+        vm.stopPrank();
+    }
+    
+    // ============ Test 5: Multiple LPs ============
+    
+    function test_MultipleLPs_SharesCalculation() public {
+        address lp2 = address(0x6);
+        usdcToken.mint(lp2, 50_000e6);
+        
+        // LP1 creates market with 10k
+        vm.startPrank(lpProvider);
+        usdcToken.approve(address(factory), INITIAL_LIQUIDITY);
+        
+        address market = factory.createMarket(
+            address(collateralToken),
+            address(usdcToken),
+            ILendingMarket.AssetType.ERC20,
+            OracleType.CHAINLINK,
+            address(0x123),
+            address(0),
+            LTV_BPS,
+            APR_BPS,
+            30 days,
+            INITIAL_LIQUIDITY
+        );
+        vm.stopPrank();
+        
+        LendingMarket lendingMarket = LendingMarket(market);
+        
+        // LP2 deposits 20k
+        vm.startPrank(lp2);
+        usdcToken.approve(market, 20_000e6);
+        uint256 shares2 = lendingMarket.depositLiquidity(20_000e6);
+        vm.stopPrank();
+        
+        assertGt(shares2, 0, "No shares minted");
+        
+        // Create loan
+        vm.startPrank(borrower);
+        collateralToken.approve(market, 100e18);
+        address loanContract = lendingMarket.requestLoan(100e18, 0, 0);
+        vm.stopPrank();
+        
+        // Repay loan with interest
+        vm.startPrank(borrower);
+        LoanContract loan = LoanContract(loanContract);
+        (uint256 principal, uint256 interestAmount, , , , , , , ) = loan.getLoanDetails();
+        
+        usdcToken.approve(address(loan), principal + interestAmount);
+        loan.repay();
+        vm.stopPrank();
+        
+        // LP2 withdraws (should have share of interest)
+        vm.prank(lp2);
+        uint256 withdrawn = lendingMarket.withdrawLiquidity(shares2);
+        
+        assertGt(withdrawn, 20_000e6, "No interest earned");
+    }
+}
+
+// ============ Mock Contracts ============
+
+contract USDC is ERC20 {
+    constructor() ERC20("USD Coin", "USDC") {}
+    
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
+    
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+contract MockERC20 is ERC20 {
+    uint8 private _decimals;
+    
+    constructor(string memory name, string memory symbol, uint8 decimals_) ERC20(name, symbol) {
+        _decimals = decimals_;
+    }
+    
+    function decimals() public view override returns (uint8) {
+        return _decimals;
+    }
+    
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+contract MockERC721 is ERC721 {
+    constructor(string memory name, string memory symbol) ERC721(name, symbol) {}
+    
+    function mint(address to, uint256 tokenId) external {
+        _mint(to, tokenId);
+    }
+}

@@ -1,11 +1,30 @@
 {
-  "name": "contracts",
+  "name": "red-chips-contracts",
   "version": "1.0.0",
+  "description": "Red Chips Protocol - Smart Contracts",
   "main": "index.js",
   "scripts": {
-    "test": "hardhat test"
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    
+    "verify:sepolia": "hardhat run scripts/verify.ts --network sepolia",
+    "verify:base-sepolia": "hardhat run scripts/verify.ts --network baseSepolia",
+    
+    "create-market:sepolia": "hardhat run scripts/create-test-market.ts --network sepolia",
+    "create-market:base-sepolia": "hardhat run scripts/create-test-market.ts --network baseSepolia",
+    
+    "node": "hardhat node",
+    "clean": "hardhat clean && rimraf ./cache ./artifacts ./typechain-types",
+    "typechain": "hardhat typechain"
   },
   "devDependencies": {
+    "@chainlink/contracts": "^1.1.0",
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
@@ -16,14 +35,20 @@
     "@types/chai": "^4.2.0",
     "@types/mocha": "^10.0.0",
     "@types/node": "^18.0.0",
+    "@uniswap/v3-core": "^1.0.1",
+    "@uniswap/v3-periphery": "^1.4.4",
     "chai": "^4.2.0",
     "dotenv": "^16.0.0",
     "ethers": "^6.4.0",
     "hardhat": "^2.19.0",
     "hardhat-gas-reporter": "^1.0.8",
+    "rimraf": "^5.0.0",
     "solidity-coverage": "^0.8.0",
     "ts-node": "^10.9.1",
     "typechain": "^8.3.0",
     "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

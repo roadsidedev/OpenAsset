@@ -1,0 +1,179 @@
+type MarketFactory @entity {
+  id: ID! # Factory contract address
+  owner: Bytes!
+  treasury: Bytes!
+  totalMarketsCreated: BigInt!
+  totalFeesCollected: BigInt!
+  activeMarkets: [Market!]! @derivedFrom(field: "factory")
+  createdAt: BigInt!
+}
+
+type Market @entity {
+  id: ID! # Market contract address
+  factory: MarketFactory!
+  owner: Bytes!
+  collateralAsset: Bytes!
+  loanAsset: Bytes!
+  assetType: AssetType!
+  oracleType: OracleType!
+
+  # Market parameters
+  ltvBps: BigInt!
+  aprBps: BigInt!
+  durationSeconds: BigInt!
+  healthFactorThreshold: BigInt!
+
+  # Liquidity stats
+  totalLiquidity: BigInt!
+  reservedLiquidity: BigInt!
+  availableLiquidity: BigInt!
+  totalShares: BigInt!
+
+  # Computed stats
+  utilizationRate: BigDecimal! # reservedLiquidity / totalLiquidity
+  totalVolume: BigInt! # Sum of all loan principals
+  totalInterestEarned: BigInt!
+
+  # State
+  active: Boolean!
+  circuitBreakerTriggered: Boolean!
+  createdAt: BigInt!
+  updatedAt: BigInt!
+
+  # Relationships
+  loans: [Loan!]! @derivedFrom(field: "market")
+  liquidityProviders: [LiquidityProvider!]! @derivedFrom(field: "market")
+  liquidityEvents: [LiquidityEvent!]! @derivedFrom(field: "market")
+}
+
+type Loan @entity {
+  id: ID! # LoanContract address
+  market: Market!
+  borrower: User!
+
+  # Loan details
+  principal: BigInt!
+  interestAmount: BigInt!
+  collateralAmount: BigInt!
+  tokenId: BigInt # For NFT collateral
+  erc1155Amount: BigInt # For ERC1155
+  # Timestamps
+  startTime: BigInt!
+  expiryTime: BigInt!
+  repaidAt: BigInt
+  liquidatedAt: BigInt
+
+  # State
+  status: LoanStatus!
+  healthFactor: BigDecimal!
+
+  # Relationships
+  liquidation: Liquidation @derivedFrom(field: "loan")
+}
+
+type Liquidation @entity {
+  id: ID! # Transaction hash + log index
+  loan: Loan!
+  liquidator: User!
+
+  collateralSeized: BigInt!
+  debtRecovered: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+type User @entity {
+  id: ID! # User address
+  # Activity stats
+  totalBorrowed: BigInt!
+  totalRepaid: BigInt!
+  totalLiquidated: BigInt!
+  activeLoanCount: Int!
+
+  # LP stats
+  totalDeposited: BigInt!
+  totalWithdrawn: BigInt!
+  totalInterestEarned: BigInt!
+
+  # Relationships
+  loans: [Loan!]! @derivedFrom(field: "borrower")
+  liquidations: [Liquidation!]! @derivedFrom(field: "liquidator")
+  liquidityPositions: [LiquidityProvider!]! @derivedFrom(field: "user")
+}
+
+type LiquidityProvider @entity {
+  id: ID! # User address + Market address
+  user: User!
+  market: Market!
+
+  shares: BigInt!
+  deposited: BigInt!
+  withdrawn: BigInt!
+  interestEarned: BigInt!
+
+  firstDepositAt: BigInt!
+  lastActionAt: BigInt!
+}
+
+type LiquidityEvent @entity {
+  id: ID! # Transaction hash + log index
+  market: Market!
+  provider: User!
+
+  type: LiquidityEventType!
+  amount: BigInt!
+  shares: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+type FactoryStats @entity(immutable: false) {
+  id: ID! # "FACTORY_STATS" singleton
+  totalMarketsCreated: BigInt!
+  totalActiveMarkets: BigInt!
+  totalLoansCreated: BigInt!
+  totalLoansRepaid: BigInt!
+  totalLoansLiquidated: BigInt!
+
+  totalVolumeUSD: BigInt!
+  totalLiquidityUSD: BigInt!
+  totalFeesCollectedUSD: BigInt!
+
+  updatedAt: BigInt!
+}
+
+type CircuitBreakerEvent @entity {
+  id: ID! # Transaction hash + log index
+  market: Market!
+
+  volatility: BigInt!
+  triggered: Boolean!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+# ============ Enums ============
+
+enum AssetType {
+  ERC20
+  ERC721
+  ERC1155
+}
+
+enum OracleType {
+  UNISWAP_V3_TWAP
+  CHAINLINK
+  NFT_ORACLE
+}
+
+enum LoanStatus {
+  ACTIVE
+  REPAID
+  LIQUIDATED
+  DEFAULTED
+}
+
+enum LiquidityEventType {
+  DEPOSIT
+  WITHDRAW
+}
