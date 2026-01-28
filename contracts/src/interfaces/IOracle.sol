@@ -3,22 +3,68 @@ pragma solidity 0.8.20;
 
 /**
  * @title IOracle
- * @notice Generic oracle interface for price feeds
+ * @notice Unified oracle interface for all oracle types (Chainlink, Uniswap V3, etc.)
+ * @dev Implemented by ChainlinkOracle, UniswapV3TWAPWrapper, and OracleRouter
+ * 
+ * All prices must be returned with 18 decimals (1e18 = $1.00)
  */
 interface IOracle {
     /**
-     * @notice Get current price for an asset
-     * @param asset Address of the asset
-     * @return price Price in USD with 18 decimals (1e18 = $1)
+     * @notice Get the current price of an asset
+     * @param asset Address of the asset to price
+     * @return price Price in USD with 18 decimals (1e18 = $1.00)
+     * @return decimals Number of decimals in the price (always 18)
      */
-    function getPrice(address asset) external view returns (uint256 price);
+    function getPrice(address asset) external view returns (uint256 price, uint8 decimals);
     
     /**
-     * @notice Get timestamp of last price update
+     * @notice Get the timestamp of the last price update
      * @param asset Address of the asset
-     * @return timestamp Last update timestamp
+     * @return timestamp Unix timestamp of last update
      */
     function getLastUpdate(address asset) external view returns (uint256 timestamp);
+    
+    /**
+     * @notice Check if the oracle supports a given asset
+     * @param asset Address of the asset
+     * @return supported True if oracle can price this asset
+     */
+    function supportsAsset(address asset) external view returns (bool supported);
+    
+    /**
+     * @notice Get the type of oracle (for diagnostics and routing)
+     * @return oracleType String identifier (e.g., "CHAINLINK", "UNISWAP_V3_TWAP", "ORACLE_ROUTER")
+     */
+    function oracleType() external pure returns (string memory oracleType);
+}
+
+/**
+ * @title IOracleRegistry
+ * @notice Registry interface for managing multiple oracle sources
+ * @dev Used by OracleRouter and market factories
+ */
+interface IOracleRegistry {
+    /**
+     * @notice Register an oracle for a specific asset
+     * @param asset Asset address
+     * @param oracle Oracle contract address
+     * @param isPrimary Whether this is the primary oracle for the asset
+     */
+    function registerOracle(address asset, address oracle, bool isPrimary) external;
+    
+    /**
+     * @notice Get the primary oracle for an asset
+     * @param asset Asset address
+     * @return oracle Primary oracle address
+     */
+    function getPrimaryOracle(address asset) external view returns (address oracle);
+    
+    /**
+     * @notice Get all oracles for an asset (primary + fallbacks)
+     * @param asset Asset address
+     * @return oracles Array of oracle addresses (ordered by priority)
+     */
+    function getOracles(address asset) external view returns (address[] memory oracles);
 }
 
 /**
@@ -56,169 +102,15 @@ interface INFTOracle {
     function isPriceStale(address collection) external view returns (bool isStale);
 }
 
-/**
- * @title ILendingMarket
- * @notice Interface for isolated lending market
- */
-interface ILendingMarket {
-    enum AssetType { ERC20, ERC721, ERC1155 }
-    
-    /**
-     * @notice Deposit liquidity to the market
-     * @param amount Amount of loan asset to deposit
-     * @return shares LP shares minted
-     */
-    function depositLiquidity(uint256 amount) external returns (uint256 shares);
-    
-    /**
-     * @notice Withdraw liquidity from the market
-     * @param shares Amount of LP shares to burn
-     * @return amount Loan asset withdrawn
-     */
-    function withdrawLiquidity(uint256 shares) external returns (uint256 amount);
-    
-    /**
-     * @notice Request a loan by depositing collateral
-     * @param collateralAmount Amount of collateral (for ERC20/ERC1155)
-     * @param tokenId Token ID (for ERC721)
-     * @param erc1155Amount Amount (for ERC1155)
-     * @return loanContract Address of created LoanContract
-     */
-    function requestLoan(
-        uint256 collateralAmount,
-        uint256 tokenId,
-        uint256 erc1155Amount
-    ) external returns (address loanContract);
-    
-    /**
-     * @notice Get available liquidity for new loans
-     * @return available Amount available
-     */
-    function getAvailableLiquidity() external view returns (uint256 available);
-    
-    /**
-     * @notice Check if market is paused by circuit breaker
-     * @return isPaused True if paused due to volatility
-     */
-    function isCircuitBreakerTriggered() external view returns (bool isPaused);
-}
+
 
 /**
- * @title ILoanContract
- * @notice Interface for individual loan escrow contract
- */
-interface ILoanContract {
-    enum LoanStatus { ACTIVE, REPAID, LIQUIDATED, DEFAULTED }
-    
-    /**
-     * @notice Initialize loan contract (called by LendingMarket)
-     * @param borrower_ Borrower address
-     * @param collateralAmount_ Amount of collateral
-     * @param tokenId_ Token ID (for NFT)
-     * @param erc1155Amount_ Amount (for ERC1155)
-     * @param principal_ Loan principal amount
-     * @param interestAmount_ Interest amount
-     * @param expiryTime_ Loan expiry timestamp
-     */
-    function initialize(
-        address borrower_,
-        uint256 collateralAmount_,
-        uint256 tokenId_,
-        uint256 erc1155Amount_,
-        uint256 principal_,
-        uint256 interestAmount_,
-        uint256 expiryTime_
-    ) external;
-    
-    /**
-     * @notice Repay loan and reclaim collateral
-     */
-    function repay() external;
-    
-    /**
-     * @notice Liquidate undercollateralized or expired loan
-     */
-    function liquidate() external;
-    
-    /**
-     * @notice Get current health factor
-     * @return healthFactor Health factor with 18 decimals (1e18 = 100%)
-     */
-    function getHealthFactor() external view returns (uint256 healthFactor);
-    
-    /**
-     * @notice Check if loan can be liquidated
-     * @return canLiquidate True if liquidation is allowed
-     */
-    function isLiquidatable() external view returns (bool canLiquidate);
-    
-    /**
-     * @notice Get loan details
-     */
-    function getLoanDetails() external view returns (
-        address borrower,
-        uint256 principal,
-        uint256 interestAmount,
-        uint256 collateralAmount,
-        uint256 tokenId,
-        uint256 startTime,
-        uint256 expiryTime,
-        LoanStatus status,
-        uint256 healthFactor
-    );
-}
-
-/**
- * @title IMarketFactory
- * @notice Interface for market factory
- */
-interface IMarketFactory {
-    /**
-     * @notice Create a new isolated lending market
-     * @param collateralAsset Collateral token address
-     * @param loanAsset Loan token address (must be whitelisted stablecoin)
-     * @param assetType Type of collateral asset
-     * @param oracleType Type of oracle to use
-     * @param primaryOracle Primary oracle address
-     * @param nftOracle NFT oracle address (for NFT collateral)
-     * @param ltvBps Loan-to-value ratio in basis points
-     * @param aprBps Interest rate in basis points
-     * @param durationSeconds Loan duration
-     * @param initialLiquidity Initial liquidity to deposit
-     * @return market Address of created market
-     */
-    function createMarket(
-        address collateralAsset,
-        address loanAsset,
-        ILendingMarket.AssetType assetType,
-        OracleType oracleType,
-        address primaryOracle,
-        address nftOracle,
-        uint256 ltvBps,
-        uint256 aprBps,
-        uint256 durationSeconds,
-        uint256 initialLiquidity
-    ) external returns (address market);
-    
-    /**
-     * @notice Check if address is a valid market
-     * @param market Address to check
-     * @return isValid True if valid market
-     */
-    function isMarket(address market) external view returns (bool isValid);
-    
-    /**
-     * @notice Get total number of markets
-     * @return count Total markets created
-     */
-    function getMarketCount() external view returns (uint256 count);
-}
-
-/**
- * @notice Oracle type enum
+ * @notice Oracle type enum for market configuration
+ * @dev Used to determine which oracle implementation to use
  */
 enum OracleType {
-    UNISWAP_V3_TWAP,
-    CHAINLINK,
-    NFT_ORACLE
+    UNISWAP_V3_TWAP,    // 0: Uniswap V3 TWAP wrapper
+    CHAINLINK,          // 1: Chainlink price feed
+    NFT_ORACLE,         // 2: NFT-specific oracle
+    ORACLE_ROUTER       // 3: Multi-source oracle router (NEW)
 }

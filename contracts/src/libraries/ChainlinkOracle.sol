@@ -55,7 +55,21 @@ library ChainlinkOracle {
         view 
         returns (bool isValid) 
     {
-        try ChainlinkOracle.getPrice(priceFeed) returns (uint256, uint256) {
+        if (priceFeed == address(0)) return false;
+        
+        AggregatorV3Interface feed = AggregatorV3Interface(priceFeed);
+        
+        try feed.latestRoundData() returns (
+            uint80 roundId,
+            int256 answer,
+            uint256,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        ) {
+            if (answer <= 0) return false;
+            if (updatedAt == 0) return false;
+            if (answeredInRound < roundId) return false;
+            if (block.timestamp - updatedAt > MAX_PRICE_AGE) return false;
             return true;
         } catch {
             return false;

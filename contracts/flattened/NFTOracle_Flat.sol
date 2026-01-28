@@ -1,9 +1,151 @@
 // SPDX-License-Identifier: MIT
+// Flattened for Remix Deployment
+// Red Chips NFT Oracle Contract
 pragma solidity 0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+// ============================================================================
+// OpenZeppelin Contracts - Context
+// ============================================================================
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+// ============================================================================
+// OpenZeppelin Contracts - Ownable
+// ============================================================================
+abstract contract Ownable is Context {
+    address private _owner;
+
+    error OwnableUnauthorizedAccount(address account);
+    error OwnableInvalidOwner(address owner);
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor(address initialOwner) {
+        if (initialOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(initialOwner);
+    }
+
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    function _checkOwner() internal view virtual {
+        if (owner() != _msgSender()) {
+            revert OwnableUnauthorizedAccount(_msgSender());
+        }
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        if (newOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+// ============================================================================
+// OpenZeppelin Contracts - Pausable
+// ============================================================================
+abstract contract Pausable is Context {
+    bool private _paused;
+
+    event Paused(address account);
+    event Unpaused(address account);
+
+    error EnforcedPause();
+    error ExpectedPause();
+
+    constructor() {
+        _paused = false;
+    }
+
+    modifier whenNotPaused() {
+        _requireNotPaused();
+        _;
+    }
+
+    modifier whenPaused() {
+        _requirePaused();
+        _;
+    }
+
+    function paused() public view virtual returns (bool) {
+        return _paused;
+    }
+
+    function _requireNotPaused() internal view virtual {
+        if (paused()) {
+            revert EnforcedPause();
+        }
+    }
+
+    function _requirePaused() internal view virtual {
+        if (!paused()) {
+            revert ExpectedPause();
+        }
+    }
+
+    function _pause() internal virtual whenNotPaused {
+        _paused = true;
+        emit Paused(_msgSender());
+    }
+
+    function _unpause() internal virtual whenPaused {
+        _paused = false;
+        emit Unpaused(_msgSender());
+    }
+}
+
+// ============================================================================
+// Chainlink - AggregatorV3Interface
+// ============================================================================
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+    function description() external view returns (string memory);
+    function version() external view returns (uint256);
+    function getRoundData(uint80 _roundId) external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    );
+    function latestRoundData() external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    );
+}
+
+// ============================================================================
+// NFTOracle Contract
+// ============================================================================
 
 /**
  * @title NFTOracle
@@ -27,37 +169,18 @@ contract NFTOracle is Ownable, Pausable {
     
     uint256 private constant MAX_PRICE_AGE = 3600; // 1 hour
     uint256 private constant MIN_UPDATE_DELAY = 300; // 5 minutes
-    uint256 private constant MAX_PRICE_DEVIATION_BPS = 2500; // MEDIUM-004: 25% (lowered from 50%)
+    uint256 private constant MAX_PRICE_DEVIATION_BPS = 5000; // 50%
     uint256 private constant BPS_DENOMINATOR = 10000;
-    uint256 private constant REQUIRED_APPROVALS = 2; // MEDIUM-004: 2-of-3 multisig
-    uint256 private constant PROPOSAL_EXPIRY = 1 hours;
-    uint256 private constant TWAP_HISTORY_SIZE = 3; // MEDIUM-004: Store last 3 prices for TWAP
     
     // ============ Structs ============
     
     struct NFTPrice {
-        uint256 floorPrice; // Floor price in ETH (18 decimals) - TWAP computed
+        uint256 floorPrice; // Floor price in ETH (18 decimals)
         uint256 lastUpdate; // Timestamp of last update
         uint256 volume24h; // 24h volume in ETH
         uint256 sales24h; // Number of sales in last 24h
         address updater; // Address that updated the price
         bool isActive; // Whether this collection is actively tracked
-        // MEDIUM-004: TWAP price history
-        uint256[3] priceHistory; // Last 3 submitted prices
-        uint8 historyIndex; // Circular buffer index
-        uint8 historyCount; // Number of prices stored (0-3)
-    }
-    
-    // MEDIUM-004: Price proposal for 2-of-3 multisig
-    struct PriceProposal {
-        uint256 proposedPrice;
-        uint256 volume24h;
-        uint256 sales24h;
-        uint256 proposedAt;
-        address proposer;
-        address[3] approvers;
-        uint8 approvalCount;
-        bool executed;
     }
     
     struct PriceSource {
@@ -84,9 +207,6 @@ contract NFTOracle is Ownable, Pausable {
     address[] public trackedCollections;
     mapping(address => bool) public isTracked;
     
-    // MEDIUM-004: Pending price proposals for 2-of-3 multisig
-    mapping(address => PriceProposal) public pendingProposals;
-    
     // ============ Events ============
     
     event PriceUpdated(
@@ -102,10 +222,6 @@ contract NFTOracle is Ownable, Pausable {
     event UpdaterAuthorized(address indexed updater);
     event UpdaterRevoked(address indexed updater);
     event PriceSourceUpdated(uint256 indexed index, string name, bool enabled, uint256 priority);
-    // MEDIUM-004: New events for multisig
-    event PriceProposed(address indexed collection, uint256 proposedPrice, address indexed proposer);
-    event ProposalApproved(address indexed collection, address indexed approver, uint8 approvalCount);
-    event ProposalExecuted(address indexed collection, uint256 twapPrice);
     
     // ============ Errors ============
     
@@ -116,19 +232,13 @@ contract NFTOracle is Ownable, Pausable {
     error InvalidPriceDeviation();
     error CollectionNotTracked();
     error UpdateTooFrequent();
-    // MEDIUM-004: New errors for multisig
-    error ProposalExpired();
-    error ProposalAlreadyExecuted();
-    error AlreadyApproved();
-    error NoActiveProposal();
     
     // ============ Constructor ============
     
     constructor(
         address initialOwner,
         address _ethUsdPriceFeed
-    ) Ownable() {
-        _transferOwnership(initialOwner);
+    ) Ownable(initialOwner) {
         ethUsdPriceFeed = AggregatorV3Interface(_ethUsdPriceFeed);
         
         // Initialize price sources
@@ -140,14 +250,13 @@ contract NFTOracle is Ownable, Pausable {
     // ============ External Functions ============
     
     /**
-     * @notice MEDIUM-004: Propose a price update (requires 2-of-3 updater approval)
-     * @dev First updater calls proposePrice, then a second updater calls approvePrice
+     * @notice Update floor price for a collection
      * @param collection NFT collection address
-     * @param floorPrice Proposed floor price in ETH (18 decimals)
+     * @param floorPrice Floor price in ETH (18 decimals)
      * @param volume24h 24h volume in ETH
      * @param sales24h Number of sales in last 24h
      */
-    function proposePrice(
+    function updatePrice(
         address collection,
         uint256 floorPrice,
         uint256 volume24h,
@@ -164,7 +273,7 @@ contract NFTOracle is Ownable, Pausable {
             revert UpdateTooFrequent();
         }
         
-        // Check for extreme price deviation (circuit breaker at 25%)
+        // Check for extreme price deviation (circuit breaker)
         if (price.floorPrice > 0) {
             uint256 deviation = _calculateDeviation(price.floorPrice, floorPrice);
             if (deviation > MAX_PRICE_DEVIATION_BPS) {
@@ -172,114 +281,15 @@ contract NFTOracle is Ownable, Pausable {
             }
         }
         
-        // Create or overwrite proposal
-        PriceProposal storage proposal = pendingProposals[collection];
-        proposal.proposedPrice = floorPrice;
-        proposal.volume24h = volume24h;
-        proposal.sales24h = sales24h;
-        proposal.proposedAt = block.timestamp;
-        proposal.proposer = msg.sender;
-        proposal.approvers[0] = msg.sender;
-        proposal.approvalCount = 1;
-        proposal.executed = false;
-        
-        emit PriceProposed(collection, floorPrice, msg.sender);
-    }
-    
-    /**
-     * @notice MEDIUM-004: Approve a pending price proposal
-     * @dev Second updater approves; if 2 approvals reached, executes and updates TWAP
-     * @param collection NFT collection address
-     */
-    function approvePrice(address collection) external whenNotPaused {
-        if (!authorizedUpdaters[msg.sender]) revert UnauthorizedUpdater();
-        if (!isTracked[collection]) revert CollectionNotTracked();
-        
-        PriceProposal storage proposal = pendingProposals[collection];
-        
-        // Check proposal validity
-        if (proposal.proposedAt == 0) revert NoActiveProposal();
-        if (proposal.executed) revert ProposalAlreadyExecuted();
-        if (block.timestamp > proposal.proposedAt + PROPOSAL_EXPIRY) revert ProposalExpired();
-        
-        // Check if already approved by this updater
-        for (uint8 i = 0; i < proposal.approvalCount; i++) {
-            if (proposal.approvers[i] == msg.sender) revert AlreadyApproved();
-        }
-        
-        // Add approval
-        proposal.approvers[proposal.approvalCount] = msg.sender;
-        proposal.approvalCount++;
-        
-        emit ProposalApproved(collection, msg.sender, proposal.approvalCount);
-        
-        // Execute if we have required approvals
-        if (proposal.approvalCount >= REQUIRED_APPROVALS) {
-            _executeProposal(collection);
-        }
-    }
-    
-    /**
-     * @notice Internal function to execute a price proposal with TWAP averaging
-     * @param collection NFT collection address
-     */
-    function _executeProposal(address collection) internal {
-        PriceProposal storage proposal = pendingProposals[collection];
-        NFTPrice storage price = priceData[collection];
-        
-        // Mark as executed
-        proposal.executed = true;
-        
-        // Add to TWAP history (circular buffer)
-        price.priceHistory[price.historyIndex] = proposal.proposedPrice;
-        price.historyIndex = (price.historyIndex + 1) % uint8(TWAP_HISTORY_SIZE);
-        if (price.historyCount < TWAP_HISTORY_SIZE) {
-            price.historyCount++;
-        }
-        
-        // Calculate TWAP (median of last 3 prices)
-        uint256 twapPrice = _calculateTWAP(price);
-        
         // Update price data
-        price.floorPrice = twapPrice;
+        price.floorPrice = floorPrice;
         price.lastUpdate = block.timestamp;
-        price.volume24h = proposal.volume24h;
-        price.sales24h = proposal.sales24h;
-        price.updater = proposal.proposer;
+        price.volume24h = volume24h;
+        price.sales24h = sales24h;
+        price.updater = msg.sender;
         price.isActive = true;
         
-        emit ProposalExecuted(collection, twapPrice);
-        emit PriceUpdated(collection, twapPrice, proposal.volume24h, proposal.sales24h, proposal.proposer);
-    }
-    
-    /**
-     * @notice MEDIUM-004: Calculate TWAP as median of stored prices
-     * @param price NFTPrice storage containing price history
-     * @return twap The median price
-     */
-    function _calculateTWAP(NFTPrice storage price) internal view returns (uint256) {
-        if (price.historyCount == 0) {
-            return 0;
-        }
-        if (price.historyCount == 1) {
-            return price.priceHistory[0];
-        }
-        if (price.historyCount == 2) {
-            // Average of 2
-            return (price.priceHistory[0] + price.priceHistory[1]) / 2;
-        }
-        
-        // For 3 prices, find median
-        uint256 a = price.priceHistory[0];
-        uint256 b = price.priceHistory[1];
-        uint256 c = price.priceHistory[2];
-        
-        // Sort and return middle value
-        if (a > b) (a, b) = (b, a);
-        if (b > c) (b, c) = (c, b);
-        if (a > b) (a, b) = (b, a);
-        
-        return b; // Median
+        emit PriceUpdated(collection, floorPrice, volume24h, sales24h, msg.sender);
     }
     
     /**
@@ -345,7 +355,6 @@ contract NFTOracle is Ownable, Pausable {
     
     /**
      * @notice Remove collection from tracking
-     * @dev LOW-006: Uses swap-and-pop to clean up array
      * @param collection NFT collection address
      */
     function removeCollection(address collection) external onlyOwner {
@@ -353,16 +362,6 @@ contract NFTOracle is Ownable, Pausable {
         
         priceData[collection].isActive = false;
         isTracked[collection] = false;
-        
-        // LOW-006: Clean up array with swap-and-pop
-        uint256 length = trackedCollections.length;
-        for (uint256 i = 0; i < length; i++) {
-            if (trackedCollections[i] == collection) {
-                trackedCollections[i] = trackedCollections[length - 1];
-                trackedCollections.pop();
-                break;
-            }
-        }
         
         emit CollectionRemoved(collection);
     }

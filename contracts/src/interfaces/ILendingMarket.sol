@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import "./IMarketFactory.sol";
+import {AssetType} from "./IMarketFactory.sol";
 
 /**
  * @title ILendingMarket
@@ -30,4 +30,6 @@ interface ILendingMarket {
         AssetType assetType,
         uint256 healthFactorThreshold
     );
+    
+    function getCollateralPrice() external view returns (uint256 price);
 }

@@ -9,9 +9,9 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./LendingMarket.sol";
 import "./LoanContract.sol";
-import "./libraries/UniswapV3TWAPOracle.sol";
-import "./libraries/ChainlinkOracle.sol";
+import "./libraries/CircuitBreaker.sol"; // Contains AssetHandler library
 import "./interfaces/IMarketFactory.sol";
+import "./interfaces/IOracle.sol";
 
 /**
  * @title MarketFactory
@@ -90,6 +90,7 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
     // Stats
     uint256 public totalMarketsCreated;
     uint256 public totalFeesCollected;
+    uint256 public activeMarketCount; // LOW-002: Track active count to avoid O(n) loop
     
     // ============ Events ============
     
@@ -128,7 +129,8 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
         address initialOwner,
         address treasury,
         address loanImpl
-    ) Ownable(initialOwner) {
+    ) Ownable() {
+        _transferOwnership(initialOwner);
         if (initialOwner == address(0)) revert InvalidAddress();
         if (treasury == address(0)) revert InvalidAddress();
         if (loanImpl == address(0)) revert InvalidAddress();
@@ -257,6 +259,7 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
         });
         
         totalMarketsCreated++;
+        activeMarketCount++; // LOW-002: Track active market count
         
         // 8. INTERACTIONS: Pull initial liquidity from creator
         IERC20(loanAsset).safeTransferFrom(msg.sender, address(this), initialLiquidity);
@@ -304,7 +307,7 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
         if (!approvedStablecoins[loanAsset]) revert StablecoinNotApproved();
         
         // Validate asset type and collateral contract
-        if (!AssetHandler.validateAsset(assetType, collateralAsset)) {
+        if (!AssetHandler.validateAsset(AssetHandler.AssetType(uint8(assetType)), collateralAsset)) {
             revert InvalidParameter();
         }
         
@@ -327,40 +330,47 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
     
     /**
      * @notice Validate oracle configuration
+     * @dev Supports CHAINLINK, UNISWAP_V3_TWAP, ORACLE_ROUTER, and NFT_ORACLE
      */
     function _validateOracle(
         OracleType oracleType,
-        address primaryOracle,
+        address priceOracle,
         address collateralAsset,
         address loanAsset
     ) internal view {
-        if (primaryOracle == address(0)) revert InvalidAddress();
+        if (priceOracle == address(0)) revert InvalidAddress();
         
         if (oracleType == OracleType.UNISWAP_V3_TWAP) {
-            // Validate Uniswap V3 pool
-            UniswapV3TWAPOracle.TWAPConfig memory config = 
-                UniswapV3TWAPOracle.createTWAPConfig(
-                    primaryOracle,
-                    collateralAsset,
-                    loanAsset,
-                    1800 // 30 min TWAP
-                );
-            
-            // Try to get price
-            try UniswapV3TWAPOracle.getTWAPPrice(config) returns (uint256 price, uint256) {
-                if (price == 0) revert OracleValidationFailed();
-            } catch {
-                revert OracleValidationFailed();
-            }
+            // Validate Uniswap V3 wrapper (now available via wrapper contract)
+            IOracle oracle = IOracle(priceOracle);
+            require(
+                keccak256(abi.encodePacked(oracle.oracleType())) == 
+                keccak256(abi.encodePacked("UNISWAP_V3_TWAP")),
+                "Invalid Uniswap V3 oracle"
+            );
+            require(oracle.supportsAsset(collateralAsset), "Asset not supported by Uniswap oracle");
         } else if (oracleType == OracleType.CHAINLINK) {
-            // Validate Chainlink feed
-            if (!ChainlinkOracle.validatePriceFeed(primaryOracle)) {
-                revert OracleValidationFailed();
-            }
+            // Validate Chainlink oracle wrapper
+            IOracle oracle = IOracle(priceOracle);
+            require(
+                keccak256(abi.encodePacked(oracle.oracleType())) == 
+                keccak256(abi.encodePacked("CHAINLINK")),
+                "Invalid Chainlink oracle"
+            );
+            require(oracle.supportsAsset(collateralAsset), "Asset not supported by Chainlink oracle");
+        } else if (oracleType == OracleType.ORACLE_ROUTER) {
+            // Validate OracleRouter
+            IOracle oracle = IOracle(priceOracle);
+            require(
+                keccak256(abi.encodePacked(oracle.oracleType())) == 
+                keccak256(abi.encodePacked("ORACLE_ROUTER")),
+                "Invalid oracle router"
+            );
+            require(oracle.supportsAsset(collateralAsset), "Asset not configured in router");
         } else if (oracleType == OracleType.NFT_ORACLE) {
-            // NFT oracle validation would go here
-            // For now, just check address is not zero
-            if (primaryOracle == address(0)) revert InvalidOracleConfig();
+            // NFT oracle validation
+            // Just check address is not zero - complex NFT oracle validation deferred
+            if (priceOracle == address(0)) revert InvalidOracleConfig();
         }
     }
     
@@ -434,7 +444,10 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
      */
     function deactivateMarket(address market) external onlyOwner {
         if (!isMarket[market]) revert MarketNotFound();
-        marketInfo[market].active = false;
+        if (marketInfo[market].active) {
+            marketInfo[market].active = false;
+            activeMarketCount--; // LOW-002: Decrement counter
+        }
         emit MarketDeactivated(market);
     }
     
@@ -443,7 +456,10 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
      */
     function reactivateMarket(address market) external onlyOwner {
         if (!isMarket[market]) revert MarketNotFound();
-        marketInfo[market].active = true;
+        if (!marketInfo[market].active) {
+            marketInfo[market].active = true;
+            activeMarketCount++; // LOW-002: Increment counter
+        }
         emit MarketReactivated(market);
     }
     
@@ -527,14 +543,7 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
         uint256 totalActive,
         uint256 totalFees
     ) {
-        // Count active markets
-        uint256 activeCount = 0;
-        for (uint256 i = 0; i < allMarkets.length; i++) {
-            if (marketInfo[allMarkets[i]].active) {
-                activeCount++;
-            }
-        }
-        
-        return (totalMarketsCreated, activeCount, totalFeesCollected);
+        // LOW-002: Use tracked counter instead of O(n) loop
+        return (totalMarketsCreated, activeMarketCount, totalFeesCollected);
     }
 }

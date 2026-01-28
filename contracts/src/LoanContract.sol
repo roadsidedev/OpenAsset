@@ -4,9 +4,10 @@ pragma solidity 0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./libraries/AssetHandler.sol";
+import "./libraries/CircuitBreaker.sol"; // Contains AssetHandler library
 import "./interfaces/ILoanContract.sol";
 import "./interfaces/ILendingMarket.sol";
+import {AssetType} from "./interfaces/IMarketFactory.sol";
 
 /**
  * @title LoanContract
@@ -32,6 +33,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
     uint256 private constant BPS_DENOMINATOR = 10000;
     uint256 private constant ORIGINATION_FEE_BPS = 50; // 0.5%
     uint256 private constant MIN_HEALTH_FACTOR = 1e18; // 1.0 = 100%
+    uint256 private constant GRACE_PERIOD = 1 hours; // MEDIUM-003: Grace period for loan expiry
     
     // ============ Immutable Storage (Set Once via Initialize) ============
     
@@ -42,7 +44,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
     address public protocolTreasury;
     address public oracle;
     
-    AssetHandler.AssetType public assetType;
+    AssetType public assetType;
     LoanStatus public status;
     
     uint256 public collateralAmount;
@@ -136,11 +138,13 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         uint256 principal_,
         uint256 interestAmount_,
         uint256 expiryTime_
-    ) external override onlyLendingMarket {
+    ) external override {
+        // MEDIUM-001: Check initialization FIRST before any other logic
         if (initialized) revert AlreadyInitialized();
         
-        // Get configuration from lending market
+        // Set lendingMarket and validate caller is a valid contract
         lendingMarket = msg.sender;
+        require(msg.sender != address(0), "Invalid lending market");
         
         // This would be passed from lending market via constructor or separate call
         // For minimal proxy, lending market passes these via additional call
@@ -183,8 +187,8 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         // Borrower or anyone can repay
         uint256 totalRepayment = principal + interestAmount;
         
-        // CHECKS
-        if (block.timestamp > expiryTime) revert LoanNotRepayable();
+        // CHECKS - MEDIUM-003: Allow repayment during grace period
+        if (block.timestamp > expiryTime + GRACE_PERIOD) revert LoanNotRepayable();
         
         // Calculate revenue share
         uint256 platformShare = (interestAmount * 1000) / BPS_DENOMINATOR; // 10%
@@ -208,10 +212,10 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         
         // Return collateral LAST (ERC777 hooks cannot reenter now)
         AssetHandler.transferAssetOut(
-            assetType,
+            AssetHandler.AssetType(uint8(assetType)),
             collateralAsset,
             borrower,
-            assetType == AssetHandler.AssetType.ERC721 ? tokenId : collateralAmount,
+            assetType == AssetType.ERC721 ? tokenId : collateralAmount,
             erc1155Amount
         );
         
@@ -236,9 +240,9 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         ILendingMarket(lendingMarket).removeLoan(address(this), principal);
         
         // INTERACTIONS - Asset-specific liquidation (already safe, but now extra secure)
-        if (assetType == AssetHandler.AssetType.ERC20) {
+        if (assetType == AssetType.ERC20) {
             _liquidateERC20(totalDebt, collateralValue);
-        } else if (assetType == AssetHandler.AssetType.ERC721) {
+        } else if (assetType == AssetType.ERC721) {
             _liquidateERC721(totalDebt, collateralValue);
         } else {
             _liquidateERC1155(totalDebt, collateralValue);
@@ -263,9 +267,12 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             // Pull debt repayment from liquidator
             loanToken.safeTransferFrom(msg.sender, address(this), repaymentAmount);
             
-            // Calculate revenue split
+            // Calculate revenue split - LOW-004: Safe calculation
             uint256 platformShare = (interestAmount * 1000) / BPS_DENOMINATOR; // 10%
-            uint256 lpShare = repaymentAmount - principal - platformShare;
+            // Handle underwater case where repayment may not cover principal
+            uint256 lpShare = repaymentAmount > principal + platformShare 
+                ? repaymentAmount - principal - platformShare 
+                : 0;
             
             // Send to lending market and treasury
             loanToken.safeTransfer(lendingMarket, principal + lpShare);
@@ -273,7 +280,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             
             // Transfer all collateral to liquidator
             AssetHandler.transferAssetOut(
-                assetType,
+                AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
                 collateralAmount,
@@ -342,7 +349,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         
         // Transfer NFT to liquidator
         AssetHandler.transferAssetOut(
-            assetType,
+            AssetHandler.AssetType(uint8(assetType)),
             collateralAsset,
             msg.sender,
             tokenId,
@@ -387,7 +394,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             
             // Transfer all collateral to liquidator
             AssetHandler.transferAssetOut(
-                assetType,
+                AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
                 erc1155Amount,
@@ -424,7 +431,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             
             // Transfer seized collateral to liquidator
             AssetHandler.transferAssetOut(
-                assetType,
+                AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
                 totalCollateralSeized,
@@ -434,7 +441,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             // Return surplus to borrower
             if (surplus > 0) {
                 AssetHandler.transferAssetOut(
-                    assetType,
+                    AssetHandler.AssetType(uint8(assetType)),
                     collateralAsset,
                     borrower,
                     surplus,
@@ -517,9 +524,9 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
     function _getCollateralValue() internal view returns (uint256 value) {
         uint256 price = _getCollateralPrice();
         
-        if (assetType == AssetHandler.AssetType.ERC20) {
+        if (assetType == AssetType.ERC20) {
             value = (collateralAmount * price) / 1e18;
-        } else if (assetType == AssetHandler.AssetType.ERC721) {
+        } else if (assetType == AssetType.ERC721) {
             value = price; // NFT floor price in loan asset
         } else {
             value = (erc1155Amount * price) / 1e18;

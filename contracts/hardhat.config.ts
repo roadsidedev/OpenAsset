@@ -16,14 +16,27 @@ const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || "";
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.20",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          viaIR: true, // Enable IR for complex contracts
+        },
       },
-      viaIR: true, // Enable IR for complex contracts
-    },
+      {
+        version: "0.7.6",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    ],
   },
   networks: {
     // Local development

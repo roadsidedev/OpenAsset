@@ -109,6 +109,11 @@ library CircuitBreaker {
             ].price;
         }
         
+        // LOW-003: Guard against division by zero
+        if (oldestPrice == 0) {
+            return 0; // No volatility calculable without base price
+        }
+        
         // Calculate percentage change
         if (newestPrice > oldestPrice) {
             volatilityBps = ((newestPrice - oldestPrice) * BPS_DENOMINATOR) / oldestPrice;
@@ -297,11 +302,25 @@ library AssetHandler {
         }
         if (size == 0) return false;
         
-        // For production, add interface checks:
-        // - ERC20: check totalSupply() exists
-        // - ERC721: check supportsInterface(0x80ac58cd)
-        // - ERC1155: check supportsInterface(0xd9b67a26)
-        
-        return true;
+        if (assetType == AssetType.ERC20) {
+            try IERC20(asset).totalSupply() returns (uint256) {
+                return true;
+            } catch {
+                return false;
+            }
+        } else if (assetType == AssetType.ERC721) {
+            try IERC721(asset).supportsInterface(0x80ac58cd) returns (bool isSupported) {
+                return isSupported;
+            } catch {
+                return false;
+            }
+        } else {
+            try IERC1155(asset).supportsInterface(0xd9b67a26) returns (bool isSupported) {
+                return isSupported;
+            } catch {
+                return false;
+            }
+        }
     }
 }
+

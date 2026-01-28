@@ -6,15 +6,10 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
-import "./libraries/UniswapV3TWAPOracle.sol";
-import "./libraries/ChainlinkOracle.sol";
-import "./libraries/CircuitBreaker.sol";
-import "./libraries/AssetHandler.sol";
+import "./libraries/CircuitBreaker.sol"; // Contains AssetHandler library
 import "./interfaces/ILendingMarket.sol";
 import "./interfaces/ILoanContract.sol";
-import {OracleType, INFTOracle} from "./interfaces/IOracle.sol";
+import {IOracle, OracleType, INFTOracle} from "./interfaces/IOracle.sol";
 import {AssetType} from "./interfaces/IMarketFactory.sol";
 
 /**
@@ -57,7 +52,6 @@ contract LPToken is ERC20 {
  */
 contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
-    using UniswapV3TWAPOracle for UniswapV3TWAPOracle.TWAPConfig;
     using CircuitBreaker for CircuitBreaker.CircuitBreakerState;
     using AssetHandler for AssetHandler.AssetType;
     
@@ -87,9 +81,8 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     uint256 public immutable healthFactorThreshold;
     
     // Oracle configuration
-    address public immutable primaryOracle; // Uniswap pool or Chainlink feed
+    IOracle public immutable priceOracle; // Unified oracle (Chainlink, Uniswap V3, or OracleRouter)
     address public immutable nftOracle; // For NFT collateral
-    UniswapV3TWAPOracle.TWAPConfig public twapConfig;
     
     // Circuit breaker configuration
     CircuitBreaker.CircuitBreakerConfig public circuitBreakerConfig;
@@ -149,7 +142,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         address loanImplementation_,
         AssetType assetType_,
         OracleType oracleType_,
-        address primaryOracle_,
+        address priceOracle_,
         address nftOracle_,
         uint256 ltvBps_,
         uint256 aprBps_,
@@ -157,6 +150,14 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         uint256 healthFactorThreshold_,
         CircuitBreaker.CircuitBreakerConfig memory cbConfig_
     ) {
+        // LOW-001: Zero address validation
+        require(marketOwner_ != address(0), "Invalid owner");
+        require(collateralAsset_ != address(0), "Invalid collateral");
+        require(loanAsset_ != address(0), "Invalid loan asset");
+        require(protocolTreasury_ != address(0), "Invalid treasury");
+        require(loanImplementation_ != address(0), "Invalid loan impl");
+        require(priceOracle_ != address(0), "Invalid oracle");
+        
         factory = msg.sender;
         marketOwner = marketOwner_;
         collateralAsset = collateralAsset_;
@@ -166,7 +167,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         
         assetType = assetType_;
         oracleType = oracleType_;
-        primaryOracle = primaryOracle_;
+        priceOracle = IOracle(priceOracle_);
         nftOracle = nftOracle_;
         
         ltvBps = ltvBps_;
@@ -175,16 +176,6 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         healthFactorThreshold = healthFactorThreshold_;
         
         circuitBreakerConfig = cbConfig_;
-        
-        // Initialize TWAP config if using Uniswap V3
-        if (oracleType_ == OracleType.UNISWAP_V3_TWAP) {
-            twapConfig = UniswapV3TWAPOracle.createTWAPConfig(
-                primaryOracle_,
-                collateralAsset_,
-                loanAsset_,
-                UniswapV3TWAPOracle.RECOMMENDED_TWAP_PERIOD
-            );
-        }
         
         // Deploy LP token
         lpToken = new LPToken("RedChips LP Token", "rcLP");
@@ -372,7 +363,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         
         // 4. INTERACTIONS: Transfer collateral from borrower to loan contract
         AssetHandler.transferAsset(
-            assetType,
+            AssetHandler.AssetType(uint8(assetType)),
             collateralAsset,
             msg.sender,
             loanContract,
@@ -423,20 +414,17 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
      * @return price Price with 18 decimals
      */
     function getCollateralPrice() public view returns (uint256 price) {
-        if (oracleType == OracleType.UNISWAP_V3_TWAP) {
-            (price, ) = UniswapV3TWAPOracle.getTWAPPrice(twapConfig);
-        } else if (oracleType == OracleType.CHAINLINK) {
-            (price, ) = ChainlinkOracle.getPrice(primaryOracle);
-        } else if (oracleType == OracleType.NFT_ORACLE) {
+        if (oracleType == OracleType.NFT_ORACLE) {
             // Use NFT Oracle for floor price
             INFTOracle nftOracleContract = INFTOracle(nftOracle);
-            
-            // Get floor price in ETH
-            uint256 floorPriceETH = nftOracleContract.getFloorPrice(collateralAsset);
-            
-            // Convert to loan asset terms (assuming loan asset is stablecoin)
-            // If loan asset is not USD-pegged, need to convert via price feed
             price = nftOracleContract.getFloorPriceUSD(collateralAsset);
+        } else if (
+            oracleType == OracleType.CHAINLINK ||
+            oracleType == OracleType.UNISWAP_V3_TWAP ||
+            oracleType == OracleType.ORACLE_ROUTER
+        ) {
+            // All non-NFT oracles use unified IOracle interface
+            (price, ) = priceOracle.getPrice(collateralAsset);
         } else {
             revert InvalidOracle();
         }
@@ -462,42 +450,23 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     
     /**
      * @notice Get historical price for circuit breaker
-     * @param secondsAgo How many seconds back to look
-     * @return price Historical price with 18 decimals
+     * @param secondsAgo How many seconds back to look (unused for Chainlink/current oracles)
+     * @return price Current price with 18 decimals (Chainlink/Uniswap/Router don't have on-chain history)
      */
     function _getHistoricalPrice(uint256 secondsAgo) internal view returns (uint256 price) {
-        if (oracleType == OracleType.UNISWAP_V3_TWAP) {
-            // Use Uniswap V3 pool's observe() function
-            IUniswapV3Pool pool = IUniswapV3Pool(primaryOracle);
-            
-            // Validate observation cardinality
-            (, , , uint16 observationCardinality, , , ) = pool.slot0();
-            require(observationCardinality >= 2, "Insufficient observations");
-            
-            uint32[] memory secondsAgos = new uint32[](2);
-            secondsAgos[0] = uint32(secondsAgo);
-            secondsAgos[1] = 0; // Now
-            
-            (int56[] memory tickCumulatives, ) = pool.observe(secondsAgos);
-            
-            // Calculate time-weighted average tick
-            int56 tickCumulativeDelta = tickCumulatives[1] - tickCumulatives[0];
-            int24 arithmeticMeanTick = int24(tickCumulativeDelta / int56(int256(secondsAgo)));
-            
-            // Convert tick to price
-            price = OracleLibrary.getQuoteAtTick(
-                arithmeticMeanTick,
-                uint128(1e18),
-                collateralAsset,
-                address(loanAsset)
-            );
-        } else if (oracleType == OracleType.CHAINLINK) {
-            // Chainlink doesn't have historical prices on-chain
-            // Return current price (circuit breaker will use this as baseline)
-            (price, ) = ChainlinkOracle.getPrice(primaryOracle);
+        if (oracleType == OracleType.NFT_ORACLE) {
+            // NFT oracles use current price
+            INFTOracle nftOracleContract = INFTOracle(nftOracle);
+            price = nftOracleContract.getFloorPriceUSD(collateralAsset);
+        } else if (
+            oracleType == OracleType.CHAINLINK ||
+            oracleType == OracleType.UNISWAP_V3_TWAP ||
+            oracleType == OracleType.ORACLE_ROUTER
+        ) {
+            // Non-NFT oracles don't have on-chain history; use current price
+            (price, ) = priceOracle.getPrice(collateralAsset);
         } else {
-            // For NFT oracle, use current price
-            revert("NFT oracle historical price not available");
+            revert InvalidOracle();
         }
     }
     
@@ -561,7 +530,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
             collateralAsset,
             address(loanAsset),
             protocolTreasury,
-            primaryOracle,
+            address(priceOracle),
             assetType,
             healthFactorThreshold
         );

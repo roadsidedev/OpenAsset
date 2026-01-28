@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import "../libraries/CircuitBreaker.sol";
+// Import OracleType from IOracle.sol to avoid duplicate definition
+import {OracleType} from "./IOracle.sol";
 
 /**
  * @title AssetType
  * @notice Asset type enumeration
  */
 enum AssetType { ERC20, ERC721, ERC1155 }
-
-/**
- * @title OracleType
- * @notice Oracle type enumeration
- */
-enum OracleType { UNISWAP_V3_TWAP, CHAINLINK, NFT_ORACLE }
 
 /**
  * @title IMarketFactory
