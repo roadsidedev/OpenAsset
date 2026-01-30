@@ -1,54 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useMarkets } from "@/hooks/useMarkets";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 
-// Mock Data
-const MOCK_MARKETS = [
-  {
-    id: 1,
-    asset: "GAME",
-    name: "GameToken",
-    ltv: 75,
-    apr: 12,
-    duration: 30,
-    liquidity: "50,000",
-    liquiditySymbol: "USDC",
-    icon: "🎮",
-  },
-  {
-    id: 2,
-    asset: "PEPE",
-    name: "Pepe Coin",
-    ltv: 50,
-    apr: 25,
-    duration: 14,
-    liquidity: "12,500",
-    liquiditySymbol: "ETH",
-    icon: "🐸",
-  },
-  {
-    id: 3,
-    asset: "NFT-X",
-    name: "Cool Cats",
-    ltv: 60,
-    apr: 15,
-    duration: 90,
-    liquidity: "100,000",
-    liquiditySymbol: "USDC",
-    icon: "🐱",
-  },
-];
-
 export default function MarketsPage() {
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Simulate network delay
-    const timer = setTimeout(() => setIsLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  const [start, setStart] = useState(0);
+  const [filter, setFilter] = useState<"all" | "gaming" | "memes" | "nft">("all");
+  const { data, isLoading, error } = useMarkets(start, 20);
 
   return (
     <div className="min-h-screen bg-black text-white pb-20 md:pb-0">
@@ -68,74 +28,85 @@ export default function MarketsPage() {
           </Link>
         </div>
 
-        {/* Filters (Mock) */}
+        {/* Filters */}
         <div className="mt-8 flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-          <button className="whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium hover:bg-white/10 transition-colors">
-            All Assets
-          </button>
-          <button className="whitespace-nowrap rounded-full border border-white/10 px-4 py-2 text-sm font-medium hover:bg-white/10 text-zinc-400 transition-colors">
-            Gaming
-          </button>
-          <button className="whitespace-nowrap rounded-full border border-white/10 px-4 py-2 text-sm font-medium hover:bg-white/10 text-zinc-400 transition-colors">
-            Memes
-          </button>
-          <button className="whitespace-nowrap rounded-full border border-white/10 px-4 py-2 text-sm font-medium hover:bg-white/10 text-zinc-400 transition-colors">
-            NFTs
-          </button>
+          {(["all", "gaming", "memes", "nft"] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilter(type)}
+              className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                filter === type
+                  ? "border-red-500 bg-red-500/10"
+                  : "border-white/10 text-zinc-400 hover:bg-white/10"
+              }`}
+            >
+              {type === "all" ? "All Assets" : type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
+          ))}
         </div>
 
         {/* Market Grid */}
+        {error && (
+          <div className="mt-8 rounded-lg bg-red-500/10 border border-red-500/50 p-4 text-red-400">
+            Error loading markets: {error.message}
+          </div>
+        )}
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {isLoading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <MarketCardSkeleton key={i} />
               ))
-            : MOCK_MARKETS.map((market) => (
+            : data?.markets && data.markets.length > 0
+            ? data.markets.map((market) => (
                 <div
-                  key={market.id}
+                  key={market.marketAddress}
                   className="group relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/50 p-6 transition hover:border-red-500/50 hover:bg-zinc-900"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-xl">
-                        {market.icon}
+                        💼
                       </div>
                       <div>
-                        <h3 className="font-semibold">{market.name}</h3>
-                        <p className="text-xs text-zinc-500">{market.asset}</p>
+                        <h3 className="font-semibold">Market {market.marketAddress.slice(0, 6)}</h3>
+                        <p className="text-xs text-zinc-500">{market.collateralAsset.slice(0, 8)}</p>
                       </div>
                     </div>
-                    <span className="rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs text-green-400">
-                      Active
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs ${
+                      market.active
+                        ? "bg-green-500/10 text-green-400"
+                        : "bg-zinc-500/10 text-zinc-400"
+                    }`}>
+                      {market.active ? "Active" : "Inactive"}
                     </span>
                   </div>
 
                   <div className="mt-6 grid grid-cols-2 gap-4 border-t border-white/5 pt-6">
                     <div>
                       <p className="text-xs text-zinc-500">LTV</p>
-                      <p className="text-lg font-medium">{market.ltv}%</p>
+                      <p className="text-lg font-medium">{(market.ltvBps / 100).toFixed(1)}%</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">APR</p>
                       <p className="text-lg font-medium text-green-400">
-                        {market.apr}%
+                        {(market.aprBps / 100).toFixed(1)}%
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">Duration</p>
-                      <p className="text-lg font-medium">{market.duration} Days</p>
+                      <p className="text-lg font-medium">{Math.floor(market.durationSeconds / 86400)} Days</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">Liquidity</p>
-                      <p className="text-lg font-medium">
-                        {market.liquidity} <span className="text-xs text-zinc-500">{market.liquiditySymbol}</span>
+                      <p className="text-lg font-medium text-sm">
+                        {parseFloat(market.liquidity.available).toFixed(2)} <span className="text-xs text-zinc-500">USDC</span>
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-6 flex gap-3">
                     <Link
-                      href={`/borrow/${market.id}`}
+                      href={`/borrow/${market.marketAddress}`}
                       className="flex-1 rounded-lg bg-white py-2.5 text-center text-sm font-semibold text-black transition hover:bg-zinc-200"
                     >
                       Borrow
@@ -145,7 +116,12 @@ export default function MarketsPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+              ))
+            : (
+              <div className="col-span-full text-center py-12">
+                <p className="text-zinc-400">No markets found</p>
+              </div>
+            )}
         </div>
       </main>
     </div>

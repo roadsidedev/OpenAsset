@@ -1,12 +1,23 @@
-import { Router } from 'express';
-import { requireAuth } from '../middleware/auth';
+/**
+ * @file loanRoutes.ts
+ * @description Loan management routes
+ */
+
+import express from 'express';
 import { LoanController } from '../controllers/LoanController';
+import { PrismaClient } from '@prisma/client';
 
-const router = Router();
-const controller = new LoanController();
+export function createLoanRoutes(prisma: PrismaClient): express.Router {
+  const router = express.Router();
+  const controller = new LoanController(prisma);
 
-router.post('/', requireAuth, controller.create);
-router.get('/', controller.getAll);
-router.get('/:id', controller.getById);
+  // GET routes
+  router.get('/', (req, res, next) => controller.getLoans(req, res, next));
+  router.get('/:address', (req, res, next) => controller.getLoan(req, res, next));
+  router.get('/:address/liquidation-status', (req, res, next) => controller.getLiquidationStatus(req, res, next));
 
-export default router;
+  // POST routes
+  router.post('/:market/estimate-request', (req, res, next) => controller.estimateLoanRequest(req, res, next));
+
+  return router;
+}

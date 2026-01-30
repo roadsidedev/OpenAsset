@@ -1,10 +1,10 @@
-import { Request, Response } from 'express';
-import { verifyMessage } from 'ethers';
-import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
-import { config } from '../config/unifiedConfig';
-import { logger } from '../utils/logger';
+import { Request, Response } from "express";
+import { verifyMessage } from "ethers";
+import jwt from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
+import { v4 as uuidv4 } from "uuid";
+import { config } from "../config/unifiedConfig";
+import { logger } from "../utils/logger";
 
 const prisma = new PrismaClient();
 
@@ -12,20 +12,20 @@ export const getNonce = async (req: Request, res: Response) => {
   try {
     const address = req.params.address as string;
     if (!address) {
-      res.status(400).json({ error: 'Address required' });
+      res.status(400).json({ error: "Address required" });
       return;
     }
 
     const user = await prisma.user.upsert({
       where: { address: address.toLowerCase() },
       update: {},
-      create: { address: address.toLowerCase(), nonce: uuidv4() },
+      create: { address: address.toLowerCase(), nonce: uuidv4() as string },
     });
 
     res.json({ nonce: user.nonce });
   } catch (error) {
-    logger.error({ err: error }, 'Error fetching nonce');
-    res.status(500).json({ error: 'Internal server error' });
+    logger.error({ err: error }, "Error fetching nonce");
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -35,7 +35,7 @@ export const login = async (req: Request, res: Response) => {
     const { signature } = req.body;
 
     if (!address || !signature) {
-      res.status(400).json({ error: 'Address and signature required' });
+      res.status(400).json({ error: "Address and signature required" });
       return;
     }
 
@@ -44,7 +44,7 @@ export const login = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      res.status(401).json({ error: 'User not found. Fetch nonce first.' });
+      res.status(401).json({ error: "User not found. Fetch nonce first." });
       return;
     }
 
@@ -52,7 +52,7 @@ export const login = async (req: Request, res: Response) => {
     const recoveredAddress = verifyMessage(message, signature);
 
     if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
-      res.status(401).json({ error: 'Invalid signature' });
+      res.status(401).json({ error: "Invalid signature" });
       return;
     }
 
@@ -63,7 +63,9 @@ export const login = async (req: Request, res: Response) => {
     });
 
     // Generate JWT
-    const token = jwt.sign({ address: user.address }, config.jwtSecret, { expiresIn: '24h' });
+    const token = jwt.sign({ address: user.address }, config.jwtSecret, {
+      expiresIn: "24h",
+    });
 
     res.json({
       token,
@@ -74,7 +76,7 @@ export const login = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    logger.error({ err: error }, 'Login error');
-    res.status(500).json({ error: 'Internal server error' });
+    logger.error({ err: error }, "Login error");
+    res.status(500).json({ error: "Internal server error" });
   }
 };

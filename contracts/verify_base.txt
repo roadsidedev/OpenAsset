@@ -1,0 +1,43 @@
+﻿
+≡ƒöì Red Chips Protocol - Contract Verification
+
+==================================================
+≡ƒôì Network: Basescan Sepolia (Chain ID: 84532)
+≡ƒöù API: https://api-sepolia.basescan.org/api
+
+≡ƒôï Verifying contracts from: ./deployments/base-sepolia.json
+
+≡ƒô¥ Verifying LoanContract at 0xD42aDf09cE94dBddb9a30d2F44842B3bD5BB0CFD...
+Successfully submitted source code for contract
+src/LoanContract.sol:LoanContract at 0xD42aDf09cE94dBddb9a30d2F44842B3bD5BB0CFD
+for verification on the block explorer. Waiting for verification result...
+
+Successfully verified contract LoanContract on the block explorer.
+https://sepolia.basescan.org/address/0xD42aDf09cE94dBddb9a30d2F44842B3bD5BB0CFD#code
+
+The contract 0xD42aDf09cE94dBddb9a30d2F44842B3bD5BB0CFD has already been verified on Sourcify.
+https://repo.sourcify.dev/contracts/full_match/84532/0xD42aDf09cE94dBddb9a30d2F44842B3bD5BB0CFD/
+
+   Γ£à LoanContract verified!
+
+≡ƒô¥ Verifying NFTOracle at 0x922F4FE4C67451b90705fb5820770Ef8FC0B9cF3...
+   Γ¥î Verification failed: A network request failed. This is an error from the block explorer, not Hardhat. Error: read ECONNRESET
+   ≡ƒöä Attempting manual verification via API...
+   Γ¥î API Error: You are using a deprecated V1 endpoint, switch to Etherscan API V2 using https://docs.etherscan.io/v2-migration
+
+≡ƒô¥ Verifying MarketFactory at 0x4011D9b56137a1543857e90982cA01E7917A9BE1...
+Successfully submitted source code for contract
+src/MarketFactory.sol:MarketFactory at 0x4011D9b56137a1543857e90982cA01E7917A9BE1
+for verification on the block explorer. Waiting for verification result...
+
+Successfully verified contract MarketFactory on the block explorer.
+https://sepolia.basescan.org/address/0x4011D9b56137a1543857e90982cA01E7917A9BE1#code
+
+The contract 0x4011D9b56137a1543857e90982cA01E7917A9BE1 has already been verified on Sourcify.
+https://repo.sourcify.dev/contracts/full_match/84532/0x4011D9b56137a1543857e90982cA01E7917A9BE1/
+
+   Γ£à MarketFactory verified!
+
+==================================================
+Γ£à Verification complete!
+==================================================

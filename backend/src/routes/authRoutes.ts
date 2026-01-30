@@ -1,9 +1,17 @@
-import { Router } from 'express';
+/**
+ * @file authRoutes.ts
+ * @description Authentication routes
+ */
+
+import express from 'express';
 import { getNonce, login } from '../controllers/AuthController';
+import { PrismaClient } from '@prisma/client';
 
-const router = Router();
+export function createAuthRoutes(prisma: PrismaClient): express.Router {
+  const router = express.Router();
 
-router.get('/nonce/:address', getNonce);
-router.post('/login', login);
+  router.get('/nonce/:address', getNonce);
+  router.post('/login', login);
 
-export default router;
+  return router;
+}

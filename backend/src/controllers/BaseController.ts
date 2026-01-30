@@ -3,6 +3,21 @@ import { ZodError } from 'zod';
 import { logger } from '../utils/logger';
 
 export abstract class BaseController {
+  protected sendSuccess<T>(res: Response, data: T, statusCode = 200): void {
+    res.status(statusCode).json({
+      success: true,
+      data,
+    });
+  }
+
+  protected sendError(res: Response, message: string, statusCode = 500, details?: any): void {
+    res.status(statusCode).json({
+      success: false,
+      error: message,
+      details,
+    });
+  }
+
   protected handleSuccess<T>(res: Response, data: T, statusCode = 200): void {
     res.status(statusCode).json({
       success: true,

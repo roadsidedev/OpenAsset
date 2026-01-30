@@ -10,7 +10,15 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   RPC_URLS: z.string().default('http://127.0.0.1:8545').transform(s => s.split(',')),
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
-  MARKET_FACTORY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).default("0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"), // Default from E2E run
+  
+  // Contract Addresses
+  MARKET_FACTORY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  LOAN_IMPLEMENTATION_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  NFT_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  CHAINLINK_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  ORACLE_ROUTER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  UNISWAP_V3_TWAP_WRAPPER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  TREASURY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   
   // Alert Services
   SENDGRID_API_KEY: z.string().optional(),
@@ -36,6 +44,12 @@ export const config = {
   frontendUrl: env.FRONTEND_URL,
   contracts: {
     marketFactory: env.MARKET_FACTORY_ADDRESS,
+    loanImplementation: env.LOAN_IMPLEMENTATION_ADDRESS,
+    nftOracle: env.NFT_ORACLE_ADDRESS,
+    chainlinkOracle: env.CHAINLINK_ORACLE_ADDRESS,
+    oracleRouter: env.ORACLE_ROUTER_ADDRESS,
+    uniswapV3TWAPWrapper: env.UNISWAP_V3_TWAP_WRAPPER_ADDRESS,
+    treasury: env.TREASURY_ADDRESS,
   },
   alerts: {
     sendgrid: {

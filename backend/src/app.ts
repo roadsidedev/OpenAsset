@@ -2,9 +2,15 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { PrismaClient } from '@prisma/client';
 import { config } from './config/unifiedConfig';
 import { logger } from './utils/logger';
+import { createMarketRoutes } from './routes/marketRoutes';
+import { createLoanRoutes } from './routes/loanRoutes';
+import { createUserRoutes } from './routes/userRoutes';
+import { createAuthRoutes } from './routes/authRoutes';
 
+const prisma = new PrismaClient();
 const app = express();
 
 const limiter = rateLimit({
@@ -24,15 +30,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
-import marketRoutes from './routes/marketRoutes';
-import loanRoutes from './routes/loanRoutes';
-import userRoutes from './routes/userRoutes';
-import authRoutes from './routes/authRoutes';
-
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/markets', marketRoutes);
-app.use('/api/v1/loans', loanRoutes);
-app.use('/api/v1/users', userRoutes);
+// Initialize routes with Prisma client
+app.use('/api/v1/auth', createAuthRoutes(prisma));
+app.use('/api/v1/markets', createMarketRoutes(prisma));
+app.use('/api/v1/loans', createLoanRoutes(prisma));
+app.use('/api/v1/users', createUserRoutes(prisma));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

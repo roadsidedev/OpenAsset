@@ -1,0 +1,32 @@
+﻿
+≡ƒÜÇ Red Chips Protocol - Testnet Deployment
+
+==================================================
+node.exe : ConnectTimeoutError: Connect 
+Timeout Error
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" 
+"C:\Users\USER\AppData\Roaming\n ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   ConnectTimeoutE...t Timeout Error:String)  
+   [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandEr 
+   ror
+ 
+    at onConnectTimeout 
+(C:\Users\USER\OneDrive\Desktop\Vibe projects\
+Red-Chips\contracts\node_modules\undici\lib\co
+re\connect.js:186:24)
+    at C:\Users\USER\OneDrive\Desktop\Vibe pro
+jects\Red-Chips\contracts\node_modules\undici\
+lib\core\connect.js:133:46
+    at Immediate._onImmediate 
+(C:\Users\USER\OneDrive\Desktop\Vibe projects\
+Red-Chips\contracts\node_modules\undici\lib\co
+re\connect.js:172:33)
+    at processImmediate 
+(node:internal/timers:485:21) {
+  code: 'UND_ERR_CONNECT_TIMEOUT'
+}

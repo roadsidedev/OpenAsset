@@ -1,0 +1,13 @@
+{
+  "loanImplementation": "0xBE170Cdaa743C58284b221933d0dfc596D7abC6f",
+  "nftOracle": "0x6FB5387839Ac704f76beFB562b5cA6C6D0977f7a",
+  "marketFactory": "0x99352bAA80de51fA23a8235EbdabF48a3C0B799d",
+  "chainlinkOracle": "0xbFb6a9e47be9ee806957C1FDd01CB32af9fA817A",
+  "oracleRouter": "0x8A4143BCB631FcBE8cA7882736B039b9d681e5f1",
+  "uniswapV3TWAPWrapper": "0x31E905016774acd4E4eD38d2105394BB7cc48686",
+  "treasury": "0x53F9f97FC5a193a424eB2C7cC39728E0161ff15f",
+  "network": "Sepolia",
+  "chainId": 11155111,
+  "deployer": "0x53F9f97FC5a193a424eB2C7cC39728E0161ff15f",
+  "timestamp": 1769701106076
+}

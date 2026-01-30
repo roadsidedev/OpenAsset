@@ -30,9 +30,9 @@ model User {
 
 // Track indexing progress
 model SyncState {
-    id             String   @id // e.g., "event_indexer"
-    lastBlock      Int
-    updatedAt      DateTime @updatedAt
+    id        String   @id // e.g., "event_indexer"
+    lastBlock Int
+    updatedAt DateTime @updatedAt
 
     @@map("sync_states")
 }
@@ -69,6 +69,7 @@ model Market {
 
     // State
     status             MarketStatus @default(ACTIVE)
+    isActive           Boolean      @default(true)
     pausedAt           DateTime?
     totalLiquidity     String       @default("0") // Store as string for BigInt
     availableLiquidity String       @default("0")
@@ -90,6 +91,7 @@ model Market {
 // Individual Loans
 model Loan {
     id              String @id @default(uuid())
+    address         String @unique // Loan contract address
     contractLoanId  String // ID on smart contract
     marketAddress   String
     borrowerAddress String
@@ -98,7 +100,7 @@ model Loan {
     collateralAmount String  @default("0")
     tokenId          String? // For NFTs
     principal        String  @default("0")
-    repaidAmount     String?
+    repaymentAmount  String?
 
     // Timing
     startTime  DateTime
@@ -118,10 +120,25 @@ model Loan {
     borrower User    @relation(fields: [borrowerAddress], references: [address])
     alerts   Alert[]
 
+    repaidAt     DateTime?
+    liquidatedAt DateTime?
+
     @@unique([marketAddress, contractLoanId])
     @@index([borrowerAddress])
     @@index([status])
     @@map("loans")
+}
+
+model LiquidityPosition {
+    marketAddress       String
+    lpAddress           String
+    lpTokenBalance      String   @default("0")
+    stablecoinDeposited String   @default("0")
+    createdAt           DateTime @default(now())
+    updatedAt           DateTime @updatedAt
+
+    @@id([marketAddress, lpAddress])
+    @@map("liquidity_positions")
 }
 
 // Historical Prices for Volatility/Circuit Breaker
@@ -140,16 +157,16 @@ model PriceHistory {
 
 // Notification Logs
 model Alert {
-    id      String      @id @default(uuid())
-    userId  String
-    loanId  String?
-    type    AlertType
-    level   AlertLevel
-    message String
-    status  AlertStatus @default(PENDING)
-    retryCount Int      @default(0)
-    sentVia String[] // ["email", "sms", "push"]
-    sentAt  DateTime    @default(now())
+    id         String      @id @default(uuid())
+    userId     String
+    loanId     String?
+    type       AlertType
+    level      AlertLevel
+    message    String
+    status     AlertStatus @default(PENDING)
+    retryCount Int         @default(0)
+    sentVia    String[] // ["email", "sms", "push"]
+    sentAt     DateTime    @default(now())
 
     user User  @relation(fields: [userId], references: [address])
     loan Loan? @relation(fields: [loanId], references: [id])

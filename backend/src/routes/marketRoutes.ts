@@ -1,12 +1,23 @@
-import { Router } from 'express';
-import { requireAuth } from '../middleware/auth';
+/**
+ * @file marketRoutes.ts
+ * @description Market management routes
+ */
+
+import express from 'express';
 import { MarketController } from '../controllers/MarketController';
+import { PrismaClient } from '@prisma/client';
 
-const router = Router();
-const controller = new MarketController();
+export function createMarketRoutes(prisma: PrismaClient): express.Router {
+  const router = express.Router();
+  const controller = new MarketController(prisma);
 
-router.post('/', requireAuth, controller.create);
-router.get('/', controller.getAll);
-router.get('/:id', controller.getById);
+  // GET routes
+  router.get('/', (req, res, next) => controller.getMarkets(req, res, next));
+  router.get('/:address', (req, res, next) => controller.getMarket(req, res, next));
+  router.get('/:address/liquidity', (req, res, next) => controller.getMarketLiquidity(req, res, next));
 
-export default router;
+  // POST routes
+  router.post('/estimate-creation', (req, res, next) => controller.estimateMarketCreation(req, res, next));
+
+  return router;
+}

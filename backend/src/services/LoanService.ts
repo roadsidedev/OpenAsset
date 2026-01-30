@@ -2,6 +2,7 @@ import { LoanRepository } from '../repositories/LoanRepository';
 import { PrismaClient, Loan, Prisma } from '@prisma/client';
 
 export interface CreateLoanParams {
+  address: string;
   contractLoanId: string;
   marketAddress: string;
   borrowerAddress: string;
@@ -21,6 +22,7 @@ export class LoanService {
 
   async createLoan(params: CreateLoanParams): Promise<Loan> {
     const data: Prisma.LoanCreateInput = {
+      address: params.address,
       contractLoanId: params.contractLoanId,
       collateralAmount: params.collateralAmount,
       tokenId: params.tokenId,

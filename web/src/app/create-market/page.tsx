@@ -1,13 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMarketStore } from "@/store/useMarketStore";
+import { useContractInteraction } from "@/hooks/useContractInteraction";
+import { useAccount } from "wagmi";
+
+const FACTORY_ADDRESS = "0x99352bAA80de51fA23a8235EbdabF48a3C0B799d";
 
 export default function CreateMarketPage() {
+  const router = useRouter();
+  const { address: userAddress } = useAccount();
   const { step, formData, setStep, setFormData } = useMarketStore();
+  const { createMarket, isLoading, error, clearError } = useContractInteraction();
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   const handleNext = () => setStep(Math.min(step + 1, 4));
   const handleBack = () => setStep(Math.max(step - 1, 1));
+
+  const handleDeploy = async () => {
+    if (!userAddress) {
+      alert("Please connect your wallet");
+      return;
+    }
+
+    try {
+      clearError();
+      const params = {
+        collateralAsset: formData.assetAddress,
+        loanAsset: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH placeholder
+        assetType: 0,
+        oracleType: 0,
+        primaryOracle: "0x0000000000000000000000000000000000000000",
+        nftOracle: "0x0000000000000000000000000000000000000000",
+        ltvBps: formData.ltv * 100,
+        aprBps: formData.apr * 100,
+        durationSeconds: formData.duration * 86400,
+        initialLiquidity: formData.liquidity || "0",
+      };
+
+      const result = await createMarket(params, FACTORY_ADDRESS);
+      setTxHash(result.txHash);
+      setTimeout(() => {
+        router.push("/markets");
+      }, 2000);
+    } catch (err) {
+      console.error("Market creation failed:", err);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -24,6 +65,16 @@ export default function CreateMarketPage() {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-8">
+          {error && (
+            <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/50 p-4 text-red-400">
+              {error.message}
+            </div>
+          )}
+          {txHash && (
+            <div className="mb-6 rounded-lg bg-green-500/10 border border-green-500/50 p-4 text-green-400">
+              Market created successfully! Tx: {txHash.slice(0, 10)}...
+            </div>
+          )}
           {step === 1 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold">Asset Selection</h2>
@@ -171,16 +222,18 @@ export default function CreateMarketPage() {
             {step > 1 && (
               <button
                 onClick={handleBack}
-                className="flex-1 rounded-lg border border-white/10 py-3 font-semibold transition hover:bg-white/5"
+                disabled={isLoading}
+                className="flex-1 rounded-lg border border-white/10 py-3 font-semibold transition hover:bg-white/5 disabled:opacity-50"
               >
                 Back
               </button>
             )}
             <button
-              onClick={step === 4 ? () => alert("Market Deployed!") : handleNext}
-              className="flex-1 rounded-lg bg-red-600 py-3 font-semibold transition hover:bg-red-500"
+              onClick={step === 4 ? handleDeploy : handleNext}
+              disabled={isLoading || (step === 4 && !userAddress)}
+              className="flex-1 rounded-lg bg-red-600 py-3 font-semibold transition hover:bg-red-500 disabled:opacity-50"
             >
-              {step === 4 ? "Deploy Market" : "Continue"}
+              {isLoading ? "Processing..." : step === 4 ? "Deploy Market" : "Continue"}
             </button>
           </div>
         </div>
