@@ -132,8 +132,8 @@ model Loan {
 model LiquidityPosition {
     marketAddress       String
     lpAddress           String
-    lpTokenBalance      String   @default("0")
-    stablecoinDeposited String   @default("0")
+    lpTokenBalance      BigInt   @default(0)
+    stablecoinDeposited BigInt   @default(0)
     createdAt           DateTime @default(now())
     updatedAt           DateTime @updatedAt
 
