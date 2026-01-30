@@ -321,6 +321,7 @@ export class EventIndexerService {
       update: { updatedAt: new Date() },
       create: {
         marketAddress,
+        address: loanContract,
         contractLoanId: loanContract,
         borrowerAddress: borrower,
         collateralAmount: "0", // Should ideally be in the event or fetched
