@@ -5,7 +5,6 @@
  */
 
 import { PrismaClient, AssetType, OracleType } from '@prisma/client';
-
 import { ethers } from 'ethers';
 import { logger } from '../../utils/logger';
 import { config } from '../../config/unifiedConfig';
@@ -19,6 +18,7 @@ import {
 const BLOCK_CHUNK_SIZE = 100;
 const POLL_INTERVAL_MS = 5000;
 const MAX_RETRIES = 3;
+const MAX_ADDRESSES_PER_FILTER = 50;
 
 export class EventIndexerService {
   private prisma: PrismaClient;
@@ -27,6 +27,11 @@ export class EventIndexerService {
   private isRunning: boolean = false;
   private lastIndexedBlock: number = 0;
   private retryCount: number = 0;
+
+  // Interfaces for parsing logs
+  private factoryInterface: ethers.Interface;
+  private lendingMarketInterface: ethers.Interface;
+  private loanContractInterface: ethers.Interface;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
@@ -46,6 +51,10 @@ export class EventIndexerService {
       MARKET_FACTORY_ABI,
       this.provider
     );
+
+    this.factoryInterface = new ethers.Interface(MARKET_FACTORY_ABI);
+    this.lendingMarketInterface = new ethers.Interface(LENDING_MARKET_ABI);
+    this.loanContractInterface = new ethers.Interface(LOAN_CONTRACT_ABI);
 
     logger.info(
       { factory: config.contracts.marketFactory },
@@ -82,8 +91,10 @@ export class EventIndexerService {
           'Starting Event Indexer from current block'
         );
 
-        await this.prisma.syncState.create({
-          data: { id: 'event_indexer', lastBlock: this.lastIndexedBlock },
+        await this.prisma.syncState.upsert({
+          where: { id: 'event_indexer' },
+          update: {},
+          create: { id: 'event_indexer', lastBlock: this.lastIndexedBlock },
         });
       }
 
@@ -113,11 +124,14 @@ export class EventIndexerService {
 
         logger.info({ fromBlock, toBlock }, 'Indexing blocks');
 
-        // Index factory events (market creation)
+        // 1. Index Markets (Factory Events)
         await this.indexFactoryEvents(fromBlock, toBlock);
 
-        // Index all market and loan events
-        await this.indexMarketAndLoanEvents(fromBlock, toBlock);
+        // 2. Index Market-specific events (Liquidity, Loan Creation)
+        await this.indexMarketEvents(fromBlock, toBlock);
+
+        // 3. Index Loan lifecycle events (Repay, Liquidate)
+        await this.indexLoanLifecycleEvents(fromBlock, toBlock);
 
         // Update last indexed block
         this.lastIndexedBlock = toBlock;
@@ -176,17 +190,10 @@ export class EventIndexerService {
           loanAsset,
           assetType,
           ltvBps,
+          initialLiquidity,
         } = log.args;
 
-        logger.info(
-          {
-            market,
-            owner,
-            collateralAsset,
-            assetType: Number(assetType),
-          },
-          'New market created'
-        );
+        logger.info({ market }, 'Found new market');
 
         // Upsert user (LP)
         await this.prisma.user.upsert({
@@ -205,14 +212,13 @@ export class EventIndexerService {
         // Create market record
         await this.prisma.market.upsert({
           where: { address: market },
-          update: { isActive: true, updatedAt: new Date() },
+          update: { updatedAt: new Date() },
           create: {
             address: market,
             lpAddress: owner,
             collateralAsset,
-            loanAsset,
-            assetType: this._mapAssetType(Number(marketInfo.assetType)),
-            ltvBasisPoints: Number(marketInfo.ltvBps),
+            assetType: this._mapAssetType(Number(assetType)),
+            ltvBasisPoints: Number(ltvBps),
             aprBasisPoints: Number(marketInfo.aprBps),
             durationSeconds: Number(marketInfo.durationSeconds),
             gracePeriodHours: 72,
@@ -220,10 +226,10 @@ export class EventIndexerService {
             healthFactorThreshold: 12000, // 120%
             oracleType: this._mapOracleType(Number(marketInfo.oracleType)),
             primaryOracle: marketInfo.primaryOracle,
-            nftOracle: marketInfo.nftOracle,
             twapPeriodSeconds: 1800,
             circuitBreakerEnabled: true,
-            isActive: true,
+            totalLiquidity: initialLiquidity.toString(),
+            availableLiquidity: initialLiquidity.toString(),
             createdAt: new Date(Number(marketInfo.createdAt) * 1000),
             updatedAt: new Date(),
           },
@@ -239,185 +245,136 @@ export class EventIndexerService {
   }
 
   /**
-   * Index all market and loan events
+   * Index events for all known markets (Liquidity and Loan Creation)
    */
-  private async indexMarketAndLoanEvents(
-    fromBlock: number,
-    toBlock: number
-  ): Promise<void> {
-    try {
-      // Get all known markets
-      const markets = await this.prisma.market.findMany({
-        select: { address: true },
+  private async indexMarketEvents(fromBlock: number, toBlock: number) {
+    const markets = await this.prisma.market.findMany({ select: { address: true, durationSeconds: true } });
+    if (markets.length === 0) return;
+
+    const marketAddresses = markets.map(m => m.address);
+    const marketDurationMap = new Map(markets.map(m => [m.address, m.durationSeconds]));
+
+    for (let i = 0; i < marketAddresses.length; i += MAX_ADDRESSES_PER_FILTER) {
+      const batch = marketAddresses.slice(i, i + MAX_ADDRESSES_PER_FILTER);
+      
+      const logs = await this.provider.getLogs({
+        address: batch,
+        fromBlock,
+        toBlock,
+        topics: [[
+          this.lendingMarketInterface.getEvent("LiquidityDeposited")?.topicHash,
+          this.lendingMarketInterface.getEvent("LoanCreated")?.topicHash
+        ].filter(Boolean) as string[]]
       });
 
-      for (const market of markets) {
-        await this.indexMarketEvents(market.address, fromBlock, toBlock);
+      for (const log of logs) {
+        const topic = log.topics[0];
+        const marketAddress = log.address;
+
+        if (topic === this.lendingMarketInterface.getEvent("LiquidityDeposited")?.topicHash) {
+          const parsed = this.lendingMarketInterface.parseLog(log);
+          if (parsed) {
+            const { provider, amount, shares } = parsed.args;
+            await this._handleLiquidityDeposit(marketAddress, provider, amount, shares);
+          }
+        } else if (topic === this.lendingMarketInterface.getEvent("LoanCreated")?.topicHash) {
+          const parsed = this.lendingMarketInterface.parseLog(log);
+          if (parsed) {
+            const { loanContract, borrower, principal } = parsed.args;
+            const duration = marketDurationMap.get(marketAddress) || 86400 * 30;
+            await this._handleLoanCreation(marketAddress, loanContract, borrower, principal, duration);
+          }
+        }
       }
-    } catch (error) {
-      logger.error(
-        { error, fromBlock, toBlock },
-        'Failed to index market and loan events'
-      );
-      // Don't throw - continue indexing
     }
   }
 
-  /**
-   * Index events for a specific market
-   */
-  private async indexMarketEvents(
-    marketAddress: string,
-    fromBlock: number,
-    toBlock: number
-  ): Promise<void> {
-    const marketContract = new ethers.Contract(
-      marketAddress,
-      LENDING_MARKET_ABI,
-      this.provider
-    );
+  private async _handleLiquidityDeposit(marketAddress: string, provider: string, amount: any, shares: any) {
+    await this.prisma.user.upsert({
+      where: { address: provider },
+      update: { updatedAt: new Date() },
+      create: { address: provider },
+    });
 
-    try {
-      // Index LiquidityDeposited events
-      const deposits = await marketContract.queryFilter(
-        'LiquidityDeposited',
-        fromBlock,
-        toBlock
-      );
-      for (const log of deposits) {
-        if (!(log instanceof ethers.EventLog)) continue;
-        const { provider, amount, sharesIssued } = log.args;
-
-        await this.prisma.user.upsert({
-          where: { address: provider },
-          update: { updatedAt: new Date() },
-          create: {
-            address: provider,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
-
-        await this.prisma.liquidityPosition.upsert({
-          where: {
-            marketAddress_lpAddress: {
-              marketAddress,
-              lpAddress: provider,
-            },
-          },
-          update: {
-            lpTokenBalance: { increment: BigInt(sharesIssued.toString()) },
-            stablecoinDeposited: { increment: BigInt(amount.toString()) },
-            updatedAt: new Date(),
-          },
-          create: {
-            marketAddress,
-            lpAddress: provider,
-            lpTokenBalance: BigInt(sharesIssued.toString()),
-            stablecoinDeposited: BigInt(amount.toString()),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
+    // In a real implementation, we'd have a LiquidityPosition model or update Market state
+    // For now, let's update Market liquidity
+    await this.prisma.market.update({
+      where: { address: marketAddress },
+      data: {
+        totalLiquidity: { increment: amount.toString() } as any,
+        availableLiquidity: { increment: amount.toString() } as any,
       }
+    });
+  }
 
-      // Index LoanRequested events
-      const loanRequests = await marketContract.queryFilter(
-        'LoanRequested',
-        fromBlock,
-        toBlock
-      );
-      for (const log of loanRequests) {
-        if (!(log instanceof ethers.EventLog)) continue;
-        const { loanAddress, borrower, collateral, principal } = log.args;
+  private async _handleLoanCreation(marketAddress: string, loanContract: string, borrower: string, principal: any, duration: number) {
+    logger.info({ market: marketAddress, loanContract }, 'Found new loan contract');
+    
+    await this.prisma.user.upsert({
+      where: { address: borrower },
+      update: { updatedAt: new Date() },
+      create: { address: borrower }
+    });
 
-        await this.prisma.user.upsert({
-          where: { address: borrower },
-          update: { updatedAt: new Date() },
-          create: {
-            address: borrower,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
-
-        const loanContract = new ethers.Contract(
-          loanAddress,
-          LOAN_CONTRACT_ABI,
-          this.provider
-        );
-
-        const expiryTime = await loanContract.getExpiryTime();
-
-        await this.prisma.loan.upsert({
-          where: { address: loanAddress },
-          update: { updatedAt: new Date() },
-          create: {
-            address: loanAddress,
-            contractLoanId: loanAddress,
-            marketAddress,
-            borrowerAddress: borrower,
-            collateralAmount: collateral.toString(),
-            principal: principal.toString(),
-            startTime: new Date(),
-            expiryTime: new Date(Number(expiryTime) * 1000),
-            status: 'ACTIVE',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
+    await this.prisma.loan.upsert({
+      where: { marketAddress_contractLoanId: { marketAddress, contractLoanId: loanContract } },
+      update: { updatedAt: new Date() },
+      create: {
+        marketAddress,
+        contractLoanId: loanContract,
+        borrowerAddress: borrower,
+        collateralAmount: "0", // Should ideally be in the event or fetched
+        principal: principal.toString(),
+        startTime: new Date(),
+        expiryTime: new Date(Date.now() + duration * 1000),
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }
+    });
+  }
 
-      // Index LoanRepaid events
-      const repayments = await marketContract.queryFilter(
-        'LoanRepaid',
+  private async indexLoanLifecycleEvents(fromBlock: number, toBlock: number) {
+    const activeLoans = await this.prisma.loan.findMany({ 
+      where: { status: 'ACTIVE' },
+      select: { contractLoanId: true }
+    });
+
+    if (activeLoans.length === 0) return;
+
+    const loanAddresses = activeLoans.map(l => l.contractLoanId);
+
+    for (let i = 0; i < loanAddresses.length; i += MAX_ADDRESSES_PER_FILTER) {
+      const batch = loanAddresses.slice(i, i + MAX_ADDRESSES_PER_FILTER);
+
+      const logs = await this.provider.getLogs({
+        address: batch,
         fromBlock,
-        toBlock
-      );
-      for (const log of repayments) {
-        if (!(log instanceof ethers.EventLog)) continue;
-        const { borrower, totalRepayment } = log.args;
+        toBlock,
+        topics: [[
+          this.loanContractInterface.getEvent("LoanRepaid")?.topicHash,
+          this.loanContractInterface.getEvent("LoanLiquidated")?.topicHash
+        ].filter(Boolean) as string[]]
+      });
 
-        await this.prisma.loan.updateMany({
-          where: {
-            marketAddress,
-            borrowerAddress: borrower,
-            status: 'ACTIVE',
-          },
-          data: {
-            status: 'REPAID',
-            repaymentAmount: totalRepayment.toString(),
-            repaidAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
+      for (const log of logs) {
+        const topic = log.topics[0];
+        const loanContract = log.address;
+
+        if (topic === this.loanContractInterface.getEvent("LoanRepaid")?.topicHash) {
+          logger.info({ loanContract }, 'Loan Repaid');
+          await this.prisma.loan.updateMany({
+            where: { contractLoanId: loanContract },
+            data: { status: 'REPAID', repaidAt: new Date(), updatedAt: new Date() }
+          });
+        } else if (topic === this.loanContractInterface.getEvent("LoanLiquidated")?.topicHash) {
+          logger.info({ loanContract }, 'Loan Liquidated');
+          await this.prisma.loan.updateMany({
+            where: { contractLoanId: loanContract },
+            data: { status: 'LIQUIDATED', liquidatedAt: new Date(), updatedAt: new Date() }
+          });
+        }
       }
-
-      // Index LoanLiquidated events
-      const liquidations = await marketContract.queryFilter(
-        'LoanLiquidated',
-        fromBlock,
-        toBlock
-      );
-      for (const log of liquidations) {
-        if (!(log instanceof ethers.EventLog)) continue;
-        const { loanAddress } = log.args;
-
-        await this.prisma.loan.update({
-          where: { address: loanAddress },
-          data: {
-            status: 'LIQUIDATED',
-            liquidatedAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
-      }
-    } catch (error) {
-      logger.warn(
-        { error, marketAddress, fromBlock, toBlock },
-        'Failed to index events for market (market may be recently created)'
-      );
-      // Don't throw - continue with other markets
     }
   }
 
@@ -433,11 +390,10 @@ export class EventIndexerService {
 
   private _mapOracleType(value: number): OracleType {
     const mapping: Record<number, OracleType> = {
-      0: OracleType.CHAINLINK,
-      1: OracleType.UNISWAP_V3_TWAP,
-      2: OracleType.ORACLE_ROUTER,
-      3: OracleType.MANUAL,
+      0: OracleType.UNISWAP_V3_TWAP,
+      1: OracleType.CHAINLINK,
+      2: OracleType.MANUAL,
     };
-    return mapping[value] || OracleType.CHAINLINK;
+    return mapping[value] || OracleType.UNISWAP_V3_TWAP;
   }
 }
