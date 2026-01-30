@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider } from '@privy-io/wagmi';
+import { WagmiProvider as WagmiProviderBase } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '../lib/wagmi';
 
@@ -15,9 +16,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // This prevents build failures due to invalid App ID validation
   if (!appId || appId === 'test-app-id' || appId.startsWith('clp000')) {
     return (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
+      <WagmiProviderBase config={config}>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      </WagmiProviderBase>
     );
   }
 

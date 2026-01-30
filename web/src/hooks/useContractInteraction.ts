@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { usePublicClient, useWalletClient } from 'wagmi';
-import { Contract, BrowserProvider, toBeHex } from 'ethers';
+import { parseAbi, Address } from 'viem';
 import { MARKET_FACTORY_ABI, LENDING_MARKET_ABI, LOAN_CONTRACT_ABI } from '@/lib/contractAbis';
 
 export interface CreateMarketParams {
@@ -32,6 +32,7 @@ export const useContractInteraction = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -42,26 +43,28 @@ export const useContractInteraction = () => {
 
       try {
         if (!walletClient) throw new Error('Wallet not connected');
+        if (!publicClient) throw new Error('Public client not available');
 
-        const provider = new BrowserProvider(walletClient.transport);
-        const signer = await provider.getSigner();
-        const contract = new Contract(factoryAddress, MARKET_FACTORY_ABI, signer);
+        const hash = await walletClient.writeContract({
+          address: factoryAddress as Address,
+          abi: parseAbi(MARKET_FACTORY_ABI),
+          functionName: 'createMarket',
+          args: [
+            params.collateralAsset as Address,
+            params.loanAsset as Address,
+            params.assetType,
+            params.oracleType,
+            params.primaryOracle as Address,
+            params.nftOracle as Address,
+            BigInt(params.ltvBps),
+            BigInt(params.aprBps),
+            BigInt(params.durationSeconds),
+            BigInt(params.initialLiquidity),
+          ],
+        });
 
-        const tx = await contract.createMarket(
-          params.collateralAsset,
-          params.loanAsset,
-          params.assetType,
-          params.oracleType,
-          params.primaryOracle,
-          params.nftOracle,
-          params.ltvBps,
-          params.aprBps,
-          params.durationSeconds,
-          toBeHex(params.initialLiquidity)
-        );
-
-        const receipt = await tx.wait();
-        return { txHash: tx.hash, receipt };
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -70,7 +73,7 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, clearError]
+    [walletClient, publicClient, clearError]
   );
 
   const depositLiquidity = useCallback(
@@ -80,14 +83,17 @@ export const useContractInteraction = () => {
 
       try {
         if (!walletClient) throw new Error('Wallet not connected');
+        if (!publicClient) throw new Error('Public client not available');
 
-        const provider = new BrowserProvider(walletClient.transport);
-        const signer = await provider.getSigner();
-        const contract = new Contract(marketAddress, LENDING_MARKET_ABI, signer);
+        const hash = await walletClient.writeContract({
+          address: marketAddress as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'depositLiquidity',
+          args: [BigInt(amount)],
+        });
 
-        const tx = await contract.depositLiquidity(toBeHex(amount));
-        const receipt = await tx.wait();
-        return { txHash: tx.hash, receipt };
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -96,7 +102,7 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, clearError]
+    [walletClient, publicClient, clearError]
   );
 
   const requestLoan = useCallback(
@@ -106,20 +112,22 @@ export const useContractInteraction = () => {
 
       try {
         if (!walletClient) throw new Error('Wallet not connected');
+        if (!publicClient) throw new Error('Public client not available');
 
-        const provider = new BrowserProvider(walletClient.transport);
-        const signer = await provider.getSigner();
-        const contract = new Contract(marketAddress, LENDING_MARKET_ABI, signer);
+        const hash = await walletClient.writeContract({
+          address: marketAddress as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'requestLoan',
+          args: [
+            BigInt(params.collateralAmount),
+            BigInt(params.tokenId),
+            BigInt(params.erc1155Amount),
+            BigInt(params.desiredPrincipal),
+          ],
+        });
 
-        const tx = await contract.requestLoan(
-          toBeHex(params.collateralAmount),
-          params.tokenId,
-          toBeHex(params.erc1155Amount),
-          toBeHex(params.desiredPrincipal)
-        );
-
-        const receipt = await tx.wait();
-        return { txHash: tx.hash, receipt };
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -128,7 +136,7 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, clearError]
+    [walletClient, publicClient, clearError]
   );
 
   const repayLoan = useCallback(
@@ -138,14 +146,17 @@ export const useContractInteraction = () => {
 
       try {
         if (!walletClient) throw new Error('Wallet not connected');
+        if (!publicClient) throw new Error('Public client not available');
 
-        const provider = new BrowserProvider(walletClient.transport);
-        const signer = await provider.getSigner();
-        const contract = new Contract(loanAddress, LOAN_CONTRACT_ABI, signer);
+        const hash = await walletClient.writeContract({
+          address: loanAddress as Address,
+          abi: parseAbi(LOAN_CONTRACT_ABI),
+          functionName: 'repayLoan',
+          args: [BigInt(repaymentAmount)],
+        });
 
-        const tx = await contract.repayLoan(toBeHex(repaymentAmount));
-        const receipt = await tx.wait();
-        return { txHash: tx.hash, receipt };
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -154,7 +165,7 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, clearError]
+    [walletClient, publicClient, clearError]
   );
 
   return {
