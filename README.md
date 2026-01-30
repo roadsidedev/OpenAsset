@@ -114,3 +114,4 @@ The `monitoringWorker` tracks volatility in real-time. If an asset's price moves
 ## 📄 License
 
 This project is licensed under the MIT License.
+Roadsidelab Production
