@@ -40,4 +40,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Error handling middleware (must be last)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  logger.error({ error: err }, 'Unhandled error');
+  res.status(err.statusCode || 500).json({
+    success: false,
+    error: err.message || 'Internal Server Error',
+  });
+});
+
 export default app;

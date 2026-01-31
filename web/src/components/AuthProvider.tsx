@@ -23,11 +23,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
 
-  // Load auth token from local storage on mount
+  // Load and validate auth token from local storage on mount
   useEffect(() => {
     const stored = localStorage.getItem(AUTH_STORAGE_KEY);
     if (stored) {
-      setAuthToken(stored);
+      // Validate token is still valid by attempting a protected endpoint
+      fetchFromApi('/auth/me', {
+        headers: { 'Authorization': `Bearer ${stored}` }
+      })
+        .then(() => setAuthToken(stored))
+        .catch(() => {
+          // Token invalid or expired, clear it
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuthToken(null);
+        });
     }
   }, []);
 
