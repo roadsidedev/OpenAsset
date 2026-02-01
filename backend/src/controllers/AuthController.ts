@@ -30,53 +30,92 @@ export const getNonce = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-  try {
-    const address = req.body.address as string;
-    const { signature } = req.body;
+   try {
+     const address = req.body.address as string;
+     const { signature } = req.body;
+ 
+     if (!address || !signature) {
+       res.status(400).json({ error: "Address and signature required" });
+       return;
+     }
+ 
+     const user = await prisma.user.findUnique({
+       where: { address: address.toLowerCase() },
+     });
+ 
+     if (!user) {
+       res.status(401).json({ error: "User not found. Fetch nonce first." });
+       return;
+     }
+ 
+     const message = `Login to RedChips: ${user.nonce}`;
+     const recoveredAddress = verifyMessage(message, signature);
+ 
+     if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
+       res.status(401).json({ error: "Invalid signature" });
+       return;
+     }
+ 
+     // Rotate nonce
+     await prisma.user.update({
+       where: { address: user.address },
+       data: { nonce: uuidv4() },
+     });
+ 
+     // Generate JWT
+     const token = jwt.sign({ address: user.address }, config.jwtSecret, {
+       expiresIn: "24h",
+     });
+ 
+     res.json({
+       token,
+       user: {
+         address: user.address,
+         email: user.email,
+         emailVerified: user.emailVerified,
+       },
+     });
+   } catch (error) {
+     logger.error({ err: error }, "Login error");
+     res.status(500).json({ error: "Internal server error" });
+   }
+};
 
-    if (!address || !signature) {
-      res.status(400).json({ error: "Address and signature required" });
-      return;
-    }
+/**
+ * Verify current JWT token is valid
+ * Used by frontend on mount to restore auth state
+ */
+export const verifyToken = async (req: Request, res: Response) => {
+   try {
+     const authHeader = req.headers.authorization;
+     
+     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+       res.status(401).json({ error: "Missing or invalid authorization header" });
+       return;
+     }
 
-    const user = await prisma.user.findUnique({
-      where: { address: address.toLowerCase() },
-    });
+     const token = authHeader.split(' ')[1];
+     const decoded = jwt.verify(token, config.jwtSecret) as { address: string };
 
-    if (!user) {
-      res.status(401).json({ error: "User not found. Fetch nonce first." });
-      return;
-    }
+     const user = await prisma.user.findUnique({
+       where: { address: decoded.address.toLowerCase() },
+     });
 
-    const message = `Login to RedChips: ${user.nonce}`;
-    const recoveredAddress = verifyMessage(message, signature);
+     if (!user) {
+       res.status(401).json({ error: "User not found" });
+       return;
+     }
 
-    if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
-      res.status(401).json({ error: "Invalid signature" });
-      return;
-    }
-
-    // Rotate nonce
-    await prisma.user.update({
-      where: { address: user.address },
-      data: { nonce: uuidv4() },
-    });
-
-    // Generate JWT
-    const token = jwt.sign({ address: user.address }, config.jwtSecret, {
-      expiresIn: "24h",
-    });
-
-    res.json({
-      token,
-      user: {
-        address: user.address,
-        email: user.email,
-        emailVerified: user.emailVerified,
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error }, "Login error");
-    res.status(500).json({ error: "Internal server error" });
-  }
+     res.json({
+       token,
+       user: {
+         address: user.address,
+         email: user.email,
+         emailVerified: user.emailVerified,
+       },
+     });
+   } catch (error) {
+     logger.error({ err: error }, "Token verification error");
+     res.status(401).json({ error: "Invalid or expired token" });
+   }
 };

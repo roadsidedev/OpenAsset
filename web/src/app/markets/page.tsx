@@ -13,19 +13,11 @@ export default function MarketsPage() {
   return (
     <div className="min-h-screen bg-black text-white pb-20 md:pb-0">
       <main className="container mx-auto px-6 py-12">
-        <div className="flex flex-col justify-between gap-8 md:flex-row md:items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Lending Markets</h1>
-            <p className="mt-2 text-zinc-400">
-              Browse active markets or create your own to earn yield.
-            </p>
-          </div>
-          <Link
-            href="/create-market"
-            className="rounded-full bg-red-600 px-6 py-3 font-semibold transition hover:bg-red-500 text-center"
-          >
-            + Create Market
-          </Link>
+        <div>
+          <h1 className="text-3xl font-bold">Lending Markets</h1>
+          <p className="mt-2 text-zinc-400">
+            Browse active markets or create your own to earn yield.
+          </p>
         </div>
 
         {/* Filters */}

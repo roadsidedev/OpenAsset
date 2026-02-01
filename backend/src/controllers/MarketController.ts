@@ -23,8 +23,13 @@ export class MarketController extends BaseController {
       const startNum = Math.max(0, parseInt(String(start)) || 0);
       const countNum = Math.min(100, Math.max(1, parseInt(String(count)) || 20));
 
+      logger.info({ startNum, countNum }, 'getMarkets called');
+
       const totalCount = await contractService.getMarketCount();
+      logger.info({ totalCount }, 'Got market count');
+
       const marketAddresses = await contractService.getMarkets(startNum, countNum);
+      logger.info({ addressCount: marketAddresses.length }, 'Got market addresses');
 
       const markets = await Promise.all(
         marketAddresses.map(async (addr) => {
@@ -46,6 +51,7 @@ export class MarketController extends BaseController {
         markets: markets.filter((m) => m !== null),
       });
     } catch (error) {
+      logger.error({ error, query: req.query }, 'getMarkets failed');
       next(error);
     }
   }

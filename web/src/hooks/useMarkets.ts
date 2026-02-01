@@ -28,7 +28,7 @@ export const useMarkets = (start = 0, count = 20) => {
   return useQuery<{ total: number; start: number; count: number; markets: Market[] }>({
     queryKey: ['markets', start, count],
     queryFn: async () => {
-      const res = await fetch(`/api/markets?start=${start}&count=${count}`);
+      const res = await fetch(`/api/v1/markets?start=${start}&count=${count}`);
       if (!res.ok) throw new Error('Failed to fetch markets');
       return res.json().then((r) => r.data);
     },
@@ -40,7 +40,7 @@ export const useMarket = (address: string) => {
   return useQuery<Market>({
     queryKey: ['market', address],
     queryFn: async () => {
-      const res = await fetch(`/api/markets/${address}`);
+      const res = await fetch(`/api/v1/markets/${address}`);
       if (!res.ok) throw new Error('Failed to fetch market');
       return res.json().then((r) => r.data);
     },
@@ -53,7 +53,7 @@ export const useMarketLiquidity = (address: string) => {
   return useQuery({
     queryKey: ['marketLiquidity', address],
     queryFn: async () => {
-      const res = await fetch(`/api/markets/${address}/liquidity`);
+      const res = await fetch(`/api/v1/markets/${address}/liquidity`);
       if (!res.ok) throw new Error('Failed to fetch liquidity');
       return res.json().then((r) => r.data);
     },
