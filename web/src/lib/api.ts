@@ -1,7 +1,11 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+// Use relative path to leverage Next.js rewrites
+const API_BASE = '/api/v1';
 
 export async function fetchFromApi(endpoint: string, options: RequestInit = {}) {
-  const url = `${API_URL}${endpoint}`;
+  // Ensure endpoint starts with /
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE}${path}`;
+  
   const response = await fetch(url, {
     ...options,
     headers: {

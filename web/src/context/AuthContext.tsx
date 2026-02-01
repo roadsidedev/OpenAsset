@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { usePrivy, useWallets, User } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { fetchFromApi } from '../lib/api';
 
 const AUTH_STORAGE_KEY = 'redchips_auth_token';
@@ -12,53 +12,68 @@ interface AuthContextType {
   signLoginMessage: () => Promise<void>;
   authenticatedFetch: (endpoint: string, options?: RequestInit) => Promise<any>;
   logout: () => void;
-  user: User | null;
+  user: any;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, authenticated } = usePrivy();
+  const { user, authenticated, logout: privyLogout } = usePrivy();
   const { wallets } = useWallets();
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
 
-  // Load and validate auth token from local storage on mount
+  // Load auth token from local storage on mount
   useEffect(() => {
     const stored = localStorage.getItem(AUTH_STORAGE_KEY);
     if (stored) {
-      // Validate token is still valid by attempting a protected endpoint
-      fetchFromApi('/auth/me', {
-        headers: { 'Authorization': `Bearer ${stored}` }
-      })
-        .then(() => setAuthToken(stored))
-        .catch(() => {
-          // Token invalid or expired, clear it
-          localStorage.removeItem(AUTH_STORAGE_KEY);
-          setAuthToken(null);
-        });
+      setAuthToken(stored);
     }
   }, []);
+
+  // Sync: If Privy says not authenticated, clear our local state
+  useEffect(() => {
+    if (!authenticated && authToken) {
+      setAuthToken(null);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  }, [authenticated, authToken]);
 
   const signLoginMessage = useCallback(async () => {
     if (!authenticated || !user?.wallet?.address || !wallets.length) return;
     
     setIsSigning(true);
     try {
-      const wallet = wallets.find((w) => w.address === user.wallet?.address);
-      if (!wallet) throw new Error('Wallet not found');
+      // FIX: Case-insensitive comparison for wallet address
+      const userAddress = user.wallet.address.toLowerCase();
+      const wallet = wallets.find((w) => w.address.toLowerCase() === userAddress);
+      
+      if (!wallet) {
+        console.error('Wallet not found for address:', userAddress);
+        // Fallback: use the first connected wallet if specific match fails 
+        // (sometimes Privy user object lags behind wallet list)
+        const fallbackWallet = wallets[0];
+        if (!fallbackWallet) throw new Error('No wallets connected');
+        
+        // warn if mismatch
+        if (fallbackWallet.address.toLowerCase() !== userAddress) {
+             console.warn('Using fallback wallet:', fallbackWallet.address);
+        }
+      }
+
+      const activeWallet = wallet || wallets[0];
 
       // 1. Fetch nonce from backend
-      const { nonce } = await fetchFromApi(`/auth/nonce/${user.wallet.address}`);
+      const { nonce } = await fetchFromApi(`/auth/nonce/${activeWallet.address}`);
 
       const message = `Login to RedChips: ${nonce}`;
-      const signature = await wallet.sign(message);
+      const signature = await activeWallet.sign(message);
       
       // 2. Login to get JWT
       const { token } = await fetchFromApi('/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          address: user.wallet.address,
+          address: activeWallet.address,
           signature
         })
       });
@@ -67,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthToken(token);
     } catch (err) {
       console.error('Failed to sign message:', err);
+      // Optional: Show toast error
     } finally {
       setIsSigning(false);
     }
@@ -89,20 +105,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     setAuthToken(null);
+    // We don't call privyLogout() here to separate concerns, 
+    // but the effect above will clean up if Privy logs out.
   }, []);
 
-  return (
-    <AuthContext.Provider value={{
-      isAuthenticated: !!authToken,
-      isSigning,
-      signLoginMessage,
-      authenticatedFetch,
-      logout,
-      user
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = {
+    isAuthenticated: !!authToken,
+    isSigning,
+    signLoginMessage,
+    authenticatedFetch,
+    logout,
+    user
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
