@@ -29,7 +29,7 @@ export default function CreateMarketPage() {
       clearError();
       const params = {
         collateralAsset: formData.assetAddress,
-        loanAsset: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH placeholder
+        loanAsset: formData.loanAssetAddress,
         assetType: 0,
         oracleType: 0,
         primaryOracle: "0x0000000000000000000000000000000000000000",
@@ -91,10 +91,26 @@ export default function CreateMarketPage() {
                     setFormData({ assetAddress: e.target.value })
                   }
                 />
+                <p className="mt-1 text-xs text-zinc-500">
+                  The ERC20 token borrowers will deposit as collateral.
+                </p>
               </div>
-              <div className="rounded-lg bg-zinc-800 p-4">
-                <p className="text-sm text-zinc-400">Detected Asset:</p>
-                <p className="font-semibold">GameToken (GAME)</p>
+              <div>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  Loan Asset Address (ERC20)
+                </label>
+                <input
+                  type="text"
+                  placeholder="0x..."
+                  className="w-full rounded-lg border border-white/10 bg-black px-4 py-3 text-white placeholder-zinc-600 focus:border-red-500 focus:outline-none"
+                  value={formData.loanAssetAddress}
+                  onChange={(e) =>
+                    setFormData({ loanAssetAddress: e.target.value })
+                  }
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  The token lenders will provide and borrowers will receive (e.g. USDC).
+                </p>
               </div>
             </div>
           )}

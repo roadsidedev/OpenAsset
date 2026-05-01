@@ -25,7 +25,7 @@ interface QueryParams {
   take?: number;
 }
 
-export const useLoans = (params: QueryParams = {}) => {
+export const useLoans = (params: QueryParams = {}, { enabled = true }: { enabled?: boolean } = {}) => {
   const searchParams = new URLSearchParams();
   if (params.market) searchParams.append('market', params.market);
   if (params.borrower) searchParams.append('borrower', params.borrower);
@@ -40,6 +40,7 @@ export const useLoans = (params: QueryParams = {}) => {
       if (!res.ok) throw new Error('Failed to fetch loans');
       return res.json().then((r) => r.data);
     },
+    enabled,
     staleTime: 30000,
   });
 };

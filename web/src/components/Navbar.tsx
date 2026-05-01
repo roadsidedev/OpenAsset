@@ -10,8 +10,9 @@ import { useAuthApi } from "@/hooks/useAuthApi";
 
 export function Navbar() {
   const pathname = usePathname();
-  const { login, logout: privyLogout, authenticated } = usePrivy();
-  const { isAuthenticated: isBackendAuthenticated, signLoginMessage, isSigning, logout: backendLogout, user } = useAuthApi();
+  const { login, logout: privyLogout, authenticated, ready: privyReady } = usePrivy();
+  const { isAuthenticated: isBackendAuthenticated, signLoginMessage, isSigning, logout: backendLogout, user, isLoading: authLoading } = useAuthApi();
+  const isReady = privyReady && !authLoading;
 
   const handleConnect = () => {
     if (!authenticated) {
@@ -53,33 +54,31 @@ export function Navbar() {
           <span className="text-xl font-bold tracking-tight text-white">Red Chips</span>
         </Link>
         <div className="flex items-center gap-2">
-          {!authenticated ? (
+          {!isReady ? (
+            <div className="h-8 w-8 animate-pulse rounded-full bg-zinc-800" />
+          ) : !authenticated ? (
             <Button onClick={login} size="sm" variant="secondary" className="rounded-full">
               Connect
             </Button>
+          ) : !isBackendAuthenticated ? (
+            <Button
+              onClick={signLoginMessage}
+              disabled={isSigning}
+              variant="default"
+              size="sm"
+              className="rounded-full bg-red-600 hover:bg-red-700"
+            >
+              {isSigning ? "..." : "Sign"}
+            </Button>
           ) : (
-            <>
-              {!isBackendAuthenticated ? (
-                <Button
-                  onClick={signLoginMessage}
-                  disabled={isSigning}
-                  variant="default"
-                  size="sm"
-                  className="rounded-full bg-red-600 hover:bg-red-700"
-                >
-                  {isSigning ? "..." : "Sign"}
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-400">
-                    {user?.wallet?.address?.slice(0, 4)}...{user?.wallet?.address?.slice(-4)}
-                  </div>
-                  <Button onClick={handleLogout} size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white">
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </>
+            <div className="flex items-center gap-2">
+              <div className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-400">
+                {user?.wallet?.address?.slice(0, 4)}...{user?.wallet?.address?.slice(-4)}
+              </div>
+              <Button onClick={handleLogout} size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           )}
         </div>
       </nav>
@@ -105,31 +104,29 @@ export function Navbar() {
               </Link>
             ))}
             
-            {!authenticated ? (
+            {!isReady ? (
+              <div className="h-9 w-24 animate-pulse rounded-full bg-zinc-800" />
+            ) : !authenticated ? (
               <Button onClick={login} variant="secondary" className="rounded-full">
                 Connect Wallet
               </Button>
+            ) : !isBackendAuthenticated ? (
+              <Button
+                onClick={signLoginMessage}
+                disabled={isSigning}
+                variant="default"
+                className="rounded-full bg-red-600 hover:bg-red-700"
+              >
+                {isSigning ? "Signing..." : "Sign to Login"}
+              </Button>
             ) : (
               <div className="flex items-center gap-2">
-                {!isBackendAuthenticated ? (
-                  <Button 
-                    onClick={signLoginMessage} 
-                    disabled={isSigning}
-                    variant="default" 
-                    className="rounded-full bg-red-600 hover:bg-red-700"
-                  >
-                    {isSigning ? "Signing..." : "Sign to Login"}
-                  </Button>
-                ) : (
-                   <div className="flex items-center gap-2">
-                      <div className="text-xs text-zinc-400 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                        {user?.wallet?.address?.slice(0, 6)}...{user?.wallet?.address?.slice(-4)}
-                      </div>
-                      <Button onClick={handleLogout} size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white">
-                        <LogOut className="h-4 w-4" />
-                      </Button>
-                   </div>
-                )}
+                <div className="text-xs text-zinc-400 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                  {user?.wallet?.address?.slice(0, 6)}...{user?.wallet?.address?.slice(-4)}
+                </div>
+                <Button onClick={handleLogout} size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 hover:text-white">
+                  <LogOut className="h-4 w-4" />
+                </Button>
               </div>
             )}
           </div>

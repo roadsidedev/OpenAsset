@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProtocolStatsBar } from "@/components/ProtocolStatsBar";
 
 export default function Home() {
   return (
@@ -47,25 +48,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="border-y border-white/5 bg-zinc-900/20 py-12">
-        <div className="container mx-auto px-6">
-          <div className="grid grid-cols-1 gap-8 text-center sm:grid-cols-3">
-            <div>
-              <div className="text-4xl font-bold text-white">$1.2M+</div>
-              <div className="text-sm uppercase tracking-wider text-zinc-500">Total Value Locked</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-white">42</div>
-              <div className="text-sm uppercase tracking-wider text-zinc-500">Active Markets</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-white">1,500+</div>
-              <div className="text-sm uppercase tracking-wider text-zinc-500">Loans Originated</div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Live Stats — fetched from backend, zero mock data */}
+      <ProtocolStatsBar />
 
       {/* Features Section */}
       <section className="py-24">

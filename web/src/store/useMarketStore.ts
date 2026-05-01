@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 
+// Sepolia USDC — default loan asset for new markets
+const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+
 interface MarketFormData {
   assetAddress: string;
+  loanAssetAddress: string;
   ltv: number;
   apr: number;
   duration: number;
@@ -18,6 +22,7 @@ interface MarketStore {
 
 const INITIAL_DATA: MarketFormData = {
   assetAddress: "",
+  loanAssetAddress: SEPOLIA_USDC,
   ltv: 75,
   apr: 12,
   duration: 30,

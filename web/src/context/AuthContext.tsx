@@ -9,6 +9,7 @@ const AUTH_STORAGE_KEY = 'redchips_auth_token';
 interface AuthContextType {
   isAuthenticated: boolean;
   isSigning: boolean;
+  isLoading: boolean;
   signLoginMessage: () => Promise<void>;
   authenticatedFetch: (endpoint: string, options?: RequestInit) => Promise<any>;
   logout: () => void;
@@ -18,7 +19,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, authenticated, logout: privyLogout } = usePrivy();
+  const { user, authenticated, logout: privyLogout, ready } = usePrivy();
   const { wallets } = useWallets();
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
@@ -31,13 +32,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Sync: If Privy says not authenticated, clear our local state
+  // Sync: If Privy has finished initializing and says not authenticated, clear our local state.
+  // We only clear when `ready` is true to avoid wiping the token during page refresh while
+  // Privy is still loading.
   useEffect(() => {
-    if (!authenticated && authToken) {
+    if (ready && !authenticated && authToken) {
       setAuthToken(null);
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
-  }, [authenticated, authToken]);
+  }, [ready, authenticated, authToken]);
 
   const signLoginMessage = useCallback(async () => {
     if (!authenticated || !user?.wallet?.address || !wallets.length) return;
@@ -112,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = {
     isAuthenticated: !!authToken,
     isSigning,
+    isLoading: !ready,
     signLoginMessage,
     authenticatedFetch,
     logout,
