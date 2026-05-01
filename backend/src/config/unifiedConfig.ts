@@ -5,7 +5,7 @@ dotenv.config();
 
 const envSchema = z.object({
   PORT: z.string().default('3000').transform(Number),
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.string().url().default('postgresql://user:pass@localhost:5432/redchips'),
   NODE_ENV: z.string().default('development').transform((val) => val.toLowerCase()).pipe(z.enum(['development', 'production', 'test'])),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   RPC_URLS: z.string().default('http://127.0.0.1:8545').transform(s => s.split(',')),
