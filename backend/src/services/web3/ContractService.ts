@@ -63,11 +63,13 @@ export class ContractService {
   };
 
   constructor() {
-    // Initialize provider with fallback
     const rpcUrl = config.rpcUrls[0];
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    if (rpcUrl && rpcUrl !== 'http://127.0.0.1:8545') {
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    } else {
+      this.provider = null as any;
+    }
 
-    // Load contract addresses from config
     this.contractAddresses = {
       marketFactory: config.contracts.marketFactory,
       loanImplementation: config.contracts.loanImplementation || '',
@@ -78,7 +80,11 @@ export class ContractService {
       treasury: config.contracts.treasury || '',
     };
 
-    this.initializeFactoryContract();
+    if (this.contractAddresses.marketFactory && this.provider) {
+      this.initializeFactoryContract();
+    } else {
+      logger.warn('Web3 contracts not initialized - RPC or factory address not configured');
+    }
   }
 
   private initializeFactoryContract(): void {
@@ -180,7 +186,8 @@ export class ContractService {
    */
   async getMarkets(start: number, count: number): Promise<string[]> {
     if (!this.factoryContract) {
-      throw new Error('Factory contract not initialized');
+      logger.warn('Factory contract not configured, returning empty list');
+      return [];
     }
 
     try {
@@ -197,7 +204,8 @@ export class ContractService {
    */
   async getMarketCount(): Promise<number> {
     if (!this.factoryContract) {
-      throw new Error('Factory contract not initialized');
+      logger.warn('Factory contract not configured, returning 0');
+      return 0;
     }
 
     try {
