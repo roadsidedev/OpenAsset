@@ -11,14 +11,14 @@ const envSchema = z.object({
   RPC_URLS: z.string().default('http://127.0.0.1:8545').transform(s => s.split(',')),
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   
-  // Contract Addresses
-  MARKET_FACTORY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  LOAN_IMPLEMENTATION_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  NFT_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  CHAINLINK_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  ORACLE_ROUTER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  UNISWAP_V3_TWAP_WRAPPER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  TREASURY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  // Contract Addresses (optional - validated only when provided)
+  MARKET_FACTORY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  LOAN_IMPLEMENTATION_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  NFT_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  CHAINLINK_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  ORACLE_ROUTER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  UNISWAP_V3_TWAP_WRAPPER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  TREASURY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
   
   // Alert Services
   SENDGRID_API_KEY: z.string().optional(),
