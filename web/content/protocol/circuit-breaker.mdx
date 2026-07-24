@@ -1,0 +1,40 @@
+---
+title: Circuit breaker
+description: Core engine volatility and oracle-trust pauses — not pluggable.
+---
+
+# Circuit breaker
+
+The circuit breaker is **core engine logic, not an adapter** — deliberately. If it were pluggable, an LP could disable it by choosing (or writing) an oracle that never reports stress. The Oracle Adapter only reports price and trust; the engine alone decides what to do.
+
+## Triggers
+
+1. **Volatility** — price change over the lookback window exceeds `pauseThresholdBps`
+2. **Untrusted / stale oracle** — `isTrusted == false` (includes equity weekend/holiday windows, L2 sequencer downtime, stale Chainlink rounds)
+
+## Resume conditions
+
+For volatility or stale-oracle pauses:
+
+- Cooldown period has passed (`cooldownSeconds` after `pausedAt`)
+- Oracle is trusted again
+- Price change is below `resumeThresholdBps`
+
+LPs may also **manually pause** or **force-resume** their market.
+
+## What’s allowed while paused
+
+| Action | Allowed? |
+|---|---|
+| New loan origination | **Blocked** |
+| Repayments | Allowed |
+| Liquidations | Allowed |
+| LP withdrawal of unlent liquidity | Allowed |
+
+## LP configuration at market creation
+
+- Enable / disable circuit breaker
+- Pause threshold (bps over lookback)
+- Resume threshold
+- Lookback period
+- Cooldown period

@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/AppShell";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Red Chips | Permissionless Asset Lending",
-  description: "Launch a lending market for any asset in minutes.",
+  title: "oA | Permissionless Asset Lending",
+  description: "OpenAsset Market — launch a lending market for any asset in minutes.",
 };
 
 export default function RootLayout({
@@ -17,13 +17,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" dir="ltr" className="dark" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          <Navbar />
-          <div className="pb-20 md:pb-0">
-            {children}
-          </div>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

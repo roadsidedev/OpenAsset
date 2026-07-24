@@ -117,7 +117,7 @@ export const requestEmailVerification = async (req: Request, res: Response) => {
 
     await emailService.sendEmail(
       user.email,
-      'RedChips Verification Code',
+      'OpenAsset Market Verification Code',
       `Your verification code is: ${code}`
     );
 
@@ -200,7 +200,7 @@ export const requestSmsVerification = async (req: Request, res: Response) => {
 
     await smsService.sendSms(
         user.sms,
-        `Your RedChips verification code is: ${code}`
+        `Your OpenAsset Market verification code is: ${code}`
     );
 
     res.json({ message: 'Verification code sent' });

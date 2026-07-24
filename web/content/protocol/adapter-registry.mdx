@@ -1,0 +1,54 @@
+---
+title: Adapter registry
+description: Hybrid permissionless registration with Verified / unverified / deprecated metadata.
+---
+
+# Adapter registry
+
+**Model: hybrid.** Anyone can deploy an adapter conforming to one of the five interfaces and register it. The registry does not gate what exists — it attaches and surfaces trust metadata so creators and borrowers can decide.
+
+## AdapterInfo
+
+```solidity
+enum AdapterType { ASSET, ORACLE, COMPLIANCE, LIQUIDATION, POSITION }
+
+struct AdapterInfo {
+    address adapterAddress;
+    AdapterType adapterType;
+    address registeredBy;
+    bool verified;           // audit sign-off only
+    bool deprecated;
+    string auditReference;
+    uint256 registeredAt;
+    uint256 totalValueSecured; // TVL through markets using this adapter
+}
+```
+
+## Lifecycle operations
+
+| Function | Who | Effect |
+|---|---|---|
+| `registerAdapter` | Anyone | Adds unverified adapter |
+| `markVerified` | Audit governance multisig | Sets verified + audit reference |
+| `markDeprecated` | Audit governance multisig | Blocks new selection; does **not** pause existing markets |
+
+### Deprecation behavior (explicit)
+
+Deprecation does **not** retroactively pause markets already using the adapter — consistent with “market creator controls their market.” It does:
+
+1. Block the adapter from selection in any **new** market
+2. Surface a persistent warning on existing markets still wired to it
+3. Directly notify affected LP(s)
+
+## Reference adapters (ship Verified at launch)
+
+Protocol-authored defaults so most usage runs through vetted code while the registry door stays open:
+
+| Type | Adapters |
+|---|---|
+| Asset | `ERC20Adapter`, `ERC721Adapter` |
+| Oracle | `UniswapV3TWAPAdapter`, `ChainlinkAdapter` |
+| Liquidation | `DEXSwapLiquidationAdapter`, `NFTAuctionLiquidationAdapter` |
+| Position | `StandardPositionAdapter`, `SoulboundPositionAdapter`, `TransferablePositionAdapter` |
+
+RWA-specific adapters (`ChainlinkEquityFeedAdapter`, `ERC3643ComplianceAdapter`, `IssuerRedemptionLiquidationAdapter`) follow the same model once issuer integrations and counsel gates are met.

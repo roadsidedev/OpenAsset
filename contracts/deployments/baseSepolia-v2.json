@@ -1,0 +1,20 @@
+{
+    "network":  "baseSepolia",
+    "deployer":  "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
+    "timestamp":  "2026-07-24T13:50:36.019Z",
+    "contracts":  {
+                      "adapterRegistry":  "0x47638415A8fd5AB1a7F2625BA172cB6065BBA448",
+                      "marketFactory":  "0xbFe3F5E898A059D0B399C8826A00dbe1e03608fd",
+                      "erc20Adapter":  "0xf94feB842E777d9Aad490c38890c6520A68AF52C",
+                      "erc721Adapter":  "0xa24807251FdF1467D184e5bDA74A19eA96EEB822",
+                      "standardPosition":  "0x3D1F31C4AA2419184d6A56367816cE892167AFfE",
+                      "soulboundPosition":  "0xE24E121F044aDeaE9a5224c0b1Ea4aD79BF0F1Ce",
+                      "transferablePosition":  "0xF1a56c7D0485476AF12B93AEbc6d769D449ebb66",
+                      "dexSwapLiquidation":  "0x0615642340e70f0a48BC1BCB8bfb5551Ec055Fec",
+                      "nftAuctionLiquidation":  "0x2910b2f6851A210453CB43ED4E3A9fF7E138d881",
+                      "marketDeployer":  "0x745f6f79362B88dc2a9475fF64Dc6DB7140D3741",
+                      "erc20AdapterWETH":  "0xBc09566675D50d7622545CBA2eD5D135Ae52e578",
+                      "erc20AdapterUSDC":  "0xd0448DE8c5bCA1B8f17359F28F301EADC4F4CBc3"
+                  },
+    "note":  "ERC20Adapter and ERC721Adapter are deployed on the deployer address. For production, deploy one instance per distinct collateral token."
+}

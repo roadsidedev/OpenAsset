@@ -5,13 +5,18 @@ dotenv.config();
 
 const envSchema = z.object({
   PORT: z.string().default('3000').transform(Number),
-  DATABASE_URL: z.string().url().default('postgresql://user:pass@localhost:5432/redchips'),
+  DATABASE_URL: z.string().url().default('postgresql://user:pass@localhost:5432/openasset'),
   NODE_ENV: z.string().default('development').transform((val) => val.toLowerCase()).pipe(z.enum(['development', 'production', 'test'])),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  RPC_URLS: z.string().default('http://127.0.0.1:8545').transform(s => s.split(',')),
+  
+  // Multi-chain RPC URLs (comma-separated, or chainId:url format)
+  // Format: "1:https://eth.llamarpc.com,https://backup.eth.com;11155111:https://rpc.sepolia.org"
+  RPC_URLS: z.string().default('http://127.0.0.1:8545'),
+  CHAIN_IDS: z.string().optional(), // e.g., "1,11155111"
+  
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   
-  // Contract Addresses (optional - validated only when provided)
+  // Contract Addresses (chainId:address format for multi-chain)
   MARKET_FACTORY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
   LOAN_IMPLEMENTATION_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
   NFT_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
@@ -19,6 +24,7 @@ const envSchema = z.object({
   ORACLE_ROUTER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
   UNISWAP_V3_TWAP_WRAPPER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
   TREASURY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  ADAPTER_REGISTRY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
   
   // Alert Services
   SENDGRID_API_KEY: z.string().optional(),
@@ -28,29 +34,101 @@ const envSchema = z.object({
   TWILIO_FROM_NUMBER: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_KEY: z.string().optional(),
   JWT_SECRET: z.string().default('super-secret-change-me-in-production'),
+  
+  // Keeper Service (Liquidation Execution)
+  KEEPER_ENABLED: z.string().default('false').transform(v => v === 'true'),
+  KEEPER_PRIVATE_KEY: z.string().optional(),
+  KEEPER_CHAIN_ID: z.string().default('11155111').transform(Number),
+  KEEPER_MAX_GAS_PRICE_GWEI: z.string().default('100').transform(Number),
+  KEEPER_POLL_INTERVAL_MS: z.string().default('30000').transform(Number),
+  KEEPER_MIN_HEALTH_FACTOR_BPS: z.string().default('12000').transform(Number),
+  KEEPER_BATCH_SIZE: z.string().default('10').transform(Number),
+  
+  // Database Pool
+  DB_POOL_SIZE: z.string().default('10').transform(Number),
+  DB_POOL_TIMEOUT: z.string().default('30000').transform(Number),
 });
 
 const env = envSchema.parse(process.env);
+
+function parseRpcUrls(input: string): Map<number, string[]> {
+  const result = new Map<number, string[]>();
+  
+  if (input.includes(':')) {
+    // Multi-chain format: "1:url1,url2;11155111:url3,url4"
+    const parts = input.split(';');
+    for (const part of parts) {
+      const [chainIdStr, ...urlParts] = part.split(':');
+      const chainId = parseInt(chainIdStr, 10);
+      if (!isNaN(chainId) && urlParts.length > 0) {
+        result.set(chainId, urlParts.join(':').split(',').filter(u => u.trim()));
+      }
+    }
+  } else {
+    // Single chain - use CHAIN_IDS or default to Sepolia
+    const chainIds = env.CHAIN_IDS 
+      ? env.CHAIN_IDS.split(',').map(s => parseInt(s.trim(), 10))
+      : [11155111];
+    const urls = input.split(',').filter(u => u.trim());
+    for (const chainId of chainIds) {
+      result.set(chainId, urls);
+    }
+  }
+  
+  return result;
+}
+
+function parseContractAddresses(input: string): Map<number, string> {
+  const result = new Map<number, string>();
+  if (!input) return result;
+  
+  // Format: "1:0x...;11155111:0x..."
+  const parts = input.split(';');
+  for (const part of parts) {
+    const [chainIdStr, address] = part.split(':');
+    const chainId = parseInt(chainIdStr, 10);
+    if (!isNaN(chainId) && address) {
+      result.set(chainId, address);
+    }
+  }
+  return result;
+}
+
+const rpcUrlsMap = parseRpcUrls(env.RPC_URLS);
+const chainIds = Array.from(rpcUrlsMap.keys());
 
 export const config = {
   port: env.PORT,
   jwtSecret: env.JWT_SECRET,
   db: {
     url: env.DATABASE_URL,
+    poolSize: env.DB_POOL_SIZE,
+    poolTimeout: env.DB_POOL_TIMEOUT,
   },
   env: env.NODE_ENV,
   logLevel: env.LOG_LEVEL,
-  rpcUrls: env.RPC_URLS,
+  rpcUrls: rpcUrlsMap,
   frontendUrl: env.FRONTEND_URL,
+  
+  // Chain configuration
+  chains: chainIds.map(id => ({ 
+    id, 
+    rpcUrls: rpcUrlsMap.get(id) || [],
+  })),
+  
+  // Contract addresses per chain
   contracts: {
-    marketFactory: env.MARKET_FACTORY_ADDRESS,
-    loanImplementation: env.LOAN_IMPLEMENTATION_ADDRESS,
-    nftOracle: env.NFT_ORACLE_ADDRESS,
-    chainlinkOracle: env.CHAINLINK_ORACLE_ADDRESS,
-    oracleRouter: env.ORACLE_ROUTER_ADDRESS,
-    uniswapV3TWAPWrapper: env.UNISWAP_V3_TWAP_WRAPPER_ADDRESS,
-    treasury: env.TREASURY_ADDRESS,
+    marketFactory: parseContractAddresses(env.MARKET_FACTORY_ADDRESS),
+    loanImplementation: parseContractAddresses(env.LOAN_IMPLEMENTATION_ADDRESS),
+    nftOracle: parseContractAddresses(env.NFT_ORACLE_ADDRESS),
+    chainlinkOracle: parseContractAddresses(env.CHAINLINK_ORACLE_ADDRESS),
+    oracleRouter: parseContractAddresses(env.ORACLE_ROUTER_ADDRESS),
+    uniswapV3TWAPWrapper: parseContractAddresses(env.UNISWAP_V3_TWAP_WRAPPER_ADDRESS),
+    treasury: parseContractAddresses(env.TREASURY_ADDRESS),
+    adapterRegistry: parseContractAddresses(env.ADAPTER_REGISTRY_ADDRESS),
   },
+  
+  // Alert configuration with deduplication
   alerts: {
     sendgrid: {
       apiKey: env.SENDGRID_API_KEY,
@@ -63,6 +141,43 @@ export const config = {
     },
     firebase: {
       serviceAccountKey: env.FIREBASE_SERVICE_ACCOUNT_KEY,
-    }
-  }
+    },
+    dedup: {
+      defaultWindowSec: 3600, // 1 hour default
+      windows: {
+        HEALTH_FACTOR: 1800,    // 30 min
+        LIQUIDATION_RISK: 1800, // 30 min
+        MARKET_PAUSED: 86400,   // 24 hours
+        LOAN_EXPIRING: 3600,    // 1 hour
+        LIQUIDATION_CURE_WARNING: 600, // 10 min
+        CURE_WINDOW_EXPIRING: 600,     // 10 min
+        SETTLEMENT_TIMEOUT: 86400,     // 24 hours
+      } as Record<string, number>,
+    },
+  },
+  
+  // Keeper service configuration
+  keeper: {
+    enabled: env.KEEPER_ENABLED,
+    privateKey: env.KEEPER_PRIVATE_KEY,
+    chainId: env.KEEPER_CHAIN_ID,
+    maxGasPriceGwei: env.KEEPER_MAX_GAS_PRICE_GWEI,
+    pollIntervalMs: env.KEEPER_POLL_INTERVAL_MS,
+    minHealthFactorBps: env.KEEPER_MIN_HEALTH_FACTOR_BPS,
+    batchSize: env.KEEPER_BATCH_SIZE,
+  },
 };
+
+// Helper methods
+export function getRpcUrl(chainId: number): string | undefined {
+  const urls = config.rpcUrls.get(chainId);
+  return urls?.[0];
+}
+
+export function getRpcUrls(chainId: number): string[] {
+  return config.rpcUrls.get(chainId) || [];
+}
+
+export function getContractAddress(name: keyof typeof config.contracts, chainId: number): string | undefined {
+  return config.contracts[name]?.get(chainId);
+}

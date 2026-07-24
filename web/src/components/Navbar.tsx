@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutDashboard, PlusCircle, Wallet, LogOut } from "lucide-react";
+import { Home, LayoutDashboard, PlusCircle, Wallet, LogOut, Blocks, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
@@ -43,6 +43,16 @@ export function Navbar() {
       href: "/dashboard",
       icon: LayoutDashboard,
     },
+    {
+      label: "Adapters",
+      href: "/adapters",
+      icon: Blocks,
+    },
+    {
+      label: "Docs",
+      href: "/docs",
+      icon: BookOpen,
+    },
   ];
 
   return (
@@ -51,7 +61,7 @@ export function Navbar() {
       <nav className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-white/10 bg-black/90 backdrop-blur-lg px-4 md:hidden">
         <Link href="/" className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-full bg-red-600"></div>
-          <span className="text-xl font-bold tracking-tight text-white">Red Chips</span>
+          <span className="text-xl font-bold tracking-tight text-white">oA</span>
         </Link>
         <div className="flex items-center gap-2">
           {!isReady ? (
@@ -88,7 +98,7 @@ export function Navbar() {
         <div className="container mx-auto flex h-16 items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 bg-red-600 rounded-full"></div>
-            <span className="text-xl font-bold tracking-tight text-white">Red Chips</span>
+            <span className="text-xl font-bold tracking-tight text-white">oA</span>
           </Link>
           <div className="flex items-center gap-6">
             {NAV_ITEMS.map((item) => (

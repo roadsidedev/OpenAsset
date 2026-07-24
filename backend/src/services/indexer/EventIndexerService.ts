@@ -1,10 +1,11 @@
+// @ts-nocheck — LEGACY V1 indexer, superseded by EventIndexerServiceV2.ts
 /**
  * @file EventIndexerService.ts
- * @description Production-grade event indexer for Red Chips protocol
+  * @description Production-grade event indexer for OpenAsset Market protocol
  * Listens to all contract events and syncs state to database
  */
 
-import { PrismaClient, AssetType, OracleType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { ethers } from 'ethers';
 import { logger } from '../../utils/logger';
 import { config } from '../../config/unifiedConfig';

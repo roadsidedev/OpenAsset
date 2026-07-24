@@ -43,12 +43,7 @@ export default function BorrowPage({ params }: { params: { marketId: string } })
         return;
       }
 
-      const result = await requestLoan(market.marketAddress, {
-        collateralAmount,
-        tokenId: 0,
-        erc1155Amount: "0",
-        desiredPrincipal: principalAmount,
-      });
+      const result = await requestLoan(market.marketAddress, collateralAmount);
 
       setTxHash(result.txHash);
       setTimeout(() => {

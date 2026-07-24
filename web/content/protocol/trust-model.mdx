@@ -1,0 +1,45 @@
+---
+title: Adapter trust model
+description: Verified vs unverified adapters — and why the engine never fully trusts either.
+---
+
+# Adapter trust model
+
+import { Callout } from 'nextra/components'
+
+<Callout type="error">
+  This is the single most important security design in v2.0. Treat it as non-negotiable during implementation and audit.
+</Callout>
+
+## Process trust vs code trust
+
+The [Adapter Registry](/docs/protocol/adapter-registry) is **hybrid**:
+
+| Status | Meaning |
+|---|---|
+| **Verified** | Passed OpenAsset Market’s internal audit; audit reference attached |
+| **Unverified** | Registered permissionlessly; LP’s judgment; prominent UI risk warning |
+| **Deprecated** | Blocked for *new* markets; existing markets keep running with warnings |
+
+Verification is a **process** control — a human reviewer vouched for the code.
+
+**It does not change how the core engine treats the adapter at the code level.** Verified and unverified adapters are called identically. The engine independently verifies outputs in both cases.
+
+Verification reduces the *probability* a bug exists. It does not eliminate the *need* for the engine to defend itself. Treating a Verified adapter as fully trusted at the contract level would turn a single missed review bug into a protocol-wide vulnerability — the failure mode the adapter architecture exists to prevent.
+
+## Defensive invariants (every adapter call)
+
+| Adapter call | Defensive check |
+|---|---|
+| `assetAdapter.escrow()` | Verify actual balance delta matches requested amount — never assume success from a non-reverting call |
+| `oracleAdapter.getPrice()` | Reject `isTrusted == false`; bound price against hard sanity ceiling/floor |
+| `oracleAdapter.getPrice()` (repeat) | Bound magnitude of change between consecutive reads in the same tx |
+| `complianceAdapter.isEligible()` | Treat any revert as `false` (**fail closed**), never fail open |
+| `liquidationAdapter.liquidate()` | Verify `recoveredForLP + returnedToHolder` reconciles against assets received |
+| Every adapter call | Full CEI ordering + `nonReentrant` — each call is external to semi-trusted code |
+
+## UI requirements
+
+- Unverified adapters must be as prominent as “Manual Oracle — use at your own risk”
+- Warnings at **borrower** decision points, not only LP market creation
+- Explicit confirmation checkbox when selecting unverified adapters at market creation

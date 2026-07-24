@@ -48,7 +48,7 @@ contract LPToken is ERC20 {
  * - Revenue sharing (90% LP, 10% protocol)
  * - Comprehensive loan registry
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.io
  */
 contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -178,7 +178,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         circuitBreakerConfig = cbConfig_;
         
         // Deploy LP token
-        lpToken = new LPToken("RedChips LP Token", "rcLP");
+        lpToken = new LPToken("OpenAsset Market LP Token", "oALP");
     }
     
     // ============ Initialization (Called by Factory) ============
@@ -358,8 +358,8 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         isLoan[loanContract] = true;
         loanIndex[loanContract] = allLoans.length - 1;
         
-        // Reserve liquidity
-        reservedLiquidity += maxLoan;
+        // Reserve liquidity (only the net amount actually lent out)
+        reservedLiquidity += netLoan;
         
         // 4. INTERACTIONS: Transfer collateral from borrower to loan contract
         AssetHandler.transferAsset(

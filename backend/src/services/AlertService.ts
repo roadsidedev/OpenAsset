@@ -1,8 +1,16 @@
 import { PrismaClient, AlertType, AlertLevel } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { config } from '../config/unifiedConfig';
 import { EmailService } from './notifications/EmailService';
 import { SmsService } from './notifications/SmsService';
 import { PushService } from './notifications/PushService';
+
+interface UserAlertPrefs {
+  email?: boolean;
+  sms?: boolean;
+  push?: boolean;
+  dedupWindowSec?: number;
+}
 
 export class AlertService {
   private emailService: EmailService;
@@ -29,8 +37,8 @@ export class AlertService {
           type,
           level,
           message,
-          loanId: loanId || null, 
-          sentVia: [], 
+          loanId: loanId || null,
+          sentVia: [],
         },
       });
 
@@ -43,7 +51,7 @@ export class AlertService {
 
   private async dispatchAlert(alert: any) {
     const sentVia: string[] = [];
-    
+
     try {
       const user = await this.prisma.user.findUnique({
         where: { address: alert.userId },
@@ -58,65 +66,50 @@ export class AlertService {
         return alert;
       }
 
-      // Rate limiting: Avoid spamming users with same alert type (unless CRITICAL)
-      if (alert.level !== AlertLevel.CRITICAL) {
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        const recentAlert = await this.prisma.alert.findFirst({
-          where: {
-            userId: alert.userId,
-            type: alert.type,
-            status: 'SENT',
-            sentAt: { gt: oneHourAgo },
-            id: { not: alert.id }, 
-          },
-          orderBy: { sentAt: 'desc' },
+      // Check deduplication
+      const shouldDedup = await this.checkDeduplication(alert, user);
+      if (shouldDedup) {
+        await this.prisma.alert.update({
+          where: { id: alert.id },
+          data: { status: 'SENT', message: alert.message + ' (Deduplicated)' }
         });
-
-        if (recentAlert) {
-          logger.info({ userId: alert.userId, type: alert.type }, 'Rate limited alert dispatch');
-          await this.prisma.alert.update({
-            where: { id: alert.id },
-            data: { status: 'SENT', message: alert.message + ' (Rate limited)' }
-          });
-          return alert;
-        }
+        return alert;
       }
 
       const promises: Promise<void>[] = [];
 
       // Email
       if (user.email && user.emailVerified) {
-         if (user.emailAllAlerts || alert.level === AlertLevel.CRITICAL || alert.level === AlertLevel.WARNING) {
-             promises.push(
-               this.emailService.sendEmail(user.email, `[${alert.level}] RedChips Alert`, alert.message)
-                 .then(() => { sentVia.push('email'); })
-             );
-         }
+        if (user.emailAllAlerts || alert.level === AlertLevel.CRITICAL || alert.level === AlertLevel.WARNING) {
+          promises.push(
+            this.emailService.sendEmail(user.email, `[${alert.level}] OpenAsset Market Alert`, alert.message)
+              .then(() => { sentVia.push('email'); })
+          );
+        }
       }
 
       // SMS
       if (user.sms && user.smsVerified) {
-          if (alert.level === AlertLevel.CRITICAL) {
-             promises.push(
-                this.smsService.sendSms(user.sms, `RedChips: ${alert.message}`)
-                  .then(() => { sentVia.push('sms'); })
-             );
-          }
+        if (alert.level === AlertLevel.CRITICAL) {
+          promises.push(
+            this.smsService.sendSms(user.sms, `OpenAsset Market: ${alert.message}`)
+              .then(() => { sentVia.push('sms'); })
+          );
+        }
       }
 
       // Push
       if (user.pushToken && user.pushEnabled) {
-          promises.push(
-            this.pushService.sendPush(user.pushToken, 'RedChips Alert', alert.message)
-              .then(() => { sentVia.push('push'); })
-          );
+        promises.push(
+          this.pushService.sendPush(user.pushToken, 'OpenAsset Market Alert', alert.message)
+            .then(() => { sentVia.push('push'); })
+        );
       }
 
       const results = await Promise.allSettled(promises);
       const someSucceeded = results.some(r => r.status === 'fulfilled');
       const allFailed = results.length > 0 && results.every(r => r.status === 'rejected');
 
-      // Update alert with sentVia and status
       await this.prisma.alert.update({
         where: { id: alert.id },
         data: { 
@@ -135,5 +128,51 @@ export class AlertService {
     }
 
     return alert;
+  }
+
+  private async checkDeduplication(alert: any, user: any): Promise<boolean> {
+    // Never deduplicate CRITICAL alerts
+    if (alert.level === AlertLevel.CRITICAL) return false;
+
+    // Get dedup window for this alert type (from config or user prefs)
+    const typeWindow = config.alerts.dedup.windows[alert.type];
+    const defaultWindow = config.alerts.dedup.defaultWindowSec;
+    const windowSec = typeWindow ?? user.dedupWindowSec ?? defaultWindow;
+    const windowMs = windowSec * 1000;
+
+    const windowStart = new Date(Date.now() - windowMs);
+
+    const recentAlert = await this.prisma.alert.findFirst({
+      where: {
+        userId: alert.userId,
+        type: alert.type,
+        status: 'SENT',
+        sentAt: { gt: windowStart },
+        id: { not: alert.id },
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+
+    if (recentAlert) {
+      logger.info({ 
+        userId: alert.userId, 
+        type: alert.type, 
+        windowSec,
+        recentAlertId: recentAlert.id 
+      }, 'Alert deduplicated');
+      return true;
+    }
+
+    return false;
+  }
+
+  // Get user's effective alert preferences (can be extended with user preferences table)
+  private getUserAlertPrefs(user: any): UserAlertPrefs {
+    return {
+      email: user.email && user.emailVerified && (user.emailAllAlerts || true),
+      sms: user.sms && user.smsVerified,
+      push: user.pushToken && user.pushEnabled,
+      dedupWindowSec: undefined, // Could be stored in user preferences
+    };
   }
 }

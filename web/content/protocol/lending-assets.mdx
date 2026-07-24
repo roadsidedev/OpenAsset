@@ -1,0 +1,20 @@
+---
+title: Lending asset scope
+description: v1 restriction — stablecoin-only borrowed-out assets via Factory allowlist.
+---
+
+# Lending asset scope
+
+## v1 rule
+
+**The lending (borrowed-out) asset is stablecoins only.**
+
+This is a Factory-enforced allowlist, not LP discretion. Borrowers receive stablecoin proceeds and may convert outside the protocol.
+
+## Why
+
+Adapter-ization is scoped to the **collateral** side first. Expanding pluggable-asset logic to both sides of a loan simultaneously multiplies audit surface for limited near-term benefit.
+
+## Future
+
+Non-stablecoin lending assets (ETH, BTC) are an explicit, demand-gated future item — see [Deferred / out of scope](/docs/reference/deferred).

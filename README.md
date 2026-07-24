@@ -1,6 +1,6 @@
-# Red Chips: Permissionless Asset Lending Infrastructure
+# OpenAsset Market: Permissionless Asset Lending Infrastructure
 
-Red Chips is a decentralized, permissionless lending protocol that enables anyone to launch an isolated lending market for any on-chain asset (ERC20, ERC721, ERC1155). It empowers communities, DAOs, and individual LPs to provide liquidity and set their own risk parameters, bringing DeFi utility to the 95% of assets currently excluded from traditional platforms like Aave or Compound.
+OpenAsset Market is a decentralized, permissionless lending protocol that enables anyone to launch an isolated lending market for any on-chain asset (ERC20, ERC721, ERC1155). It empowers communities, DAOs, and individual LPs to provide liquidity and set their own risk parameters, bringing DeFi utility to the 95% of assets currently excluded from traditional platforms like Aave or Compound.
 
 ## 🚀 Key Features
 
@@ -23,7 +23,7 @@ Red Chips is a decentralized, permissionless lending protocol that enables anyon
 ## 📂 Project Structure
 
 ```text
-redchips/
+openasset/
 ├── contracts/        # Smart contracts (Hardhat project)
 ├── backend/          # Node.js API and worker services
 ├── web/              # Next.js frontend application
@@ -42,8 +42,8 @@ redchips/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/roadsidedev/redchips.git
-   cd redchips
+   git clone https://github.com/roadsidedev/openasset.git
+   cd openasset
    ```
 
 2. Install dependencies for all components:
@@ -88,10 +88,10 @@ npm run dev
 ## 🏗 Architecture
 
 ### Isolated Markets
-Unlike shared-pool protocols, Red Chips uses a factory pattern to deploy unique `LendingMarket` contracts for each asset pair. This ensures that a bad debt event in one market cannot affect others.
+Unlike shared-pool protocols, OpenAsset Market uses a factory pattern to deploy unique `LendingMarket` contracts for each asset pair. This ensures that a bad debt event in one market cannot affect others.
 
 ### TWAP Oracle System
-To prevent price manipulation, Red Chips consults Uniswap V3 pools to calculate a Time-Weighted Average Price (TWAP) over a configurable window (e.g., 30 minutes). This makes the protocol highly resistant to flash loan attacks.
+To prevent price manipulation, OpenAsset Market consults Uniswap V3 pools to calculate a Time-Weighted Average Price (TWAP) over a configurable window (e.g., 30 minutes). This makes the protocol highly resistant to flash loan attacks.
 
 ### Circuit Breaker
 The `monitoringWorker` tracks volatility in real-time. If an asset's price moves beyond the LP-defined threshold within the lookback window, the market automatically pauses new loan requests while still allowing repayments and liquidations.

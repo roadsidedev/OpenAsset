@@ -21,7 +21,7 @@ model User {
     createdAt      DateTime @default(now())
     updatedAt      DateTime @updatedAt
 
-    loans   Loan[]
+    loans   Loan[]   @relation("BorrowerLoans")
     markets Market[] @relation("LPMarkets")
     alerts  Alert[]
 
@@ -37,13 +37,41 @@ model SyncState {
     @@map("sync_states")
 }
 
-// Lending Market configuration and state
+// Adapter Registry — tracks all registered adapters with trust metadata
+model Adapter {
+    id               Int         @id @default(autoincrement())
+    adapterAddress   String
+    chainId          Int         @default(11155111)
+    adapterType      AdapterType
+    registeredBy     String
+    verified         Boolean     @default(false)
+    deprecated       Boolean     @default(false)
+    auditReference   String?
+    totalValueSecured String    @default("0")
+    registeredAt     DateTime    @default(now())
+
+    @@unique([adapterAddress, chainId])
+    @@index([adapterType])
+    @@index([verified])
+    @@index([chainId])
+    @@map("adapters")
+}
+
+// Lending Market configuration and state (V2 — adapter-based)
 model Market {
     id              String    @id @default(uuid())
     address         String    @unique // Contract address
+    chainId         Int       @default(11155111)
     lpAddress       String
-    collateralAsset String // Address of collateral token
-    assetType       AssetType
+    collateralAsset String    // Address of collateral token
+    lendingAsset    String    // Stablecoin only (V2)
+
+    // The five adapters (V2 core)
+    assetAdapter      String
+    oracleAdapter     String
+    complianceAdapter String?   // nullable — optional
+    liquidationAdapter String
+    positionAdapter   String
 
     // Terms
     ltvBasisPoints   Int
@@ -55,11 +83,6 @@ model Market {
     enableHealthFactor    Boolean
     healthFactorThreshold Int?
 
-    // Configuration
-    oracleType        OracleType
-    primaryOracle     String
-    twapPeriodSeconds Int
-
     // Circuit Breaker
     circuitBreakerEnabled Boolean
     pauseThresholdBps     Int?
@@ -69,9 +92,8 @@ model Market {
 
     // State
     status             MarketStatus @default(ACTIVE)
-    isActive           Boolean      @default(true)
     pausedAt           DateTime?
-    totalLiquidity     String       @default("0") // Store as string for BigInt
+    totalLiquidity     String       @default("0")
     availableLiquidity String       @default("0")
     totalBorrowed      String       @default("0")
 
@@ -85,26 +107,26 @@ model Market {
     @@index([lpAddress])
     @@index([collateralAsset])
     @@index([status])
+    @@index([assetAdapter])
+    @@index([oracleAdapter])
     @@map("markets")
 }
 
-// Individual Loans
+// Individual Loans (V2 — stored in market mapping, not standalone contracts)
 model Loan {
-    id              String @id @default(uuid())
-    address         String @unique // Loan contract address
-    contractLoanId  String // ID on smart contract
-    marketAddress   String
-    borrowerAddress String
+    id                    String  @id @default(uuid())
+    contractLoanId        String  // uint256 loan ID on LendingMarketV2
+    marketAddress         String
+    positionHolderAddress String  // Current holder (may differ from original borrower for TransferablePosition)
 
     // Amounts
     collateralAmount String  @default("0")
-    tokenId          String? // For NFTs
     principal        String  @default("0")
-    repaymentAmount  String?
 
     // Timing
-    startTime  DateTime
-    expiryTime DateTime
+    startTime       DateTime
+    expiryTime      DateTime
+    frozenInterestAt DateTime? // Set when entering LIQUIDATION_CURE; 0 otherwise
 
     // Status
     status LoanStatus @default(ACTIVE)
@@ -117,14 +139,14 @@ model Loan {
     updatedAt DateTime @updatedAt
 
     market   Market  @relation(fields: [marketAddress], references: [address])
-    borrower User    @relation(fields: [borrowerAddress], references: [address])
+    borrower User?   @relation("BorrowerLoans", fields: [positionHolderAddress], references: [address])
     alerts   Alert[]
 
     repaidAt     DateTime?
     liquidatedAt DateTime?
 
     @@unique([marketAddress, contractLoanId])
-    @@index([borrowerAddress])
+    @@index([positionHolderAddress])
     @@index([status])
     @@map("loans")
 }
@@ -193,29 +215,28 @@ model VerificationCode {
     @@map("verification_codes")
 }
 
-enum AssetType {
-    ERC20
-    ERC721
-    ERC1155
-}
-
-enum OracleType {
-    UNISWAP_V3_TWAP
-    CHAINLINK
-    MANUAL
+enum AdapterType {
+    ASSET
+    ORACLE
+    COMPLIANCE
+    LIQUIDATION
+    POSITION
 }
 
 enum MarketStatus {
     ACTIVE
     PAUSED_VOLATILITY
+    PAUSED_STALE_ORACLE
     PAUSED_MANUAL
 }
 
 enum LoanStatus {
     ACTIVE
+    GRACE_PERIOD
+    LIQUIDATION_CURE
+    LIQUIDATION_SETTLING
     REPAID
     LIQUIDATED
-    GRACE_PERIOD
 }
 
 enum AlertType {
@@ -223,6 +244,9 @@ enum AlertType {
     LIQUIDATION_RISK
     MARKET_PAUSED
     LOAN_EXPIRING
+    LIQUIDATION_CURE_WARNING
+    CURE_WINDOW_EXPIRING
+    SETTLEMENT_TIMEOUT
 }
 
 enum AlertLevel {

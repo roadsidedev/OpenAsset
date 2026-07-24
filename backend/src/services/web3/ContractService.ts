@@ -1,11 +1,11 @@
 /**
  * @file ContractService.ts
- * @description Production-grade Web3 contract interaction service
- * Handles all smart contract reads/writes with error handling and type safety
+ * @description Legacy V1 contract interaction service (updated for multi-chain config)
+ * Handles V1 smart contract reads/writes with error handling and type safety
  */
 
 import { ethers, Contract } from 'ethers';
-import { config } from '../../config/unifiedConfig';
+import { config, getRpcUrl, getContractAddress } from '../../config/unifiedConfig';
 import { logger } from '../../utils/logger';
 import {
   MARKET_FACTORY_ABI,
@@ -25,14 +25,7 @@ export interface CreateMarketParams {
   ltvBps: number;
   aprBps: number;
   durationSeconds: number;
-  initialLiquidity: string; // Use string for BigInt amounts
-}
-
-export interface RequestLoanParams {
-  collateralAmount: string;
-  tokenId: number;
-  erc1155Amount: string;
-  desiredPrincipal: string;
+  initialLiquidity: string;
 }
 
 export interface MarketInfo {
@@ -50,80 +43,64 @@ export interface MarketInfo {
 }
 
 export class ContractService {
-  private factoryContract: Contract | null = null;
-  private provider: ethers.JsonRpcProvider;
-  private contractAddresses: {
-    marketFactory: string;
-    loanImplementation: string;
-    nftOracle: string;
-    chainlinkOracle: string;
-    oracleRouter: string;
-    uniswapV3TWAPWrapper: string;
-    treasury: string;
-  };
+  private factoryContracts: Map<number, Contract> = new Map();
+  private providers: Map<number, ethers.JsonRpcProvider> = new Map();
 
   constructor() {
-    const rpcUrl = config.rpcUrls[0];
-    if (rpcUrl && rpcUrl !== 'http://127.0.0.1:8545') {
-      this.provider = new ethers.JsonRpcProvider(rpcUrl);
-    } else {
-      this.provider = null as any;
+    // Initialize providers for all configured chains
+    for (const chain of config.chains) {
+      const rpcUrl = getRpcUrl(chain.id);
+      if (rpcUrl) {
+        this.providers.set(chain.id, new ethers.JsonRpcProvider(rpcUrl, undefined, {
+          staticNetwork: true,
+          batchMaxCount: 100,
+          cacheTimeout: 30_000,
+        }));
+      }
     }
-
-    this.contractAddresses = {
-      marketFactory: config.contracts.marketFactory,
-      loanImplementation: config.contracts.loanImplementation || '',
-      nftOracle: config.contracts.nftOracle || '',
-      chainlinkOracle: config.contracts.chainlinkOracle || '',
-      oracleRouter: config.contracts.oracleRouter || '',
-      uniswapV3TWAPWrapper: config.contracts.uniswapV3TWAPWrapper || '',
-      treasury: config.contracts.treasury || '',
-    };
-
-    if (this.contractAddresses.marketFactory && this.provider) {
-      this.initializeFactoryContract();
-    } else {
-      logger.warn('Web3 contracts not initialized - RPC or factory address not configured');
-    }
-  }
-
-  private initializeFactoryContract(): void {
-    try {
-      this.factoryContract = new ethers.Contract(
-        this.contractAddresses.marketFactory,
-        MARKET_FACTORY_ABI,
-        this.provider
-      );
-      logger.info(
-        { address: this.contractAddresses.marketFactory },
-        'MarketFactory contract initialized'
-      );
-    } catch (error) {
-      logger.error({ error }, 'Failed to initialize MarketFactory contract');
-      throw error;
+    
+    // Initialize factory contracts per chain
+    for (const chain of config.chains) {
+      const factoryAddress = getContractAddress('marketFactory', chain.id);
+      const provider = this.providers.get(chain.id);
+      if (factoryAddress && provider) {
+        try {
+          this.factoryContracts.set(chain.id, new ethers.Contract(
+            factoryAddress,
+            MARKET_FACTORY_ABI,
+            provider
+          ));
+          logger.info({ chainId: chain.id, address: factoryAddress }, 'MarketFactory contract initialized');
+        } catch (error) {
+          logger.error({ error, chainId: chain.id }, 'Failed to initialize MarketFactory contract');
+        }
+      }
     }
   }
 
-  /**
-   * Create a new lending market
-   * @param params Market creation parameters
-   * @param userAddress User address to execute transaction
-   * @returns Transaction hash and market creation details
-   */
+  private getProvider(chainId: number = 11155111): ethers.JsonRpcProvider {
+    const provider = this.providers.get(chainId);
+    if (!provider) throw new Error(`RPC provider not configured for chain ${chainId}`);
+    return provider;
+  }
+
+  private getFactoryContract(chainId: number = 11155111): Contract {
+    const factory = this.factoryContracts.get(chainId);
+    if (!factory) throw new Error(`Factory contract not initialized for chain ${chainId}`);
+    return factory;
+  }
+
   async createMarket(
+    chainId: number,
     params: CreateMarketParams,
     userAddress: string
   ): Promise<{ txHash: string; estimatedGas: string }> {
-    if (!this.factoryContract) {
-      throw new Error('Factory contract not initialized');
-    }
+    const factoryContract = this.getFactoryContract(chainId);
 
     try {
-      // Validate parameters
       this._validateCreateMarketParams(params);
 
-      // Estimate gas
-      const gasEstimate = await this.factoryContract.createMarket.estimateGas(
+      const gasEstimate = await factoryContract.createMarket.estimateGas(
         params.collateralAsset,
         params.loanAsset,
         params.assetType,
@@ -137,30 +114,25 @@ export class ContractService {
       );
 
       logger.info(
-        { gasEstimate: gasEstimate.toString(), userAddress },
+        { gasEstimate: gasEstimate.toString(), userAddress, chainId },
         'Market creation estimated'
       );
 
       return {
-        txHash: '', // Will be populated after user signs
+        txHash: '',
         estimatedGas: gasEstimate.toString(),
       };
     } catch (error) {
-      logger.error({ error, params }, 'Failed to estimate market creation');
+      logger.error({ error, params, chainId }, 'Failed to estimate market creation');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get market information by address
-   */
-  async getMarketInfo(marketAddress: string): Promise<MarketInfo> {
-    if (!this.factoryContract) {
-      throw new Error('Factory contract not initialized');
-    }
+  async getMarketInfo(chainId: number = 11155111, marketAddress: string): Promise<MarketInfo> {
+    const factoryContract = this.getFactoryContract(chainId);
 
     try {
-      const info = await this.factoryContract.getMarketInfo(marketAddress);
+      const info = await factoryContract.getMarketInfo(marketAddress);
 
       return {
         marketAddress: info.marketAddress,
@@ -176,51 +148,35 @@ export class ContractService {
         active: info.active,
       };
     } catch (error) {
-      logger.error({ error, marketAddress }, 'Failed to get market info');
+      logger.error({ error, chainId, marketAddress }, 'Failed to get market info');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get paginated list of markets
-   */
-  async getMarkets(start: number, count: number): Promise<string[]> {
-    if (!this.factoryContract) {
-      logger.warn('Factory contract not configured, returning empty list');
-      return [];
-    }
-
+  async getMarkets(chainId: number = 11155111, start: number, count: number): Promise<string[]> {
     try {
-      const markets = await this.factoryContract.getMarkets(start, count);
+      const factoryContract = this.getFactoryContract(chainId);
+      const markets = await factoryContract.getMarkets(start, count);
       return markets;
     } catch (error) {
-      logger.error({ error, start, count }, 'Failed to get markets');
+      logger.error({ error, chainId, start, count }, 'Failed to get markets');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get total market count
-   */
-  async getMarketCount(): Promise<number> {
-    if (!this.factoryContract) {
-      logger.warn('Factory contract not configured, returning 0');
-      return 0;
-    }
-
+  async getMarketCount(chainId: number = 11155111): Promise<number> {
     try {
-      const count = await this.factoryContract.getMarketCount();
+      const factoryContract = this.getFactoryContract(chainId);
+      const count = await factoryContract.getMarketCount();
       return Number(count);
     } catch (error) {
-      logger.error({ error }, 'Failed to get market count');
+      logger.error({ error, chainId }, 'Failed to get market count');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Check if market exists
-   */
   async checkMarketExists(
+    chainId: number,
     collateralAsset: string,
     loanAsset: string,
     assetType: number,
@@ -228,12 +184,10 @@ export class ContractService {
     aprBps: number,
     durationSeconds: number
   ): Promise<{ exists: boolean; market: string }> {
-    if (!this.factoryContract) {
-      throw new Error('Factory contract not initialized');
-    }
+    const factoryContract = this.getFactoryContract(chainId);
 
     try {
-      const result = await this.factoryContract.checkMarketExists(
+      const result = await factoryContract.checkMarketExists(
         collateralAsset,
         loanAsset,
         assetType,
@@ -247,58 +201,44 @@ export class ContractService {
         market: result.market,
       };
     } catch (error) {
-      logger.error({ error }, 'Failed to check market existence');
+      logger.error({ error, chainId }, 'Failed to check market existence');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get lending market contract instance
-   */
-  getLendingMarketContract(marketAddress: string): Contract {
+  getLendingMarketContract(chainId: number, marketAddress: string): Contract {
     return new ethers.Contract(
       marketAddress,
       LENDING_MARKET_ABI,
-      this.provider
+      this.getProvider(chainId)
     );
   }
 
-  /**
-   * Get loan contract instance
-   */
-  getLoanContract(loanAddress: string): Contract {
-    return new ethers.Contract(loanAddress, LOAN_CONTRACT_ABI, this.provider);
+  getLoanContract(loanAddress: string, chainId: number = 11155111): Contract {
+    return new ethers.Contract(loanAddress, LOAN_CONTRACT_ABI, this.getProvider(chainId));
   }
 
-  /**
-   * Get ERC20 token contract instance
-   */
-  getERC20Contract(tokenAddress: string): Contract {
-    return new ethers.Contract(tokenAddress, ERC20_ABI, this.provider);
+  getERC20Contract(tokenAddress: string, chainId: number = 11155111): Contract {
+    return new ethers.Contract(tokenAddress, ERC20_ABI, this.getProvider(chainId));
   }
 
-  /**
-   * Get oracle contract instance
-   */
-  getOracleContract(oracleAddress: string): Contract {
+  getOracleContract(oracleAddress: string, chainId: number = 11155111): Contract {
     return new ethers.Contract(
       oracleAddress,
       ORACLE_ROUTER_ABI,
-      this.provider
+      this.getProvider(chainId)
     );
   }
 
-  /**
-   * Get available liquidity for a market
-   */
   async getMarketLiquidity(
+    chainId: number,
     marketAddress: string
   ): Promise<{
     total: string;
     available: string;
     reserved: string;
   }> {
-    const market = this.getLendingMarketContract(marketAddress);
+    const market = this.getLendingMarketContract(chainId, marketAddress);
 
     try {
       const total = await market.getTotalLiquidity();
@@ -311,15 +251,13 @@ export class ContractService {
         reserved: reserved.toString(),
       };
     } catch (error) {
-      logger.error({ error, marketAddress }, 'Failed to get market liquidity');
+      logger.error({ error, chainId, marketAddress }, 'Failed to get market liquidity');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get loan details
-   */
   async getLoanDetails(
+    chainId: number,
     loanAddress: string
   ): Promise<{
     borrower: string;
@@ -329,7 +267,7 @@ export class ContractService {
     expiryTime: number;
     status: number;
   }> {
-    const loan = this.getLoanContract(loanAddress);
+    const loan = this.getLoanContract(loanAddress, chainId);
 
     try {
       const [borrower, principal, interest, healthFactor, expiry, status] =
@@ -351,51 +289,44 @@ export class ContractService {
         status: Number(status),
       };
     } catch (error) {
-      logger.error({ error, loanAddress }, 'Failed to get loan details');
+      logger.error({ error, chainId, loanAddress }, 'Failed to get loan details');
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get asset price from oracle
-   */
   async getAssetPrice(
+    chainId: number,
     oracleAddress: string,
     assetAddress: string
   ): Promise<string> {
-    const oracle = this.getOracleContract(oracleAddress);
+    const oracle = this.getOracleContract(oracleAddress, chainId);
 
     try {
       const price = await oracle.getPrice(assetAddress);
       return price.toString();
     } catch (error) {
       logger.error(
-        { error, oracleAddress, assetAddress },
+        { error, chainId, oracleAddress, assetAddress },
         'Failed to get asset price'
       );
       throw this._normalizeError(error);
     }
   }
 
-  /**
-   * Get ERC20 balance
-   */
-  async getBalance(tokenAddress: string, accountAddress: string): Promise<string> {
-    const token = this.getERC20Contract(tokenAddress);
+  async getBalance(tokenAddress: string, accountAddress: string, chainId: number = 11155111): Promise<string> {
+    const token = this.getERC20Contract(tokenAddress, chainId);
 
     try {
       const balance = await token.balanceOf(accountAddress);
       return balance.toString();
     } catch (error) {
       logger.error(
-        { error, tokenAddress, accountAddress },
+        { error, tokenAddress, accountAddress, chainId },
         'Failed to get balance'
       );
       throw this._normalizeError(error);
     }
   }
-
-  // Private helpers
 
   private _validateCreateMarketParams(params: CreateMarketParams): void {
     if (!ethers.isAddress(params.collateralAsset)) {
@@ -438,5 +369,4 @@ export class ContractService {
   }
 }
 
-// Singleton instance
 export const contractService = new ContractService();

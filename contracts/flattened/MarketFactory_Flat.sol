@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Flattened for Remix Deployment
-// Red Chips MarketFactory - Deploy Isolated Lending Markets
+// OpenAsset Market MarketFactory - Deploy Isolated Lending Markets
 pragma solidity 0.8.20;
 
 // ============================================================================
@@ -283,7 +283,7 @@ library ChainlinkOracle {
  * - Minimum liquidity requirement (1000 USD equivalent)
  * - Comprehensive parameter validation
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.market
  */
 contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;

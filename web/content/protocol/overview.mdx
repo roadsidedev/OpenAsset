@@ -1,0 +1,65 @@
+---
+title: Protocol overview
+description: How OpenAsset Market works — isolated markets, adapter architecture, and the lending engine.
+---
+
+# Protocol overview
+
+OpenAsset Market is a factory-deployed, **isolated-market** lending protocol. Each market is its own contract instance with independent liquidity, collateral asset, risk parameters, and adapter stack.
+
+import { Callout } from 'nextra/components'
+
+## Problem
+
+Legacy money markets approve a small set of blue-chip collaterals, fix terms via governance, and leave the long tail of on-chain value without lending utility — gaming tokens, niche NFTs, community assets, and increasingly tokenized equities and RWAs.
+
+## Solution
+
+Separate a **stable, narrowly scoped lending engine** from a **pluggable adapter layer**:
+
+1. **Market Factory** — permissionless deployment + validation matrix
+2. **LendingMarket (engine)** — liquidity accounting, loan state machine, circuit breaker, defensive invariants
+3. **Adapter Registry** — hybrid trust metadata (Verified / unverified / deprecated)
+4. **Five adapter types** — Asset, Oracle, Compliance (optional), Liquidation, Position
+
+New asset classes do not require modifying or re-auditing the contracts that hold everyone’s collateral. They require a new adapter.
+
+## Lifecycle in one page
+
+```
+LP creates market
+  → Factory validates config + adapter compatibility
+  → Deploys isolated LendingMarket
+  → Wires adapters, seeds liquidity
+
+Borrower requests loan
+  → Compliance check (if configured)
+  → Oracle price (must be trusted)
+  → Asset adapter escrows collateral (balance verified)
+  → Position adapter mints position
+  → Stablecoin proceeds transferred
+
+Repay or default
+  → Sync liquidation (DEX / NFT auction) OR
+  → Async path (issuer redemption: CURE → SETTLING → LIQUIDATED)
+  → Surplus returned to position holder (gradual liquidation shape)
+```
+
+## What the engine never does
+
+- Encode ERC20 vs NFT vs RWA branches
+- Trust adapter outputs without verification
+- Continuously poll real-world eligibility mid-loan
+- Underwrite which assets “deserve” markets
+- Share risk across markets (no shared pool contagion)
+
+## Related
+
+- [Design philosophy](/docs/protocol/design-philosophy)
+- [Core contracts](/docs/protocol/core-contracts)
+- [Adapter system](/docs/protocol/adapter-system)
+- [Loan lifecycle](/docs/protocol/loan-lifecycle)
+
+<Callout type="warning">
+  **Issuer risk is not price risk.** For RWA and tokenized equity collateral, issuer insolvency or redemption halt can zero the token independent of the underlying asset’s market price. See [RWA & tokenized equity](/docs/protocol/rwa).
+</Callout>

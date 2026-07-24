@@ -48,7 +48,7 @@ export const login = async (req: Request, res: Response) => {
        return;
      }
  
-     const message = `Login to RedChips: ${user.nonce}`;
+      const message = `Login to OpenAsset Market: ${user.nonce}`;
      const recoveredAddress = verifyMessage(message, signature);
  
      if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {

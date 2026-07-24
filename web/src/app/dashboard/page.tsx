@@ -48,32 +48,32 @@ export default function DashboardPage() {
 
   const { data: marketsData, isLoading: marketsLoading } = useMarkets(0, 100);
 
-  const activeLoans = loansData?.loans || [];
-  const allMarkets = marketsData?.markets || [];
+  const activeLoans: any[] = loansData?.loans || [];
+  const allMarkets: any[] = marketsData?.markets || [];
   const myMarkets = address
     ? allMarkets.filter(
-        (m) => m.owner.toLowerCase() === address.toLowerCase()
+        (m: any) => m.owner.toLowerCase() === address.toLowerCase()
       )
     : [];
 
   // Borrower stats
   const totalBorrowed = activeLoans.reduce(
-    (sum, loan) => sum + BigInt(loan.principal || 0),
+    (sum: bigint, loan: any) => sum + BigInt(loan.principal || 0),
     BigInt(0)
   );
   const totalCollateral = activeLoans.reduce(
-    (sum, loan) => sum + BigInt(loan.collateralAmount || 0),
+    (sum: bigint, loan: any) => sum + BigInt(loan.collateralAmount || 0),
     BigInt(0)
   );
 
   // LP stats
   const totalLiquidity = myMarkets.reduce(
-    (sum, m) => sum + BigInt(m.liquidity?.available || 0),
+    (sum: bigint, m: any) => sum + BigInt(m.liquidity?.available || 0),
     BigInt(0)
   );
   const avgAprBps =
     myMarkets.length > 0
-      ? myMarkets.reduce((sum, m) => sum + (m.aprBps || 0), 0) /
+      ? myMarkets.reduce((sum: number, m: any) => sum + (m.aprBps || 0), 0) /
         myMarkets.length
       : 0;
 

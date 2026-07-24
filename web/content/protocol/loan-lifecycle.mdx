@@ -1,0 +1,54 @@
+---
+title: Loan lifecycle & state machine
+description: Synchronous and asynchronous loan paths from origination through repayment or liquidation.
+---
+
+# Loan lifecycle & state machine
+
+## Synchronous path (default — most markets)
+
+Applies when `ILiquidationAdapter.isAsynchronous() == false` (DEX swap, NFT auction). Liquidation resolves in one transaction.
+
+```
+ACTIVE → GRACE_PERIOD → LIQUIDATED
+   │                        │
+   └─ repay → REPAID        └─ repay during grace → REPAID
+```
+
+## Asynchronous path (issuer-redemption / RWA)
+
+```
+ACTIVE → GRACE_PERIOD → LIQUIDATION_CURE → LIQUIDATION_SETTLING → LIQUIDATED
+              │                  │
+              └─ REPAID          └─ repay (still reversible) → REPAID
+                                                      │
+                                                      └─ settlement timeout
+                                                         → flag for manual LP intervention
+```
+
+### LIQUIDATION_CURE
+
+Entered when liquidation conditions are first met (grace expired or health factor breached).
+
+- Interest accrual **freezes immediately** (`frozenInterestAt = block.timestamp`)
+- Window length is set **per liquidation-adapter instance** (issuer-specific cancellation cutoffs)
+- Current position holder may repay: principal + frozen interest + liquidation penalty
+- Penalty is charged by default — this is a genuine default event, not a courtesy extension
+- LPs may configure penalty-on-cure per market; default is non-zero
+
+### LIQUIDATION_SETTLING
+
+Entered when the cure window expires without repayment.
+
+- Adapter’s `liquidate()` submits redemption to the issuer
+- **Irreversible** — collateral is committed to the issuer’s settlement pipeline
+- Settlement confirmation (callback or keeper poll) distributes proceeds → `LIQUIDATED`
+- If confirmation never arrives within the outer timeout → flagged for manual LP intervention (where issuer-insolvency risk becomes operational)
+
+## Health factor
+
+Optional per market. When enabled, loans can enter liquidation paths before expiry if health drops below the configured threshold.
+
+## Position holder vs original borrower
+
+For markets using `TransferablePositionAdapter`, repayments, surplus, and alerts resolve to the **current** position holder — not necessarily the original borrower. Indexers must track NFT `Transfer` events.

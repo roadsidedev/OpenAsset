@@ -22,9 +22,9 @@ const config: HardhatUserConfig = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 20,
           },
-          viaIR: true, // Enable IR for complex contracts
+          viaIR: true,
         },
       },
       {
@@ -64,6 +64,14 @@ const config: HardhatUserConfig = {
     baseSepolia: {
       url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       chainId: 84532,
+      accounts: [PRIVATE_KEY],
+      gasPrice: "auto",
+    },
+
+    // Ethereum Mainnet
+    mainnet: {
+      url: process.env.MAINNET_RPC_URL || "",
+      chainId: 1,
       accounts: [PRIVATE_KEY],
       gasPrice: "auto",
     },

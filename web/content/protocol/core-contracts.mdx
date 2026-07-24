@@ -1,0 +1,112 @@
+---
+title: Core contracts
+description: Market Factory and LendingMarket engine responsibilities.
+---
+
+# Core contracts
+
+## Market Factory
+
+Responsible for permissionless market deployment.
+
+**Responsibilities:**
+
+- Validate market configuration against the [Validation Matrix](/docs/protocol/validation-matrix)
+- Deploy a new isolated `LendingMarket` instance
+- Wire chosen adapters from the [Adapter Registry](/docs/protocol/adapter-registry)
+- Register market metadata
+- Collect creation fees
+
+### Creation fee (immutable structure)
+
+| Parameter | Value |
+|---|---|
+| Percent fee | 1% (100 bps) of total deposit |
+| Minimum | 0.05 ETH (or chain native equivalent) |
+| Maximum | 0.5 ETH |
+
+Fee structure is immutable so LPs can compute ROI with certainty and the protocol cannot change terms after capital is committed.
+
+### MarketConfig (conceptual)
+
+```solidity
+struct MarketConfig {
+    address lpAddress;
+    address collateralAsset;
+
+    address assetAdapter;
+    address oracleAdapter;
+    address complianceAdapter;   // address(0) if none
+    address liquidationAdapter;
+    address positionAdapter;
+
+    address lendingAsset;        // must be in stablecoin allowlist
+    uint256 ltvBasisPoints;
+    uint256 aprBasisPoints;
+    uint256 durationSeconds;
+    uint256 gracePeriodHours;
+    bool enableHealthFactor;
+    uint256 healthFactorThreshold;
+    bool enableCircuitBreaker;
+    uint256 pauseThresholdBps;
+    uint256 lookbackPeriodSeconds;
+    uint256 resumeThresholdBps;
+    uint256 cooldownSeconds;
+}
+```
+
+## LendingMarket (the lending engine)
+
+Each market is its own isolated contract. It owns:
+
+- Liquidity accounting (`totalLiquidity`, `availableLiquidity`, `totalBorrowed`)
+- Loan state machine
+- Circuit breaker
+- Defensive adapter interaction
+
+It **never** contains asset-type logic. Every asset-specific action is delegated to the market’s configured adapters.
+
+### Market status
+
+```solidity
+enum MarketStatus {
+    ACTIVE,
+    PAUSED_VOLATILITY,
+    PAUSED_STALE_ORACLE,
+    PAUSED_MANUAL
+}
+```
+
+### Loan record
+
+```solidity
+struct Loan {
+    uint256 collateralAmount;
+    uint256 principal;
+    uint256 startTime;
+    uint256 expiryTime;
+    uint256 frozenInterestAt; // set in LIQUIDATION_CURE; 0 otherwise
+    LoanStatus status;
+}
+
+enum LoanStatus {
+    ACTIVE,
+    GRACE_PERIOD,
+    LIQUIDATION_CURE,      // reversible: holder can still repay
+    LIQUIDATION_SETTLING,  // irreversible: async redemption submitted
+    REPAID,
+    LIQUIDATED
+}
+```
+
+### Origination sketch
+
+1. If compliance adapter set → `isEligible(msg.sender)`
+2. `assetAdapter.isTransferable(...)`
+3. `oracleAdapter.getPrice()` — must be trusted and within sanity bounds
+4. Compute max loan from LTV
+5. Escrow collateral; **verify balance delta matches requested amount**
+6. Mint position via position adapter
+7. Transfer lending asset (stablecoin) to borrower
+
+See [Loan lifecycle](/docs/protocol/loan-lifecycle) for full state transitions.

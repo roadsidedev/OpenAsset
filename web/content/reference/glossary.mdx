@@ -1,0 +1,21 @@
+---
+title: Glossary
+description: Key OpenAsset Market terms.
+---
+
+# Glossary
+
+| Term | Definition |
+|---|---|
+| **oA** | Brand mark for OpenAsset Market (titles, navbar) |
+| **LP** | Liquidity provider / market creator |
+| **Isolated market** | Independent `LendingMarket` instance; no shared-pool contagion |
+| **Adapter** | Pluggable contract implementing one of five interfaces |
+| **Verified adapter** | Passed OpenAsset Market audit sign-off; still defended against at the engine layer |
+| **Gradual liquidation** | Interface-enforced rule: take debt+penalty, return surplus |
+| **LTV** | Loan-to-value ratio in basis points |
+| **Circuit breaker** | Core pause of new originations on volatility or untrusted oracle |
+| **LIQUIDATION_CURE** | Reversible async default window; interest frozen |
+| **LIQUIDATION_SETTLING** | Irreversible async redemption in flight |
+| **Soulbound position** | Non-transferable ERC721 loan representation |
+| **Stablecoin allowlist** | Factory-enforced set of permitted lending assets |

@@ -1,0 +1,19 @@
+---
+title: Security checklist
+description: Pre-mainnet and ongoing security requirements for OpenAsset Market.
+---
+
+# Security checklist
+
+- [ ] Core engine independently verifies every adapter’s output ([trust model](/docs/protocol/trust-model)) — for **all** adapters, not only unverified ones
+- [ ] Reentrancy guards and CEI ordering on every adapter call, not only user-facing entry points
+- [ ] Market Factory validation matrix enforced and unit-tested for every rule, including negative tests
+- [ ] Circuit breaker tested under volatility **and** stale/untrusted-oracle triggers
+- [ ] Async liquidation state machine tested: cure repay, cure expiry, settlement confirm, settlement timeout → manual flag
+- [ ] TransferablePosition + Compliance Adapter transfer-hook eligibility check tested specifically
+- [ ] Registry `markVerified` / `markDeprecated` restricted to audit-governance multisig, not a single key
+- [ ] Deprecation behavior tested: blocks new selection, does not force-pause existing markets, notifies LPs
+- [ ] Reference adapters independently audited before marked Verified
+- [ ] Legal/securities counsel review before any real-user Compliance Adapter market (RWA / permissioned assets)
+- [ ] Terms of Service disclose issuer insolvency as uninsured total-loss risk, distinct from price risk
+- [ ] Baseline retained: 2+ independent audits, bug bounty, >90% coverage, multisig treasury, incident response plan

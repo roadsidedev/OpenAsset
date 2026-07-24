@@ -1,0 +1,69 @@
+# Railway Configuration for OpenAsset Market Backend
+# Single service deployment with all workers in one process
+
+# Build configuration
+build:
+  command: "npm run build"
+  # Optional: specify Dockerfile for more control
+  # dockerfilePath: ./Dockerfile
+
+# Deploy configuration
+deploy:
+  # Start command runs the consolidated main.ts
+  startCommand: "npm run start"
+  healthCheckPath: "/health"
+  healthCheckTimeout: 30
+  restartPolicyType: "ON_FAILURE"
+  restartPolicyMaxRetries: 3
+
+# Environment variables (set in Railway dashboard)
+variables:
+  - name: "NODE_ENV": "production"
+ "DATABASE_URL": "${{ Postgres.DATABASE_URL }}"
+ "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+ "RPC_URLS": "${{ secrets.RPC_URLS }}"
+ "FRONTEND_URL": "https://your-frontend.vercel.app"
+ "LOG_LEVEL": "info"
+ 
+ # Contract addresses (chain-specific)
+ "MARKET_FACTORY_ADDRESS": "${{ secrets.MARKET_FACTORY_ADDRESS }}"
+ "ADAPTER_REGISTRY_ADDRESS": "${{ secrets.ADAPTER_REGISTRY_ADDRESS }}"
+ 
+ # Alert services
+ "SENDGRID_API_KEY": "${{ secrets.SENDGRID_API_KEY }}"
+ "SENDGRID_FROM_EMAIL": "${{ secrets.SENDGRID_FROM_EMAIL }}"
+ "TWILIO_ACCOUNT_SID": "${{ secrets.TWILIO_ACCOUNT_SID }}"
+ "TWILIO_AUTH_TOKEN": "${{ secrets.TWILIO_AUTH_TOKEN }}"
+ "TWILIO_FROM_NUMBER": "${{ secrets.TWILIO_FROM_NUMBER }}"
+ "FIREBASE_SERVICE_ACCOUNT_KEY": "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}"
+ 
+ # Keeper service (liquidation execution)
+ "KEEPER_ENABLED": "true"
+ "KEEPER_PRIVATE_KEY": "${{ secrets.KEEPER_PRIVATE_KEY }}"
+ "KEEPER_CHAIN_ID": "11155111"
+ "KEEPER_MAX_GAS_PRICE_GWEI": "100"
+ "KEEPER_POLL_INTERVAL_MS": "30000"
+ "KEEPER_MIN_HEALTH_FACTOR_BPS": "12000"
+ "KEEPER_BATCH_SIZE": "10"
+ 
+ # Alert deduplication
+ "ALERT_DEDUP_DEFAULT_WINDOW": "3600"
+ "ALERT_DEDUP_WINDOWS": '{"HEALTH_FACTOR": 1800, "LIQUIDATION_RISK": 1800, "MARKET_PAUSED": 86400}'
+ 
+ # Database pool
+ "DB_POOL_SIZE": "10"
+ "DB_POOL_TIMEOUT": "30000"
+
+# Resource allocation (adjust based on load)
+resources:
+  cpu: 1000      # 1 vCPU
+  memory: 1024   # 1 GB RAM
+
+# Railway service configuration (single service)
+services:
+  backend:
+    rootDirectory: backend
+    buildCommand: npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    variables: []

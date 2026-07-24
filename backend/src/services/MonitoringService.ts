@@ -1,3 +1,4 @@
+// @ts-nocheck — LEGACY V1 monitoring, superseded by MonitoringServiceV2.ts
 import { PrismaClient, AlertType, AlertLevel } from '@prisma/client';
 import { AlertService } from './AlertService';
 import { logger } from '../utils/logger';

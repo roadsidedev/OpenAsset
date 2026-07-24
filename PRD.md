@@ -1,7 +1,7 @@
 # Document 2: Product Requirements Document (PRD)
 
 ```markdown
-# Red Chips Product Requirements Document (PRD)
+# OpenAsset Market Product Requirements Document (PRD)
 
 Version 1.0 | January 2026
 
@@ -9,7 +9,7 @@ Version 1.0 | January 2026
 
 ### Product Vision
 
-Red Chips is permissionless asset lending infrastructure that enables anyone to launch a lending market for any on-chain asset with complete control over risk parameters and terms.
+OpenAsset Market is permissionless asset lending infrastructure that enables anyone to launch a lending market for any on-chain asset with complete control over risk parameters and terms.
 
 ### Problem Statement
 
@@ -26,7 +26,7 @@ Result: 95% of on-chain assets have zero lending utility.
 ```
 
 Solution Overview
-Red Chips provides the infrastructure for anyone to launch isolated lending markets in minutes:
+OpenAsset Market provides the infrastructure for anyone to launch isolated lending markets in minutes:
 
 Permissionless: No approval needed, deploy in one transaction
 Any Asset: ERC20, ERC721, ERC1155, SPL tokens
@@ -75,7 +75,7 @@ Jobs to Be Done:
 
 User Journey:
 
-Discover Red Chips via Twitter/Discord
+Discover OpenAsset Market via Twitter/Discord
 Browse existing markets for ideas
 Decide on asset type (gaming token, NFT collection)
 Configure market terms (5 min wizard)
@@ -116,7 +116,7 @@ User Journey:
 
 Realize need for liquidity
 Google "borrow against [my token]"
-Find Red Chips market for their asset
+Find OpenAsset Market market for their asset
 Check terms (LTV, APR, duration)
 Connect wallet, approve collateral
 Request loan (receive funds in 1 min)
@@ -155,7 +155,7 @@ Jobs to Be Done:
 User Journey:
 
 Community complains about lack of utility
-Discover Red Chips via crypto Twitter
+Discover OpenAsset Market via crypto Twitter
 Decide to launch market using treasury
 Configure generous terms for community (high LTV, low APR)
 Announce to community (marketing boost)
@@ -368,7 +368,7 @@ Step 2: Configure Loan
 └─ Click "Request Loan"
 
 Step 3: Approve Collateral
-├─ MetaMask prompts: "Approve [Token] for Red Chips?"
+├─ MetaMask prompts: "Approve [Token] for OpenAsset Market?"
 ├─ User confirms approval transaction
 ├─ Wait for confirmation (~10 seconds)
 └─ Proceed to Step 4
@@ -1276,7 +1276,7 @@ class AlertService {
     const borrower = await getBorrowerPreferences(loan.borrower_address);
 
     const message = {
-      CRITICAL: `🚨 URGENT: Your Red Chips loan (Health: ${loan.health_factor}%) is near liquidation! Repay or add collateral now.`,
+      CRITICAL: `🚨 URGENT: Your OpenAsset Market loan (Health: ${loan.health_factor}%) is near liquidation! Repay or add collateral now.`,
       WARNING: `⚠️ WARNING: Your loan health is ${loan.health_factor}%. Consider repaying soon to avoid liquidation.`,
       WATCH: `ℹ️ FYI: Your loan health is ${loan.health_factor}%. Still safe, but worth monitoring.`,
     }[alert.level];
@@ -1292,7 +1292,7 @@ class AlertService {
         body: message,
         cta: {
           text: "View Loan",
-          url: `https://redchips.xyz/loans/${loan.id}`,
+          url: `https://openasset.xyz/loans/${loan.id}`,
         },
       });
     }
@@ -1402,7 +1402,7 @@ Goal: Launch a lending market for a gaming token
 Duration: ~5 minutes
 Steps:
 
-Sarah navigates to redchips.xyz
+Sarah navigates to openasset.xyz
 Clicks "Launch Market" button
 Connects MetaMask wallet
 └─ System detects she has 50 ETH
@@ -1472,7 +1472,7 @@ LP Dashboard
 │ Available: 50 ETH (100%)
 │ Active Loans: 0
 │ Total Borrowed: 0 ETH
-├─ Share link: redchips.xyz/markets/0x5678
+├─ Share link: openasset.xyz/markets/0x5678
 └─ Sarah shares link in her DAO Discord
 
 Result: Market live in 5 minutes, ready to accept loans
@@ -1515,7 +1515,7 @@ Loan Request Page
 ├─ Mike checks "I understand" box
 └─ Clicks "Request Loan"
 Approval Transaction
-├─ MetaMask popup 1: "Approve GAME for Red Chips?"
+├─ MetaMask popup 1: "Approve GAME for OpenAsset Market?"
 ├─ Mike confirms
 ├─ Waits ~10 seconds
 └─ Shows "Approval confirmed ✓"
@@ -1587,7 +1587,7 @@ Smart contract executes:
 Success screen:
 "✓ Loan repaid successfully!
 Your 10,000 GAME tokens have been returned.
-Thanks for using Red Chips!"
+Thanks for using OpenAsset Market!"
 Backend updates:
 ├─ Marks loan as REPAID in database
 ├─ Stops health monitoring
@@ -1687,7 +1687,7 @@ LP Notification (Sarah)
 │ Your GAME market was paused due to 24% volatility.
 │ New loans suspended. Existing loans still active.
 │ Estimated resume: ~6 hours"
-├─ SMS: "Red Chips: GAME market paused (24% volatility)"
+├─ SMS: "OpenAsset Market: GAME market paused (24% volatility)"
 └─ Push notification with same info
 Borrower Experience (Potential new borrower - Alex)
 ├─ Alex visits market page

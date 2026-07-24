@@ -1,0 +1,32 @@
+---
+title: Security model
+description: Reentrancy, CEI, adapter trust boundary, and issuer insolvency handling.
+---
+
+# Security model
+
+## Reentrancy & CEI
+
+Every state-changing function uses `nonReentrant`. Every adapter call follows strict Checks-Effects-Interactions: validate → update internal state → call out to the adapter.
+
+## Integer safety
+
+Solidity `^0.8.20` default overflow checks apply. `unchecked {}` only where overflow is provably impossible given realistic bounds, with inline justification comments.
+
+## Adapter trust boundary
+
+See [Adapter trust model](/docs/protocol/trust-model) in full. Treat as equally load-bearing as reentrancy protection during audit.
+
+## Issuer insolvency
+
+See [RWA § Issuer risk](/docs/protocol/rwa). Explicitly **not** a code-level problem — a documentation, disclosure, and legal (ToS) requirement.
+
+## Operational security baseline
+
+- 2+ independent audits pre-mainnet
+- Bug bounty live
+- >90% test coverage target
+- Multisig treasury and audit-governance keys
+- Incident response plan documented
+
+Full checklist: [Security checklist](/docs/reference/security-checklist).

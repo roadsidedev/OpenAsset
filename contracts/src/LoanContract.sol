@@ -22,7 +22,7 @@ import {AssetType} from "./interfaces/IMarketFactory.sol";
  * - Origination fee (0.5% to treasury)
  * - Interest calculation
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.io
  */
 contract LoanContract is ILoanContract, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -270,13 +270,12 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             // Calculate revenue split - LOW-004: Safe calculation
             uint256 platformShare = (interestAmount * 1000) / BPS_DENOMINATOR; // 10%
             // Handle underwater case where repayment may not cover principal
-            uint256 lpShare = repaymentAmount > principal + platformShare 
-                ? repaymentAmount - principal - platformShare 
-                : 0;
+            uint256 marketPayment = repaymentAmount > platformShare ? repaymentAmount - platformShare : 0;
+            uint256 lpShare = marketPayment > principal ? marketPayment - principal : 0;
             
-            // Send to lending market and treasury
+            // Send to lending market and treasury (cap to what we actually received)
             loanToken.safeTransfer(lendingMarket, principal + lpShare);
-            loanToken.safeTransfer(protocolTreasury, platformShare);
+            loanToken.safeTransfer(protocolTreasury, platformShare > repaymentAmount ? repaymentAmount : platformShare);
             
             // Transfer all collateral to liquidator
             AssetHandler.transferAssetOut(
@@ -383,7 +382,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             
             // Calculate revenue split
             uint256 platformShare = (interestAmount * 1000) / BPS_DENOMINATOR; // 10%
-            uint256 remaining = repaymentAmount - principal;
+            uint256 remaining = repaymentAmount > principal ? repaymentAmount - principal : 0;
             uint256 lpShare = remaining > platformShare ? remaining - platformShare : 0;
             
             // Send to lending market and treasury
@@ -392,12 +391,12 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
                 loanToken.safeTransfer(protocolTreasury, platformShare);
             }
             
-            // Transfer all collateral to liquidator
+            // Transfer all collateral to liquidator (tokenId = collateralAmount for ERC1155)
             AssetHandler.transferAssetOut(
                 AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
-                erc1155Amount,
+                collateralAmount,
                 erc1155Amount
             );
             
@@ -429,12 +428,12 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             loanToken.safeTransfer(lendingMarket, principal + lpShare);
             loanToken.safeTransfer(protocolTreasury, platformShare);
             
-            // Transfer seized collateral to liquidator
+            // Transfer seized collateral to liquidator (tokenId = collateralAmount for ERC1155)
             AssetHandler.transferAssetOut(
                 AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
-                totalCollateralSeized,
+                collateralAmount,
                 totalCollateralSeized
             );
             
@@ -444,7 +443,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
                     AssetHandler.AssetType(uint8(assetType)),
                     collateralAsset,
                     borrower,
-                    surplus,
+                    collateralAmount,
                     surplus
                 );
             }

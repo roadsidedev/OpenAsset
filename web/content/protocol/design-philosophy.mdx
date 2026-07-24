@@ -1,0 +1,50 @@
+---
+title: Design philosophy
+description: Core principles behind OpenAsset Market’s adapter architecture.
+---
+
+# Design philosophy
+
+## Core principles
+
+1. **Permissionless market creation** — No asset-listing committee, no governance approval, no centralized underwriting. The market creator (LP) owns the parameters they configure.
+2. **Isolated markets** — Each market has its own liquidity, collateral, risk parameters, and liquidation mechanism. A failure in one market cannot cascade into another.
+3. **Non-custodial** — OpenAsset Market never takes discretionary control of user assets. Collateral is locked according to predefined, transparent smart contract rules.
+4. **Open asset support** — Crypto, NFTs, gaming assets, tokenized equities, RWAs, and asset classes that don’t exist yet should be supportable without redesigning the core engine.
+5. **Infrastructure, not underwriting** — The protocol does not decide which assets deserve financial utility. Market creators decide.
+
+## The adapter principle
+
+Every time a new asset class needed an `if/else` branch inside a monolithic `LendingMarket`, the whole protocol’s audit surface grew. That doesn’t scale past a handful of types, and it means the contract holding collateral gets modified — and needs re-auditing — every time you want to support something new.
+
+Instead, the core engine knows exactly four verbs:
+
+| Verb | Adapter |
+|---|---|
+| Escrow / release collateral | Asset Adapter |
+| Price collateral | Oracle Adapter |
+| Check eligibility | Compliance Adapter (optional) |
+| Resolve default | Liquidation Adapter |
+| Represent the loan | Position Adapter |
+
+New asset classes, oracle sources, compliance regimes, and liquidation mechanisms are added by **writing and registering an adapter**, not by touching the engine.
+
+A bug in an adapter is contained to markets that chose it. The engine’s safety guarantees — circuit breaker, gradual liquidation shape, reentrancy protection, defensive output checks — stay stable and centrally audited.
+
+## Non-negotiable core vs pluggable
+
+**Always in the core engine (regardless of adapters):**
+
+- Circuit breaker logic
+- Requirement that liquidation returns surplus to the collateral holder
+- Reentrancy protection and Checks-Effects-Interactions on every external call (including adapters)
+- Defensive verification of adapter outputs ([trust model](/docs/protocol/trust-model))
+- Loan state machine
+
+**Pluggable per market (chosen by LP at creation):**
+
+- How collateral is held and released
+- Where price comes from
+- Who’s eligible to borrow or hold a position
+- How liquidation is executed
+- How the loan position is represented

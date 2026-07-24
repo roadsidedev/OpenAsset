@@ -1,0 +1,42 @@
+---
+title: Borrow against collateral
+description: How borrowers request loans, pass compliance, and understand position types.
+---
+
+# Borrow against collateral
+
+import { Steps, Callout } from 'nextra/components'
+
+<Steps>
+### Find a market
+
+Browse markets for your collateral asset. Review LTV, APR, duration, oracle type, liquidation path, and adapter trust badges.
+
+### Eligibility pre-check
+
+If the market has a Compliance Adapter, the app checks `isEligible` **before** prompting wallet approval — so ineligible borrowers don’t spend gas on a revert.
+
+### Deposit collateral & request
+
+- Approve and escrow collateral via the market’s Asset Adapter
+- Max loan is computed from oracle price × LTV
+- Confirm position type disclosure (standard / soulbound / transferable)
+
+### Receive proceeds
+
+Stablecoin proceeds transfer to your wallet. Convert outside the protocol if needed.
+
+### Manage the loan
+
+- Monitor health factor (if enabled)
+- Repay before expiry / grace end
+- Watch alerts if near liquidation
+</Steps>
+
+<Callout type="info">
+  On transferable-position markets, whoever holds the position NFT is the economic actor for repay, surplus, and alerts — not necessarily the original borrower.
+</Callout>
+
+## If you’re ineligible
+
+The UI should surface the adapter’s reason when available (e.g. jurisdiction) and suggest alternative markets you can use.

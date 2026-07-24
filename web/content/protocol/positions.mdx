@@ -1,0 +1,37 @@
+---
+title: Position adapters
+description: Standard, soulbound, and transferable loan position representations.
+---
+
+# Position adapters
+
+A loan position’s representation determines who can repay, receive collateral back, and receive liquidation surplus — and whether that right is transferable.
+
+## Tiers
+
+| Tier | Representation | Transferable? | Default use case |
+|---|---|---|---|
+| `StandardPositionAdapter` | Internal struct, no token | No | Simple crypto markets; lowest gas/complexity |
+| `SoulboundPositionAdapter` | ERC721, transfers always revert | No | **Default whenever a Compliance Adapter is attached** |
+| `TransferablePositionAdapter` | Full ERC721 | Yes (eligibility-gated if compliance attached) | Crypto markets wanting secondary-market / composability upside |
+
+## Why NFT representation matters even when soulbound
+
+For a single loan, all three tiers behave identically. NFT representation (soulbound or transferable) is about **aggregation and tooling at platform scale**:
+
+- **Cross-market enumeration** — standard NFT APIs enumerate “every token this address holds” without bespoke per-market indexing forever
+- **Wallet-native visibility** — positions appear in standard wallets
+- **Standardized metadata (`tokenURI`)** — portfolio trackers, tax tools, institutional systems render state without OpenAsset Market-specific integration
+
+## Compliance hole this closes
+
+A transferable position in a compliance-gated market would let a KYC’d borrower originate, then sell the position NFT to someone never checked. Economic control would pass while collateral stayed “compliant.”
+
+- Soulbound default for compliance markets closes this by construction
+- Validation Matrix still requires transfer-hook eligibility checks if Transferable + Compliance are combined
+
+## Product defaults
+
+- Compliance attached → recommend **Soulbound**
+- No compliance → recommend **Transferable** (or Standard for gas-minimized markets)
+- Always allow LP override with plain-language tradeoff at the point of choice

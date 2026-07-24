@@ -1,0 +1,112 @@
+⇾ Compiling targets with crytic-compile
+⇾ Running command:
+C:\Users\USER\AppData\Local\Programs\Python\Python312\Scripts\crytic-compile.exe . --export-format solc --export-dir fizz_data/crytic-export --foundry-compile-all
+⇾ Finished compiling targets in 3m20s
+⇾ artifacts: Medusa is running against a new set of build artifacts
+⇾ No Slither cached results found at fizz_data/slither_results.json
+⇾ Running Slither:
+slither . --ignore-compile --print echidna --json -
+warn Failed to run slither
+‣ exec: "slither": executable file not found in %PATH%
+⇾ Running with a timeout of 90 seconds
+⇾ Setting up test chain
+⇾ Finished setting up test chain
+⇾ Creating corpus...
+⇾ Initializing corpus...
+⇾ Fuzzing with 10 workers
+⇾ [NOT STARTED] Property Test: FuzzTester.property_balanceCoversAvailable()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_borrowedConsistent()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_lpSupplyMatchesLiquidity()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_availableLteTotal()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_loanIdMonotone()
+⇾ fuzz: elapsed:       0s, calls:          0 (     0/sec), seq/s:      0, branches:    805, corpus:     0, failures: 0/0, gas/s:            0
+⇾ [NOT STARTED] Assertion Test: FuzzTester.assetAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_unpause()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.oracleAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_totalBorrowed()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_totalDeposited()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.positionAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_totalRepaid()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingAsset()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_depositLiquidity(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_liquidate(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_liquidate_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_withdrawLiquidity_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.registry()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.factory()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_depositLiquidity_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_pause()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_skipTime_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_withdrawLiquidity(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.collateralAsset()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.market()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.setCurrentActor(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_repay(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_repay_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_requestLoan_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.liquidationAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_loansCreated()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_requestLoan(uint256)
+⇾ fuzz: elapsed:       3s, calls:       4061 (  1353/sec), seq/s:     27, branches:   1866, corpus:    60, failures: 0/84, gas/s:     83803027
+⇾ fuzz: elapsed:       6s, calls:       8638 (  1518/sec), seq/s:     14, branches:   1951, corpus:    63, failures: 0/129, gas/s:     93213976
+⇾ fuzz: elapsed:       9s, calls:      13546 (  1601/sec), seq/s:     16, branches:   1954, corpus:    64, failures: 0/179, gas/s:    100219247
+⇾ fuzz: elapsed:      12s, calls:      18197 (  1541/sec), seq/s:     15, branches:   1957, corpus:    65, failures: 0/225, gas/s:     94998568
+⇾ fuzz: elapsed:      15s, calls:      22764 (  1503/sec), seq/s:     15, branches:   1963, corpus:    66, failures: 0/271, gas/s:     93329343
+⇾ fuzz: elapsed:      18s, calls:      26688 (  1276/sec), seq/s:     13, branches:   1963, corpus:    66, failures: 0/311, gas/s:     79049077
+⇾ fuzz: elapsed:      21s, calls:      30477 (  1256/sec), seq/s:     11, branches:   1963, corpus:    66, failures: 0/347, gas/s:     79236800
+⇾ fuzz: elapsed:      24s, calls:      34902 (  1474/sec), seq/s:     15, branches:   1969, corpus:    68, failures: 0/393, gas/s:     92555179
+⇾ fuzz: elapsed:      28s, calls:      38932 (  1304/sec), seq/s:     12, branches:   1988, corpus:    70, failures: 0/432, gas/s:     81443556
+⇾ fuzz: elapsed:      31s, calls:      43607 (  1548/sec), seq/s:     15, branches:   1988, corpus:    70, failures: 0/479, gas/s:     97035591
+⇾ fuzz: elapsed:      34s, calls:      47519 (  1297/sec), seq/s:     13, branches:   1988, corpus:    70, failures: 0/519, gas/s:     79912666
+⇾ fuzz: elapsed:      37s, calls:      51979 (  1484/sec), seq/s:     14, branches:   2001, corpus:    73, failures: 0/562, gas/s:     91267107
+⇾ fuzz: elapsed:      40s, calls:      54497 (   829/sec), seq/s:      8, branches:   2001, corpus:    73, failures: 0/588, gas/s:     51262322
+⇾ fuzz: elapsed:      43s, calls:      58069 (  1190/sec), seq/s:     12, branches:   2001, corpus:    73, failures: 0/626, gas/s:     72402712
+⇾ fuzz: elapsed:      46s, calls:      62290 (  1401/sec), seq/s:     13, branches:   2001, corpus:    73, failures: 0/666, gas/s:     84593390
+⇾ fuzz: elapsed:      49s, calls:      66178 (  1292/sec), seq/s:     12, branches:   2005, corpus:    74, failures: 0/704, gas/s:     78344480
+⇾ fuzz: elapsed:      52s, calls:      70924 (  1580/sec), seq/s:     16, branches:   2014, corpus:    76, failures: 0/753, gas/s:     97237659
+⇾ fuzz: elapsed:      55s, calls:      75873 (  1617/sec), seq/s:     16, branches:   2018, corpus:    77, failures: 0/803, gas/s:     99098848
+⇾ fuzz: elapsed:      58s, calls:      81020 (  1698/sec), seq/s:     16, branches:   2021, corpus:    78, failures: 0/853, gas/s:    103903593
+⇾ fuzz: elapsed:    1m01s, calls:      85119 (  1356/sec), seq/s:     13, branches:   2024, corpus:    79, failures: 0/894, gas/s:     83087744
+⇾ fuzz: elapsed:    1m04s, calls:      89054 (  1299/sec), seq/s:     13, branches:   2024, corpus:    79, failures: 0/934, gas/s:     78629007
+⇾ fuzz: elapsed:    1m07s, calls:      92829 (  1252/sec), seq/s:     11, branches:   2024, corpus:    79, failures: 0/970, gas/s:     76456611
+⇾ fuzz: elapsed:    1m10s, calls:      96568 (  1246/sec), seq/s:     13, branches:   2024, corpus:    79, failures: 0/1010, gas/s:     76490065
+⇾ fuzz: elapsed:    1m13s, calls:     100394 (  1269/sec), seq/s:     12, branches:   2024, corpus:    79, failures: 0/1047, gas/s:     78887902
+⇾ fuzz: elapsed:    1m16s, calls:     104361 (  1321/sec), seq/s:     12, branches:   2024, corpus:    79, failures: 0/1086, gas/s:     80164197
+⇾ fuzz: elapsed:    1m20s, calls:     108211 (  1274/sec), seq/s:     13, branches:   2024, corpus:    79, failures: 0/1126, gas/s:     78314633
+⇾ fuzz: elapsed:    1m23s, calls:     112077 (  1283/sec), seq/s:     12, branches:   2024, corpus:    79, failures: 0/1165, gas/s:     76802532
+⇾ fuzz: elapsed:    1m26s, calls:     114948 (   951/sec), seq/s:      8, branches:   2024, corpus:    79, failures: 0/1192, gas/s:     56662818
+⇾ fuzz: elapsed:    1m29s, calls:     118173 (  1072/sec), seq/s:     10, branches:   2024, corpus:    79, failures: 0/1225, gas/s:     64802521
+⇾ Fuzzer stopped, test results follow below ...
+⇾ [PASSED] Assertion Test: FuzzTester.assetAdapter()
+⇾ [PASSED] Assertion Test: FuzzTester.collateralAsset()
+⇾ [PASSED] Assertion Test: FuzzTester.factory()
+⇾ [PASSED] Assertion Test: FuzzTester.ghost_loansCreated()
+⇾ [PASSED] Assertion Test: FuzzTester.ghost_totalBorrowed()
+⇾ [PASSED] Assertion Test: FuzzTester.ghost_totalDeposited()
+⇾ [PASSED] Assertion Test: FuzzTester.ghost_totalRepaid()
+⇾ [PASSED] Assertion Test: FuzzTester.lendingAsset()
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_depositLiquidity(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_depositLiquidity_clamped(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_liquidate(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_liquidate_clamped(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_pause()
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_repay(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_repay_clamped(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_requestLoan(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_requestLoan_clamped(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_skipTime_clamped(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_unpause()
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_withdrawLiquidity(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.lendingMarketV2_withdrawLiquidity_clamped(uint256)
+⇾ [PASSED] Assertion Test: FuzzTester.liquidationAdapter()
+⇾ [PASSED] Assertion Test: FuzzTester.market()
+⇾ [PASSED] Assertion Test: FuzzTester.oracleAdapter()
+⇾ [PASSED] Assertion Test: FuzzTester.positionAdapter()
+⇾ [PASSED] Assertion Test: FuzzTester.registry()
+⇾ [PASSED] Assertion Test: FuzzTester.setCurrentActor(uint256)
+⇾ [PASSED] Property Test: FuzzTester.property_availableLteTotal()
+⇾ [PASSED] Property Test: FuzzTester.property_balanceCoversAvailable()
+⇾ [PASSED] Property Test: FuzzTester.property_borrowedConsistent()
+⇾ [PASSED] Property Test: FuzzTester.property_loanIdMonotone()
+⇾ [PASSED] Property Test: FuzzTester.property_lpSupplyMatchesLiquidity()
+⇾ Test summary: 32 test(s) passed, 0 test(s) failed

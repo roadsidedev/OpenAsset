@@ -1,0 +1,28 @@
+---
+title: Using adapters
+description: How LPs and borrowers read Verified status, TVL, and deprecation warnings.
+---
+
+# Using adapters
+
+## For LPs
+
+- Prefer **Verified** reference adapters unless you have a specific reason not to
+- Read audit references before wiring third-party adapters
+- Unverified adapters require explicit risk acknowledgment
+- Deprecated adapters cannot be selected for **new** markets; existing markets keep running with banners
+
+## For borrowers
+
+- Market detail pages list all five adapter choices with status
+- Unverified oracles and liquidations should be treated as elevated risk
+- Manual oracles are flagged at borrow time, not only at market creation
+
+## For adapter authors
+
+1. Implement the correct interface (`IAssetAdapter`, `IOracleAdapter`, …)
+2. Register permissionlessly in the Adapter Registry
+3. Optionally pursue OpenAsset Market verification (audit governance multisig)
+4. Expect the engine to verify your outputs regardless of verification status — design honestly
+
+Deep dive: [Adapter system](/docs/protocol/adapter-system) · [Trust model](/docs/protocol/trust-model) · [Registry](/docs/protocol/adapter-registry)

@@ -28,7 +28,7 @@ import "./interfaces/IOracle.sol";
  * - Comprehensive parameter validation
  * - Market registry with metadata
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.io
  */
 contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;

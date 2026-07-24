@@ -16,7 +16,7 @@ import "../interfaces/IOracle.sol";
  * - Comprehensive event logging
  * - Batch configuration for gas efficiency
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.io
  */
 contract ChainlinkOracle is IOracle {
     

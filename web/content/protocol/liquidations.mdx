@@ -1,0 +1,32 @@
+---
+title: Liquidations
+description: Liquidation adapters and the gradual liquidation fairness contract.
+---
+
+# Liquidations
+
+## Adapter comparison
+
+| Adapter | Collateral | recovered / returned shape | Sync? |
+|---|---|---|---|
+| `DEXSwapLiquidationAdapter` | Divisible ERC20 | Tokens for debt+penalty to LP; remainder tokens to holder | Yes |
+| `NFTAuctionLiquidationAdapter` | Indivisible ERC721/1155 | Full NFT to LP; surplus as cash side-payment | Yes |
+| `IssuerRedemptionLiquidationAdapter` | RWA / tokenized equity | Settlement proceeds split debt vs surplus | **No — async** |
+
+## Fairness contract
+
+All three satisfy the same interface rule:
+
+> Take only what’s owed plus the configured penalty. Return the rest.
+
+Enforced by the two-return-value shape of `liquidate()`, not by adapter-author discretion. Product surfaces must show the breakdown (amount to LP vs amount returned) on every liquidation event.
+
+## Async settlement timeline (RWA)
+
+Markets using issuer redemption must disclose to LP and borrower before origination:
+
+1. Cure window length
+2. Expected issuer settlement period (e.g. T+1 / T+2)
+3. Outer timeout → manual intervention path
+
+See [Loan lifecycle](/docs/protocol/loan-lifecycle) and [RWA](/docs/protocol/rwa).

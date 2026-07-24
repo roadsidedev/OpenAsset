@@ -1,0 +1,85 @@
+---
+title: Data models
+description: On-chain loan structs and off-chain PostgreSQL schema for markets, adapters, and loans.
+---
+
+# Data models
+
+## On-chain
+
+```solidity
+struct Loan {
+    uint256 collateralAmount;
+    uint256 principal;
+    uint256 startTime;
+    uint256 expiryTime;
+    uint256 frozenInterestAt; // 0 unless LIQUIDATION_CURE or beyond
+    LoanStatus status;
+}
+```
+
+## Off-chain (PostgreSQL)
+
+### markets
+
+```sql
+CREATE TABLE markets (
+    id SERIAL PRIMARY KEY,
+    contract_address VARCHAR(66) UNIQUE NOT NULL,
+    chain_id INTEGER NOT NULL,
+    lp_address VARCHAR(66) NOT NULL,
+    collateral_asset VARCHAR(66) NOT NULL,
+    lending_asset VARCHAR(66) NOT NULL,
+
+    asset_adapter VARCHAR(66) NOT NULL,
+    oracle_adapter VARCHAR(66) NOT NULL,
+    compliance_adapter VARCHAR(66),
+    liquidation_adapter VARCHAR(66) NOT NULL,
+    position_adapter VARCHAR(66) NOT NULL,
+
+    ltv_bps INTEGER NOT NULL,
+    apr_bps INTEGER NOT NULL,
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### adapters
+
+```sql
+CREATE TABLE adapters (
+    id SERIAL PRIMARY KEY,
+    adapter_address VARCHAR(66) UNIQUE NOT NULL,
+    adapter_type VARCHAR(20) NOT NULL CHECK (
+        adapter_type IN ('ASSET','ORACLE','COMPLIANCE','LIQUIDATION','POSITION')
+    ),
+    verified BOOLEAN DEFAULT FALSE,
+    deprecated BOOLEAN DEFAULT FALSE,
+    audit_reference TEXT,
+    total_value_secured DECIMAL(30, 18) DEFAULT 0,
+    registered_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### loans
+
+```sql
+CREATE TABLE loans (
+    id SERIAL PRIMARY KEY,
+    loan_id_onchain INTEGER NOT NULL,
+    market_address VARCHAR(66) NOT NULL,
+    position_holder_address VARCHAR(66) NOT NULL,
+    status VARCHAR(30) DEFAULT 'ACTIVE' CHECK (
+        status IN (
+            'ACTIVE','GRACE_PERIOD','LIQUIDATION_CURE',
+            'LIQUIDATION_SETTLING','REPAID','LIQUIDATED'
+        )
+    ),
+    health_factor DECIMAL(10, 2),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+## Indexer note
+
+For any market using `TransferablePositionAdapter`, the backend must listen for position NFT `Transfer` events and update `position_holder_address`. Health alerts must resolve the **current** holder before sending — never assume the original borrower remains correct.

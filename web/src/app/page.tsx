@@ -55,7 +55,7 @@ export default function Home() {
       <section className="py-24">
         <div className="container mx-auto px-6">
           <div className="mb-16 text-center">
-            <h2 className="text-3xl font-bold sm:text-4xl">Why Red Chips?</h2>
+            <h2 className="text-3xl font-bold sm:text-4xl">Why OpenAsset Market?</h2>
             <p className="mt-4 text-zinc-400">The infrastructure for the long tail of crypto assets.</p>
           </div>
 
@@ -105,7 +105,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-white/10 bg-black py-8">
         <div className="container mx-auto px-6 text-center text-zinc-500">
-          <p>&copy; 2026 Red Chips. All rights reserved.</p>
+          <p>&copy; 2026 OpenAsset Market. All rights reserved.</p>
         </div>
       </footer>
     </div>

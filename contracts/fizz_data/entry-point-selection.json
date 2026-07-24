@@ -1,0 +1,2027 @@
+[
+  {
+    "name": "AdapterRegistry",
+    "sourcePath": "src\\AdapterRegistry.sol",
+    "artifactPath": "out\\AdapterRegistry.sol\\AdapterRegistry.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_auditGovernance",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "markDeprecated",
+        "inputs": [
+          {
+            "name": "adapter",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "internalType": "string"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "markVerified",
+        "inputs": [
+          {
+            "name": "adapter",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "auditReference",
+            "type": "string",
+            "internalType": "string"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "registerAdapter",
+        "inputs": [
+          {
+            "name": "adapter",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "adapterType",
+            "type": "enum",
+            "internalType": "AdapterRegistry.AdapterType"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "setAuditGovernance",
+        "inputs": [
+          {
+            "name": "newGovernance",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "ERC20Adapter",
+    "sourcePath": "src\\adapters\\asset\\ERC20Adapter.sol",
+    "artifactPath": "out\\ERC20Adapter.sol\\ERC20Adapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_collateralToken",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "escrow",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amountOrId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "release",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amountOrId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "ERC721Adapter",
+    "sourcePath": "src\\adapters\\asset\\ERC721Adapter.sol",
+    "artifactPath": "out\\ERC721Adapter.sol\\ERC721Adapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_nft",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "escrow",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amountOrId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "onERC721Received",
+        "inputs": [
+          {
+            "name": "",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "release",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amountOrId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "DEXSwapLiquidationAdapter",
+    "sourcePath": "src\\adapters\\liquidation\\DEXSwapLiquidationAdapter.sol",
+    "artifactPath": "out\\DEXSwapLiquidationAdapter.sol\\DEXSwapLiquidationAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_owner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "liquidate",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "debtOwed",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "registerMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "NFTAuctionLiquidationAdapter",
+    "sourcePath": "src\\adapters\\liquidation\\NFTAuctionLiquidationAdapter.sol",
+    "artifactPath": "out\\NFTAuctionLiquidationAdapter.sol\\NFTAuctionLiquidationAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_owner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "liquidate",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "debtOwed",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "onERC721Received",
+        "inputs": [
+          {
+            "name": "",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "registerMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "UniswapV3TWAPAdapter",
+    "sourcePath": "src\\adapters\\oracle\\UniswapV3TWAPAdapter.sol",
+    "artifactPath": "out\\UniswapV3TWAPAdapter.sol\\UniswapV3TWAPAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_twapPeriod",
+          "type": "uint32",
+          "internalType": "uint32"
+        },
+        {
+          "name": "_quoteToken",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "registerMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "asset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "pool",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "token0IsBase",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "updatePrice",
+        "inputs": [
+          {
+            "name": "asset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "newPrice",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "SoulboundPositionAdapter",
+    "sourcePath": "src\\adapters\\position\\SoulboundPositionAdapter.sol",
+    "artifactPath": "out\\SoulboundPositionAdapter.sol\\SoulboundPositionAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_factory",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "approve",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "burn",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "mint",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "registerMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "safeTransferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "safeTransferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "data",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "setApprovalForAll",
+        "inputs": [
+          {
+            "name": "operator",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "approved",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "StandardPositionAdapter",
+    "sourcePath": "src\\adapters\\position\\StandardPositionAdapter.sol",
+    "artifactPath": "out\\StandardPositionAdapter.sol\\StandardPositionAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_factory",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "burn",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "mint",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "registerMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "TransferablePositionAdapter",
+    "sourcePath": "src\\adapters\\position\\TransferablePositionAdapter.sol",
+    "artifactPath": "out\\TransferablePositionAdapter.sol\\TransferablePositionAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_factory",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_complianceAdapter",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "approve",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "burn",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "mint",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "registerMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "safeTransferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "safeTransferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "data",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "setApprovalForAll",
+        "inputs": [
+          {
+            "name": "operator",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "approved",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "IssuerRedemptionLiquidationAdapter",
+    "sourcePath": "src\\adapters\\rwa\\IssuerRedemptionLiquidationAdapter.sol",
+    "artifactPath": "out\\IssuerRedemptionLiquidationAdapter.sol\\IssuerRedemptionLiquidationAdapter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_issuerRedemption",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_tokenAddress",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_cureWindow",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "liquidate",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "debtOwed",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "LPToken",
+    "sourcePath": "src\\LendingMarket.sol",
+    "artifactPath": "out\\LendingMarket.sol\\LPToken.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "internalType": "string"
+        },
+        {
+          "name": "symbol",
+          "type": "string",
+          "internalType": "string"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "approve",
+        "inputs": [
+          {
+            "name": "spender",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "burn",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "decreaseAllowance",
+        "inputs": [
+          {
+            "name": "spender",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "subtractedValue",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "increaseAllowance",
+        "inputs": [
+          {
+            "name": "spender",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "addedValue",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "mint",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transfer",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "LendingMarket",
+    "sourcePath": "src\\LendingMarket.sol",
+    "artifactPath": "out\\LendingMarket.sol\\LendingMarket.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "marketOwner_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "collateralAsset_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "loanAsset_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "protocolTreasury_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "loanImplementation_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "assetType_",
+          "type": "enum",
+          "internalType": "AssetType"
+        },
+        {
+          "name": "oracleType_",
+          "type": "enum",
+          "internalType": "OracleType"
+        },
+        {
+          "name": "priceOracle_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "nftOracle_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "ltvBps_",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "aprBps_",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "durationSeconds_",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "healthFactorThreshold_",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "cbConfig_",
+          "type": "tuple",
+          "internalType": "CircuitBreaker.CircuitBreakerConfig"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "depositLiquidity",
+        "inputs": [
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "initializeWithLiquidity",
+        "inputs": [
+          {
+            "name": "initialLiquidity",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "pause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "removeLoan",
+        "inputs": [
+          {
+            "name": "loanContract",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "principal",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "requestLoan",
+        "inputs": [
+          {
+            "name": "collateralAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "tokenId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "erc1155Amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "resetCircuitBreaker",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "triggerCircuitBreaker",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "unpause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "withdrawLiquidity",
+        "inputs": [
+          {
+            "name": "shares",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "LPTokenV2",
+    "sourcePath": "src\\LendingMarketV2.sol",
+    "artifactPath": "out\\LendingMarketV2.sol\\LPTokenV2.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "internalType": "string"
+        },
+        {
+          "name": "symbol",
+          "type": "string",
+          "internalType": "string"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "approve",
+        "inputs": [
+          {
+            "name": "spender",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "burn",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "decreaseAllowance",
+        "inputs": [
+          {
+            "name": "spender",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "subtractedValue",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "increaseAllowance",
+        "inputs": [
+          {
+            "name": "spender",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "addedValue",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "mint",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transfer",
+        "inputs": [
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transferFrom",
+        "inputs": [
+          {
+            "name": "from",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "LendingMarketV2",
+    "sourcePath": "src\\LendingMarketV2.sol",
+    "artifactPath": "out\\LendingMarketV2.sol\\LendingMarketV2.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_factory",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_marketOwner",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_collateralAsset",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_lendingAsset",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_protocolTreasury",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_assetAdapter",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_oracleAdapter",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_complianceAdapter",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_liquidationAdapter",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_positionAdapter",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_ltvBps",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "_aprBps",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "_durationSeconds",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "_gracePeriodHours",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "_enableHealthFactor",
+          "type": "bool",
+          "internalType": "bool"
+        },
+        {
+          "name": "_healthFactorThreshold",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "_cbConfig",
+          "type": "tuple",
+          "internalType": "LendingMarketV2.CircuitBreakerConfig"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "depositLiquidity",
+        "inputs": [
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "initializeLiquidity",
+        "inputs": [
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "recipient",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "liquidate",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "pause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "repay",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "requestLoan",
+        "inputs": [
+          {
+            "name": "collateralAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "settleLiquidation",
+        "inputs": [
+          {
+            "name": "loanId",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "unpause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "withdrawLiquidity",
+        "inputs": [
+          {
+            "name": "shares",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "LoanContract",
+    "sourcePath": "src\\LoanContract.sol",
+    "artifactPath": "out\\LoanContract.sol\\LoanContract.json",
+    "constructor": {
+      "inputs": [],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "initialize",
+        "inputs": [
+          {
+            "name": "borrower_",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "collateralAmount_",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "tokenId_",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "erc1155Amount_",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "principal_",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "interestAmount_",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "expiryTime_",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "liquidate",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "repay",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "MarketFactory",
+    "sourcePath": "src\\MarketFactory.sol",
+    "artifactPath": "out\\MarketFactory.sol\\MarketFactory.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "treasury",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "loanImpl",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "addStablecoin",
+        "inputs": [
+          {
+            "name": "stablecoin",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "decimals",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "createMarket",
+        "inputs": [
+          {
+            "name": "collateralAsset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "loanAsset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "assetType",
+            "type": "enum",
+            "internalType": "AssetType"
+          },
+          {
+            "name": "oracleType",
+            "type": "enum",
+            "internalType": "OracleType"
+          },
+          {
+            "name": "primaryOracle",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "nftOracle",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "ltvBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "aprBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "durationSeconds",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "initialLiquidity",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "deactivateMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "pause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "reactivateMarket",
+        "inputs": [
+          {
+            "name": "market",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "removeStablecoin",
+        "inputs": [
+          {
+            "name": "stablecoin",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "renounceOwnership",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transferOwnership",
+        "inputs": [
+          {
+            "name": "newOwner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "unpause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "MarketFactoryV2",
+    "sourcePath": "src\\MarketFactoryV2.sol",
+    "artifactPath": "out\\MarketFactoryV2.sol\\MarketFactoryV2.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_owner",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_protocolTreasury",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_registry",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "addLendingAsset",
+        "inputs": [
+          {
+            "name": "asset",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "createMarket",
+        "inputs": [
+          {
+            "name": "config",
+            "type": "tuple",
+            "internalType": "MarketFactoryV2.MarketConfig"
+          },
+          {
+            "name": "initialLiquidity",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "removeLendingAsset",
+        "inputs": [
+          {
+            "name": "asset",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "NFTOracle",
+    "sourcePath": "src\\NFTOracle.sol",
+    "artifactPath": "out\\NFTOracle.sol\\NFTOracle.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_ethUsdPriceFeed",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "addCollection",
+        "inputs": [
+          {
+            "name": "collection",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "approvePrice",
+        "inputs": [
+          {
+            "name": "collection",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "authorizeUpdater",
+        "inputs": [
+          {
+            "name": "updater",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "disableEmergencyFallback",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "enableEmergencyFallback",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "pause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "proposePrice",
+        "inputs": [
+          {
+            "name": "collection",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "floorPrice",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "volume24h",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "sales24h",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "removeCollection",
+        "inputs": [
+          {
+            "name": "collection",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "renounceOwnership",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "revokeUpdater",
+        "inputs": [
+          {
+            "name": "updater",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "transferOwnership",
+        "inputs": [
+          {
+            "name": "newOwner",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "unpause",
+        "inputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "updateETHUSDPriceFeed",
+        "inputs": [
+          {
+            "name": "newPriceFeed",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "updateEmergencyCache",
+        "inputs": [
+          {
+            "name": "collection",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  },
+  {
+    "name": "OracleRouter",
+    "sourcePath": "src\\oracles\\OracleRouter.sol",
+    "artifactPath": "out\\OracleRouter.sol\\OracleRouter.json",
+    "constructor": {
+      "inputs": [
+        {
+          "name": "_owner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    "functions": [
+      {
+        "name": "configureOracle",
+        "inputs": [
+          {
+            "name": "asset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "primaryOracle",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "secondaryOracle",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "tertiaryOracle",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "useAutomaticFallback",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "maxPriceAge",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "configureOracleBatch",
+        "inputs": [
+          {
+            "name": "assets",
+            "type": "array",
+            "internalType": "address[]"
+          },
+          {
+            "name": "primaryOracles",
+            "type": "array",
+            "internalType": "address[]"
+          },
+          {
+            "name": "secondaryOracles",
+            "type": "array",
+            "internalType": "address[]"
+          },
+          {
+            "name": "tertiaryOracles",
+            "type": "array",
+            "internalType": "address[]"
+          },
+          {
+            "name": "maxPriceAges",
+            "type": "array",
+            "internalType": "uint256[]"
+          },
+          {
+            "name": "useAutomaticFallback",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "disableOracle",
+        "inputs": [
+          {
+            "name": "oracle",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "name": "enableOracle",
+        "inputs": [
+          {
+            "name": "oracle",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "hasReceive": false,
+    "hasFallback": false
+  }
+]

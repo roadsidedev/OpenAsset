@@ -49,7 +49,7 @@ export default function MarketsPage() {
                 <MarketCardSkeleton key={i} />
               ))
             : data?.markets && data.markets.length > 0
-            ? data.markets.map((market) => (
+            ? data.markets.map((market: any) => (
                 <div
                   key={market.marketAddress}
                   className="group relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/50 p-6 transition hover:border-red-500/50 hover:bg-zinc-900"

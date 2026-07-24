@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Flattened for Remix Deployment
-// Red Chips NFT Oracle Contract
+// OpenAsset Market NFT Oracle Contract
 pragma solidity 0.8.20;
 
 // ============================================================================
@@ -161,7 +161,7 @@ interface AggregatorV3Interface {
  * - Circuit breaker for extreme price moves
  * - Chainlink ETH/USD price feed integration
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.market
  */
 contract NFTOracle is Ownable, Pausable {
     

@@ -1,0 +1,67 @@
+---
+title: Create a market
+description: Step-by-step guide for LPs launching an isolated OpenAsset Market.
+---
+
+# Create a market
+
+import { Steps, Callout } from 'nextra/components'
+
+As an LP, you launch a market by selecting adapters and setting risk parameters — one deployment, no approval step.
+
+<Steps>
+### Collateral asset
+
+- Enter asset address / type
+- Select **Asset Adapter** (Verified list first; custom registration available with unverified warning)
+- System checks asset adapter ↔ asset type compatibility
+
+### Oracle
+
+- Select an Oracle Adapter appropriate to the asset
+- UI recommends: TWAP for crypto ERC20; Chainlink Equity Feed for tokenized equities/RWA
+- Review Verified/unverified status and TVL secured by the adapter
+
+### Compliance (optional)
+
+- “Does this asset require holder eligibility checks?”
+- If yes: select Compliance Adapter (ERC-3643, issuer allowlist, jurisdiction geofence, etc.)
+- Required before async liquidation or certain transferable+permissioned combinations (Validation Matrix)
+
+### Liquidation
+
+- Choose DEX Swap, NFT Auction, or Issuer Redemption
+- Issuer Redemption requires Compliance Adapter and surfaces async settlement timeline
+
+### Position representation
+
+- Standard / Soulbound / Transferable
+- Defaults to Soulbound when compliance is attached
+
+### Risk parameters
+
+- LTV, APR, duration, grace period
+- Health factor toggle + threshold
+- Circuit breaker toggle + thresholds
+
+### Lending asset & liquidity
+
+- Lending asset from **stablecoin allowlist only**
+- Initial liquidity + creation fee
+
+### Deploy
+
+- Factory runs full Validation Matrix
+- Reverts with specific, human-readable reason on any failure
+- Live immediately on success
+</Steps>
+
+<Callout type="warning">
+  Selecting an **unverified** adapter requires an explicit confirmation: you understand it has not been audited by OpenAsset Market.
+</Callout>
+
+## Acceptance criteria (product)
+
+- Every adapter selection shows Verified/unverified badge and TVL before confirm
+- Incompatible combinations rejected in UI before tx submit, citing the rule
+- One-transaction deploy, no approval queue

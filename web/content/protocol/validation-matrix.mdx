@@ -1,0 +1,24 @@
+---
+title: Market Factory validation matrix
+description: Explicit, auditable adapter compatibility rules enforced at market creation.
+---
+
+# Market Factory validation matrix
+
+Adapter compatibility is **not** left to LP judgment or an implicit runtime checker (which would itself be untrusted code). The Factory enforces an explicit, auditable rule table. Deployment **reverts** if any rule fails.
+
+## Rules
+
+| Rule | Rationale |
+|---|---|
+| If `positionAdapter == TransferablePosition` **and** `complianceAdapter != address(0)`, the position adapter’s transfer hook **must** call `complianceAdapter.isEligible(recipient)` | Prevents the position NFT from becoming an unregulated side-door around compliance enforced only at origination |
+| If `liquidationAdapter.isAsynchronous() == true`, `complianceAdapter` **must not** be `address(0)` | Async issuer-redemption assumes an eligible caller with the issuer |
+| `lendingAsset` **must** be on the protocol stablecoin allowlist | Enforces [lending asset scope](/docs/protocol/lending-assets) at the Factory |
+| Oracle adapter’s declared covered asset type **must** match asset adapter’s declared asset type | Prevents mismatched pairings (e.g. crypto TWAP on equity collateral) |
+| If asset adapter is flagged permissioned/compliance-gated, `complianceAdapter` **must not** be `address(0)` | Permissioned asset with no compliance layer cannot legally originate |
+
+## Design notes
+
+- The table is deliberately **small and explicit** so it remains fully auditable in a single read
+- New rules are added here, not inferred by the Factory at runtime
+- Product UI should reject incompatible combinations **before** submitting a transaction, citing the specific rule

@@ -1,0 +1,40 @@
+---
+title: Async liquidation flow
+description: What happens when an RWA loan enters LIQUIDATION_CURE and beyond.
+---
+
+# Async liquidation flow
+
+import { Steps } from 'nextra/components'
+
+For markets using `IssuerRedemptionLiquidationAdapter`:
+
+<Steps>
+### Trigger
+
+Health factor breaches threshold, or grace period expires.
+
+### LIQUIDATION_CURE
+
+- Interest freezes immediately
+- Holder notified with deadline and repayment amount (frozen debt + penalty)
+- **Repay still possible**
+
+### Path A — cured
+
+Holder repays within the window → loan closes `REPAID`, collateral released.
+
+### Path B — cure expires
+
+- Redemption submitted to issuer
+- Loan enters `LIQUIDATION_SETTLING` (irreversible)
+- Holder notified that repayment is no longer possible
+
+### Settlement confirms
+
+Proceeds split `recoveredForLP` / `returnedToHolder` → loan closes `LIQUIDATED`.
+
+### Exception — settlement timeout
+
+If confirmation doesn’t arrive within the outer timeout, the loan is flagged for **manual LP intervention**.
+</Steps>

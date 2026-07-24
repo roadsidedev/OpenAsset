@@ -1,4 +1,4 @@
-# Red Chips Technical Reference
+# OpenAsset Market Technical Reference
 
 Version 1.0 | Last Updated: January 2026
 
@@ -19,7 +19,7 @@ Version 1.0 | Last Updated: January 2026
 
 ### System Philosophy
 
-Red Chips is **permissionless asset lending infrastructure**. Core principles:
+OpenAsset Market is **permissionless asset lending infrastructure**. Core principles:
 
 - **Isolated Markets**: Each LP's market is independent. Risks don't cascade.
 - **LP Control**: Market creators set all terms. Platform enforces basic safety rules only.
@@ -1220,7 +1220,7 @@ Use Anchor framework (Solana's equivalent of Hardhat):
 use anchor_lang::prelude::\*;
 use anchor_spl::token::{self, Token, TokenAccount};
 
-declare_id!("RedChipsXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
+declare_id!("OpenAsset MarketXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 
 #[program]
 pub mod red_chips {

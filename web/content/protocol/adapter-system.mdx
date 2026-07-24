@@ -1,0 +1,101 @@
+---
+title: Adapter system
+description: The five adapter interfaces that make OpenAsset Market extensible.
+---
+
+# Adapter system
+
+Four operational interfaces plus one presentation interface define every point where the core engine reaches outside itself.
+
+## IAssetAdapter
+
+Handles collateral custody.
+
+**Reference implementations:** `ERC20Adapter`, `ERC721Adapter`, `ERC1155Adapter`, issuer-specific adapters for permissioned RWA tokens.
+
+```solidity
+interface IAssetAdapter {
+    function escrow(address from, uint256 amountOrId) external;
+    function release(address to, uint256 amountOrId) external;
+    function isTransferable(address from, address to, uint256 amountOrId)
+        external view returns (bool);
+}
+```
+
+## IOracleAdapter
+
+Handles pricing.
+
+**Reference implementations:** `UniswapV3TWAPAdapter`, `ChainlinkAdapter`, `ChainlinkEquityFeedAdapter`, `NAVOracleAdapter`, `ManualOracleAdapter`.
+
+```solidity
+interface IOracleAdapter {
+    /// isTrusted covers staleness, L2 sequencer liveness, AND session-awareness
+    /// (e.g. equity feeds outside trading windows).
+    function getPrice()
+        external view returns (uint256 price, bool isTrusted, uint256 updatedAt);
+
+    function getHistoricalPrice(uint256 secondsAgo)
+        external view returns (uint256);
+}
+```
+
+The engine does not need to know *why* a price is untrusted — only whether to act on it. Untrusted prices feed the [circuit breaker](/docs/protocol/circuit-breaker).
+
+## IComplianceAdapter
+
+Handles eligibility. **Optional** — markets with no compliance requirement set `complianceAdapter == address(0)` and skip checks.
+
+**Reference implementations:** `ERC3643ComplianceAdapter`, `IssuerAllowlistAdapter`, `JurisdictionGeofenceAdapter`.
+
+```solidity
+interface IComplianceAdapter {
+    function isEligible(address participant) external view returns (bool);
+}
+```
+
+Checked at **loan origination** and, for transferable positions, at **every position transfer**.
+
+## ILiquidationAdapter
+
+Handles default resolution.
+
+**Reference implementations:** `DEXSwapLiquidationAdapter`, `NFTAuctionLiquidationAdapter`, `IssuerRedemptionLiquidationAdapter`.
+
+```solidity
+interface ILiquidationAdapter {
+    /// recoveredForLP  — value taken to satisfy debt + penalty
+    /// returnedToHolder — surplus returned to the position holder
+    function liquidate(uint256 loanId, uint256 debtOwed)
+        external returns (uint256 recoveredForLP, uint256 returnedToHolder);
+
+    function isAsynchronous() external view returns (bool);
+
+    /// Only meaningful when isAsynchronous() == true
+    function cureWindowSeconds() external view returns (uint256);
+}
+```
+
+### Gradual liquidation is an interface contract
+
+Gradual liquidation is **not** a separate adapter. Every `ILiquidationAdapter` must return both recovered and returned amounts. That forces surplus accounting:
+
+| Collateral type | How surplus is returned |
+|---|---|
+| Divisible ERC20 | Real tokens back to holder |
+| Indivisible NFT | Cash side-payment (ETH/stable) from available liquidity |
+| Issuer redemption | Whatever settlement yields after debt is satisfied |
+
+## IPositionAdapter
+
+Handles how a loan is represented and who may act on it.
+
+```solidity
+interface IPositionAdapter {
+    function mint(address to, uint256 loanId) external;
+    function ownerOf(uint256 loanId) external view returns (address);
+    function burn(uint256 loanId) external; // repay or liquidation
+}
+```
+
+**Tiers:** Standard (no token), Soulbound ERC721, Transferable ERC721. Details: [Position adapters](/docs/protocol/positions).

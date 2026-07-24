@@ -1,0 +1,3 @@
+⇾ Compiling targets with crytic-compile
+⇾ Running command:
+C:\Users\USER\AppData\Local\Programs\Python\Python312\Scripts\crytic-compile.exe . --export-format solc --export-dir fizz_data/crytic-export --foundry-compile-all

@@ -19,7 +19,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
  * - Circuit breaker for extreme price moves
  * - Chainlink ETH/USD price feed integration
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.io
  */
 contract NFTOracle is Ownable, Pausable {
     
@@ -86,6 +86,11 @@ contract NFTOracle is Ownable, Pausable {
     
     // MEDIUM-004: Pending price proposals for 2-of-3 multisig
     mapping(address => PriceProposal) public pendingProposals;
+
+    // Emergency fallback: last known good price per collection for stale-price scenarios
+    mapping(address => uint256) public emergencyCachedPrice;
+    mapping(address => uint256) public emergencyCacheTimestamp;
+    bool public emergencyFallbackEnabled;
     
     // ============ Events ============
     
@@ -112,6 +117,7 @@ contract NFTOracle is Ownable, Pausable {
     error UnauthorizedUpdater();
     error InvalidCollection();
     error StalePrice();
+    error EmergencyModeActive();
     error InvalidPrice();
     error InvalidPriceDeviation();
     error CollectionNotTracked();
@@ -283,30 +289,51 @@ contract NFTOracle is Ownable, Pausable {
     }
     
     /**
-     * @notice Get floor price in ETH
+     * @notice Get floor price in ETH with stale fallback
      * @param collection NFT collection address
+     * @param allowStale If true, returns cached price when primary is stale (for liquidations)
      * @return floorPrice Floor price in ETH with 18 decimals
      */
-    function getFloorPrice(address collection) external view returns (uint256 floorPrice) {
+    function getFloorPrice(address collection, bool allowStale) external view returns (uint256 floorPrice) {
         NFTPrice memory price = priceData[collection];
-        
+
         if (!price.isActive) revert CollectionNotTracked();
-        if (block.timestamp > price.lastUpdate + MAX_PRICE_AGE) revert StalePrice();
-        
+
+        if (block.timestamp > price.lastUpdate + MAX_PRICE_AGE) {
+            if (allowStale && emergencyFallbackEnabled && emergencyCachedPrice[collection] > 0) {
+                return emergencyCachedPrice[collection];
+            }
+            revert StalePrice();
+        }
+
         return price.floorPrice;
+    }
+
+    /**
+     * @notice Get floor price in ETH (original interface, reverts on stale)
+     */
+    function getFloorPrice(address collection) external view returns (uint256 floorPrice) {
+        return this.getFloorPrice(collection, false);
     }
     
     /**
-     * @notice Get floor price in USD
+     * @notice Get floor price in USD with stale fallback option
      * @param collection NFT collection address
+     * @param allowStale If true, allows stale cached price
      * @return priceUsd Floor price in USD with 18 decimals
      */
-    function getFloorPriceUSD(address collection) external view returns (uint256 priceUsd) {
-        uint256 floorPriceETH = this.getFloorPrice(collection);
+    function getFloorPriceUSD(address collection, bool allowStale) public view returns (uint256 priceUsd) {
+        uint256 floorPriceETH = this.getFloorPrice(collection, allowStale);
         uint256 ethUsdPrice = _getETHUSDPrice();
-        
-        // floorPriceETH (18 decimals) * ethUsdPrice (18 decimals) / 1e18
+
         return (floorPriceETH * ethUsdPrice) / 1e18;
+    }
+
+    /**
+     * @notice Get floor price in USD (original interface, reverts on stale)
+     */
+    function getFloorPriceUSD(address collection) external view returns (uint256 priceUsd) {
+        return getFloorPriceUSD(collection, false);
     }
     
     /**
@@ -394,12 +421,38 @@ contract NFTOracle is Ownable, Pausable {
     }
     
     /**
+     * @notice Enable emergency stale-price fallback (owner only)
+     * @dev When enabled, getFloorPrice(collection, true) returns cached price
+     */
+    function enableEmergencyFallback() external onlyOwner {
+        emergencyFallbackEnabled = true;
+    }
+
+    /**
+     * @notice Disable emergency fallback
+     */
+    function disableEmergencyFallback() external onlyOwner {
+        emergencyFallbackEnabled = false;
+    }
+
+    /**
+     * @notice Update the emergency cached price for a collection
+     * @param collection NFT collection address
+     */
+    function updateEmergencyCache(address collection) external onlyOwner {
+        NFTPrice storage price = priceData[collection];
+        require(price.isActive, "Collection not tracked");
+        emergencyCachedPrice[collection] = price.floorPrice;
+        emergencyCacheTimestamp[collection] = block.timestamp;
+    }
+
+    /**
      * @notice Pause oracle (emergency)
      */
     function pause() external onlyOwner {
         _pause();
     }
-    
+
     /**
      * @notice Unpause oracle
      */

@@ -22,7 +22,7 @@ import "../interfaces/IOracle.sol";
  * 3. If secondary fails, try tertiary
  * 4. If all fail and auto-fallback disabled, revert
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.io
  */
 contract OracleRouter is IOracle {
     
@@ -50,11 +50,7 @@ contract OracleRouter is IOracle {
     // Emergency disable per oracle
     mapping(address => bool) public isOracleDisabled;
     
-    // Router statistics
-    uint256 public totalPrimaryUsed;
-    uint256 public totalSecondaryUsed;
-    uint256 public totalTertiaryUsed;
-    uint256 public totalFailures;
+    // Router statistics (tracked via events, not storage, since getPrice is view)
     
     // ============ Events ============
     
@@ -130,6 +126,56 @@ contract OracleRouter is IOracle {
         bool useAutomaticFallback,
         uint256 maxPriceAge
     ) external onlyOwner {
+        _configureOracle(asset, primaryOracle, secondaryOracle, tertiaryOracle, useAutomaticFallback, maxPriceAge);
+    }
+    
+    /**
+     * @notice Batch configure oracles (gas efficient)
+     * @param assets Array of assets
+     * @param primaryOracles Array of primary oracles
+     * @param secondaryOracles Array of secondary oracles
+     * @param useAutomaticFallback Auto-fallback enabled
+     */
+    function configureOracleBatch(
+        address[] calldata assets,
+        address[] calldata primaryOracles,
+        address[] calldata secondaryOracles,
+        address[] calldata tertiaryOracles,
+        uint256[] calldata maxPriceAges,
+        bool useAutomaticFallback
+    ) external onlyOwner {
+        uint256 length = assets.length;
+        require(
+            length == primaryOracles.length &&
+            length == secondaryOracles.length &&
+            length == tertiaryOracles.length &&
+            length == maxPriceAges.length,
+            "Length mismatch"
+        );
+        
+        for (uint256 i = 0; i < length; i++) {
+            _configureOracle(
+                assets[i],
+                primaryOracles[i],
+                secondaryOracles[i],
+                tertiaryOracles[i],
+                useAutomaticFallback,
+                maxPriceAges[i]
+            );
+        }
+    }
+    
+    /**
+     * @notice Internal oracle configuration logic
+     */
+    function _configureOracle(
+        address asset,
+        address primaryOracle,
+        address secondaryOracle,
+        address tertiaryOracle,
+        bool useAutomaticFallback,
+        uint256 maxPriceAge
+    ) internal {
         require(asset != address(0), "Invalid asset");
         require(primaryOracle != address(0), "Invalid primary oracle");
         
@@ -157,37 +203,6 @@ contract OracleRouter is IOracle {
     }
     
     /**
-     * @notice Batch configure oracles (gas efficient)
-     * @param assets Array of assets
-     * @param primaryOracles Array of primary oracles
-     * @param secondaryOracles Array of secondary oracles
-     * @param useAutomaticFallback Auto-fallback enabled
-     */
-    function configureOracleBatch(
-        address[] calldata assets,
-        address[] calldata primaryOracles,
-        address[] calldata secondaryOracles,
-        bool useAutomaticFallback
-    ) external onlyOwner {
-        uint256 length = assets.length;
-        require(
-            length == primaryOracles.length && length == secondaryOracles.length,
-            "Length mismatch"
-        );
-        
-        for (uint256 i = 0; i < length; i++) {
-            this.configureOracle(
-                assets[i],
-                primaryOracles[i],
-                secondaryOracles[i],
-                address(0),
-                useAutomaticFallback,
-                3600
-            );
-        }
-    }
-    
-    /**
      * @notice Disable an oracle (emergency)
      * @param oracle Oracle address to disable
      */
@@ -211,7 +226,6 @@ contract OracleRouter is IOracle {
     
     /**
      * @notice Get price with automatic fallback
-     * @dev MEDIUM-002: Made view-compliant by removing state mutations
      * @param asset Asset to price
      * @return price Price with 18 decimals
      * @return decimals Always 18
@@ -233,7 +247,6 @@ contract OracleRouter is IOracle {
         );
         
         if (primarySuccess) {
-            // Statistics tracking removed for view compliance
             return (primaryPrice, 18);
         }
         
@@ -281,6 +294,7 @@ contract OracleRouter is IOracle {
      */
     function getPriceWithSource(address asset) 
         external 
+        view
         returns (uint256 price, address source, string memory sourceType) 
     {
         OracleConfig memory config = oracleConfigs[asset];
@@ -418,14 +432,13 @@ contract OracleRouter is IOracle {
         
         try this._externalGetPrice(oracle, asset) returns (uint256 _price, uint8) {
             if (_price > 0) {
-                // Check price staleness
                 try this._externalGetLastUpdate(oracle, asset) returns (uint256 timestamp) {
                     if (block.timestamp - timestamp <= maxAge) {
                         return (true, _price);
                     }
                 } catch {
-                    // If we can't get timestamp, assume price is valid
-                    return (true, _price);
+                    // Cannot verify staleness — fail closed
+                    return (false, 0);
                 }
             }
         } catch {
@@ -550,16 +563,11 @@ contract OracleRouter is IOracle {
     }
     
     /**
-     * @notice Get router statistics
-     * @return primaryUsed Times primary was used
-     * @return secondaryUsed Times secondary was used
-     * @return tertiaryUsed Times tertiary was used
-     * @return failures Number of failures
-     * @return totalRequests Total price requests
+     * @notice Get router statistics (no-op — stats tracked via events for view compliance)
      */
     function getStats() 
         external 
-        view 
+        pure
         returns (
             uint256 primaryUsed,
             uint256 secondaryUsed,
@@ -568,13 +576,7 @@ contract OracleRouter is IOracle {
             uint256 totalRequests
         ) 
     {
-        return (
-            totalPrimaryUsed,
-            totalSecondaryUsed,
-            totalTertiaryUsed,
-            totalFailures,
-            totalPrimaryUsed + totalSecondaryUsed + totalTertiaryUsed + totalFailures
-        );
+        return (0, 0, 0, 0, 0);
     }
     
     /**

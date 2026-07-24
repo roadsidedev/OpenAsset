@@ -1,0 +1,44 @@
+---
+title: RWA & tokenized equity
+description: Issuer risk, transfer restrictions, corporate actions, and equity oracle requirements.
+---
+
+# RWA & tokenized equity support
+
+import { Callout } from 'nextra/components'
+
+## Issuer / counterparty risk
+
+Every tokenized equity or RWA token is a **claim on an issuer**, not a pure bearer asset secured only by code. If the issuer becomes insolvent, halts redemptions, or is shut down by a regulator, the token can go to zero or freeze — **independent of the underlying asset’s price**, and independent of OpenAsset Market’s liquidation mechanics.
+
+<Callout type="error">
+  This is out of the protocol’s control by construction. No adapter or liquidation logic changes it. It must be disclosed in UI and Terms of Service as an uninsured, total-loss-possible risk category distinct from ordinary market/price risk.
+</Callout>
+
+## Transfer restriction models
+
+| Model | Example pattern | Integration implication |
+|---|---|---|
+| Freely transferable | Some bToken-style products | Standard `ERC20Adapter` may work unmodified |
+| Permissioned / identity-gated (ERC-3643 / T-REX) | Institutional issuers | Requires Compliance Adapter; market/vault must complete issuer onboarding as whitelisted holder |
+| Issuer-specific / evolving | Broker stock tokens | Verify current issuer docs before any market launch |
+
+## Corporate actions & dividends
+
+| Model | Effect while collateral is escrowed |
+|---|---|
+| Auto-mirrored to token balance | Updates on-chain; oracle reflects value |
+| Total-return / NAV appreciation | Price feed reflects reinvestment |
+| Off-chain cash credit only | Credit may go to escrow holder of record (the market), **not** the borrower, unless issuer provides pass-through — confirm per issuer and disclose |
+
+## Oracle rule (repeated because it is the common mistake)
+
+Equity/RWA markets require `ChainlinkEquityFeedAdapter` (or equivalent issuer/NAV oracle), **never** `UniswapV3TWAPAdapter`.
+
+## Liquidation
+
+Issuer-redemption liquidation is **asynchronous**. Pair with a Compliance Adapter (Validation Matrix). Full path: [Loan lifecycle](/docs/protocol/loan-lifecycle).
+
+## Legal gate
+
+Securities/RWA counsel review is a **hard pre-launch gate** for enabling real-user markets that use a Compliance Adapter — distinct from engineering readiness and contract audit.

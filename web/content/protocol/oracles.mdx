@@ -1,0 +1,30 @@
+---
+title: Oracle adapters
+description: Pricing adapters by asset class — TWAP, Chainlink, equity feeds, NAV, manual.
+---
+
+# Oracle adapters
+
+| Adapter | Asset class | Manipulation resistance | Notes |
+|---|---|---|---|
+| `UniswapV3TWAPAdapter` | Crypto-native ERC20 | Time-weighted average (10–30 min, LP-configured) | Primary where DEX liquidity is sufficient (>$50k recommended) |
+| `ChainlinkAdapter` | Crypto without sufficient DEX liquidity | Decentralized nodes + staleness check (e.g. revert if >1hr old) | Fallback path |
+| `ChainlinkEquityFeedAdapter` | Tokenized equities, ETFs, RWA with issuer Chainlink feed | Session-aware; **24/5 not 24/7**; L2 sequencer uptime check | **Do not use TWAP for this class** |
+| `NAVOracleAdapter` | Fund-like RWA (treasuries, private credit) | Issuer-published NAV, ideally + Proof of Reserve | Requires issuer cooperation |
+| `ManualOracleAdapter` | Illiquid / exotic | LP-updated, short validity window | Not recommended for production; flag at create + borrow |
+
+## Equity / RWA pricing rules
+
+- Authoritative price is aggregated multi-venue equity market data, not thin on-chain pools
+- Outside the trusted trading window, `isTrusted` returns `false` → same circuit-breaker path as any untrusted oracle
+- On L2s, sequencer downtime can freeze feeds at stale values — must be checked before trusting a read
+
+## Engine consumption
+
+The engine only needs:
+
+1. `price`
+2. `isTrusted`
+3. Historical price for volatility lookback
+
+It does not special-case oracle implementations beyond what adapters report.

@@ -1,0 +1,88 @@
+---
+title: OpenAsset Market Documentation
+description: Single source of truth for the OpenAsset Market protocol — permissionless, non-custodial lending for any tokenized asset.
+---
+
+# OpenAsset Market
+
+**Permissionless, non-custodial lending infrastructure for any tokenized asset.**
+
+This documentation is the **canonical platform reference** for OpenAsset Market (brand: **oA**). It describes how the protocol works end-to-end: architecture, adapters, loan lifecycle, security, and product flows.
+
+import { Cards, Callout } from 'nextra/components'
+
+<Callout type="info">
+  **Version 2.0 — Adapter Architecture.** The core lending engine never encodes asset-type-specific logic. Every asset class, oracle, compliance rule, liquidation path, and position representation is pluggable via adapters.
+</Callout>
+
+## What is OpenAsset Market?
+
+OpenAsset Market lets anyone create an **isolated lending market** for any tokenized asset with measurable value — crypto tokens, NFTs, gaming assets, tokenized equities, and RWAs — with full control over risk parameters and terms.
+
+Existing platforms gatekeep which assets get liquidity. oA does the opposite: the market creator decides, the protocol provides infrastructure.
+
+## Core principles
+
+| Principle | Meaning |
+|---|---|
+| **Permissionless creation** | No asset-listing committee, no governance approval to launch a market |
+| **Isolated markets** | Each market has its own liquidity, collateral, parameters, and liquidation path |
+| **Non-custodial** | Collateral is locked by transparent contract rules — not discretionary protocol control |
+| **Open asset support** | New asset classes ship as adapters, not core-engine rewrites |
+| **No underwriting** | The protocol does not decide which assets deserve utility — LPs do |
+
+## Architecture at a glance
+
+```
+                    OPENASSET MARKET
+                           │
+     ┌─────────────────────┼─────────────────────┬──────────────┐
+     │                     │                     │              │
+Asset Adapter       Oracle Adapter      Compliance Adapter  Position Adapter
+     │                     │                     │              │
+     └─────────────────────┼─────────────────────┴──────────────┘
+                           │
+                  Liquidation Adapter
+                           │
+                     Lending Engine
+          (Circuit Breaker · State Machine ·
+           Defensive Invariants · Reentrancy Guards)
+```
+
+The engine knows four verbs — **escrow, price, check eligibility, liquidate** — and calls adapters for each. What stays non-negotiably in the core:
+
+- Circuit breaker
+- Gradual liquidation shape (surplus returned to holder)
+- Reentrancy protection and CEI on every external call
+- Defensive verification of adapter outputs
+- Loan state machine
+
+## Who this is for
+
+- **Liquidity providers** — launch markets, set terms, select adapters, earn yield
+- **Borrowers** — unlock liquidity against crypto, NFTs, or tokenized assets without selling
+- **Asset projects / communities** — give holders DeFi utility without building a protocol
+- **RWA / tokenized-asset issuers** — distribution and utility via compliance-aware markets
+- **Integrators & auditors** — contracts, trust model, validation matrix, security checklist
+
+## Start here
+
+<Cards>
+  <Cards.Card title="Protocol overview" href="/docs/protocol/overview" />
+  <Cards.Card title="Adapter system" href="/docs/protocol/adapter-system" />
+  <Cards.Card title="Loan lifecycle" href="/docs/protocol/loan-lifecycle" />
+  <Cards.Card title="Create a market" href="/docs/guides/create-market" />
+  <Cards.Card title="Security model" href="/docs/protocol/security" />
+  <Cards.Card title="Security checklist" href="/docs/reference/security-checklist" />
+</Cards>
+
+## Document status
+
+| Field | Value |
+|---|---|
+| **Status** | Canonical / source of truth |
+| **Architecture** | v2.0 adapter architecture |
+| **Scope** | EVM chains; stablecoin lending assets |
+| **Supersedes** | Prior monolithic `LendingMarket` designs |
+
+Where this site and older drafts disagree, **this documentation is correct**.

@@ -1,0 +1,9 @@
+⇾ Compiling targets with crytic-compile
+⇾ Running command:
+crytic-compile . --export-format solc --export-dir fizz_data/crytic-export --foundry-compile-all
+error Failed to compile target
+‣ error while executing crytic-compile:
+OUTPUT:
+
+ERROR: exec: "crytic-compile": executable file not found in %PATH%
+

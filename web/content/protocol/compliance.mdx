@@ -1,0 +1,29 @@
+---
+title: Compliance responsibility boundary
+description: Point-in-time eligibility checks — what OpenAsset Market does and does not enforce.
+---
+
+# Compliance responsibility boundary
+
+This boundary must never be assumed to be handled by a mechanism that doesn’t exist.
+
+## What Compliance Adapters do
+
+- **Point-in-time checks** at specific protocol actions:
+  - Loan origination
+  - Position transfer (for TransferablePosition markets)
+- Enforce whatever eligibility rule already exists at the **asset / issuer** level
+
+## What they do not do
+
+- Continuous monitoring of real-world eligibility mid-loan
+- Poll for sanctions designations or revoked KYC after origination
+- Define who qualifies as an eligible investor, permitted jurisdictions, or KYC/AML standards
+
+## Mid-loan eligibility changes
+
+If a participant’s status changes mid-loan, OpenAsset Market **does not poll for this**. Enforcement happens through the **underlying token issuer’s own freeze mechanism** (e.g. capabilities required by ERC-3643), acting on the token outside OpenAsset Market contracts.
+
+## Product implication
+
+This boundary must appear in user-facing documentation (this site), not only internal specs, so LPs and borrowers understand ongoing enforcement limits.

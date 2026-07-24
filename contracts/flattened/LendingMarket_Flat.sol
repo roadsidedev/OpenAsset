@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Flattened for Remix Deployment
-// Red Chips LendingMarket - Isolated Lending Pool
+// OpenAsset Market LendingMarket - Isolated Lending Pool
 pragma solidity 0.8.20;
 
 // ============================================================================
@@ -483,7 +483,7 @@ contract LPToken is ERC20 {
  * - Revenue sharing (90% LP, 10% protocol)
  * - Comprehensive loan registry
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.market
  */
 contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -600,7 +600,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
             );
         }
 
-        lpToken = new LPToken("RedChips LP Token", "rcLP");
+        lpToken = new LPToken("OpenAsset Market LP Token", "oALP");
     }
 
     // ============ Initialization ============

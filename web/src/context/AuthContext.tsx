@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { fetchFromApi } from '../lib/api';
 
-const AUTH_STORAGE_KEY = 'redchips_auth_token';
+const AUTH_STORAGE_KEY = 'openasset_auth_token';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 1. Fetch nonce from backend
       const { nonce } = await fetchFromApi(`/auth/nonce/${activeWallet.address}`);
 
-      const message = `Login to RedChips: ${nonce}`;
+      const message = `Login to OpenAsset Market: ${nonce}`;
       const signature = await activeWallet.sign(message);
       
       // 2. Login to get JWT
@@ -128,7 +128,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    return {
+      isAuthenticated: false,
+      isSigning: false,
+      isLoading: false,
+      signLoginMessage: async () => {},
+      authenticatedFetch: async () => null,
+      logout: () => {},
+      user: null,
+    };
   }
   return context;
 }

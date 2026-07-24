@@ -1,0 +1,22 @@
+---
+title: Multi-chain architecture
+description: EVM-first deployment model; Solana and cross-chain liquidity deferred.
+---
+
+# Multi-chain architecture
+
+## v1 scope: EVM only
+
+Supported pattern: Ethereum, Base, Arbitrum, Optimism, Polygon, and EVM-compatible RWA-specific chains.
+
+Each chain is a **separate, chain-native deployment** with its own Factory and Registry instance — not a unified cross-chain liquidity layer.
+
+## Solana is not a port
+
+Solana / Anchor has no equivalent plug-and-play adapter pattern. A Solana market’s “adapter” is a distinct design exercise. Solana support is deferred to its own architecture document — not assumed to follow from these EVM interfaces.
+
+## Deferred
+
+- Cross-chain unified liquidity
+- Cross-chain position portability
+- Shared cross-chain reputation / analytics

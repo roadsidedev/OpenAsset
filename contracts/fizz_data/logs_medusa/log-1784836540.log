@@ -1,0 +1,149 @@
+⇾ Compiling targets with crytic-compile
+⇾ Running command:
+C:\Users\USER\AppData\Local\Programs\Python\Python312\Scripts\crytic-compile.exe . --export-format solc --export-dir fizz_data/crytic-export --foundry-compile-all
+⇾ Finished compiling targets in 3m1s
+⇾ artifacts: Medusa is running against a new set of build artifacts
+⇾ No Slither cached results found at fizz_data/slither_results.json
+⇾ Running Slither:
+slither . --ignore-compile --print echidna --json -
+warn Failed to run slither
+‣ exec: "slither": executable file not found in %PATH%
+⇾ Running with a timeout of 120 seconds
+⇾ Setting up test chain
+⇾ Finished setting up test chain
+⇾ Creating corpus...
+⇾ Fuzzing with 10 workers
+⇾ [NOT STARTED] Property Test: FuzzTester.property_balanceCoversAvailable()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_loanIdMonotone()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_borrowedConsistent()
+⇾ fuzz: elapsed:       0s, calls:          0 (     0/sec), seq/s:      0, branches:    808, corpus:     0, failures: 0/0, gas/s:            0
+⇾ [NOT STARTED] Property Test: FuzzTester.property_availableLteTotal()
+⇾ [NOT STARTED] Property Test: FuzzTester.property_lpSupplyMatchesLiquidity()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_pause()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingAsset()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_depositLiquidity_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_repay(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.oracleAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_requestLoan_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_totalRepaid()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_depositLiquidity(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_repay_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_withdrawLiquidity(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.positionAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.assetAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.factory()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_requestLoan(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_unpause()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_withdrawLiquidity_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.market()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_totalDeposited()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_liquidate(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_liquidate_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.lendingMarketV2_skipTime_clamped(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.liquidationAdapter()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.registry()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.setCurrentActor(uint256)
+⇾ [NOT STARTED] Assertion Test: FuzzTester.collateralAsset()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_loansCreated()
+⇾ [NOT STARTED] Assertion Test: FuzzTester.ghost_totalBorrowed()
+⇾ [Worker 4] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 35 call(s)
+⇾ [Worker 2] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 37 call(s)
+⇾ [Worker 7] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 90 call(s)
+⇾ [Worker 6] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 18 call(s)
+⇾ [Worker 0] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 8 call(s)
+⇾ [Worker 9] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 19 call(s)
+⇾ [Worker 5] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 70 call(s)
+⇾ [Worker 3] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 26 call(s)
+⇾ [Worker 8] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 45 call(s)
+⇾ fuzz: elapsed:       3s, calls:       2476 (   820/sec), seq/s:      9, branches:   1828, corpus:    40, failures: 0/30, gas/s:     50905341
+⇾ [Worker 1] Shrinking call sequence for Property Test: FuzzTester.property_balanceCoversAvailable() with 79 call(s)
+⇾ fuzz: elapsed:       6s, calls:       2527 (    16/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:      1167304
+⇾ fuzz: elapsed:       9s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      12s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      15s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      18s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      21s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      24s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      27s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      30s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      34s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      37s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      40s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      43s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ fuzz: elapsed:      46s, calls:       2527 (     0/sec), seq/s:      0, branches:   1834, corpus:    43, failures: 0/31, gas/s:            0
+⇾ [Worker 9] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ [FAILED] Property Test: FuzzTester.property_balanceCoversAvailable()
+Test for method "FuzzTester.property_balanceCoversAvailable()" failed after the following call sequence:
+[Call Sequence]
+1) FuzzTester.lendingMarketV2_requestLoan(uint256)(7839) (block=23, time=23, gas=12500000, gasprice=0, value=0, sender=0x30000)
+2) FuzzTester.lendingMarketV2_repay_clamped(uint256)(91343852291006158293329423550099527248439197078) (block=23, time=23, gas=12500000, gasprice=0, value=0, sender=0x30000)
+[Execution Trace]
+ => [call] Admin.lendingMarketV2_repay_clamped(uint256)(91343852291006158293329423550099527248439197078) (addr=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519], value=0, sender=0x30000)
+	 => [call] Market.nextLoanId()() (addr=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], value=<nil>, sender=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519])
+		 => [return (1)]
+	 => [event] LogString("Clamping value 91343852291006158293329423550099527248439197078 to 0")
+	 => [call] StdCheats.startPrank(address)(Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C]) (addr=0x7109709ECfa91a80626fF3989D68f67F5b1DD12D, value=0, sender=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519])
+		 => [return ()]
+	 => [call] Market.repay(uint256)(0) (addr=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], value=0, sender=Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C])
+		 => [call] USDC.transferFrom(address,address,uint256)(Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C], Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], 4115475) (addr=USDC [0xC7f2Cf4845C6db0e1a1e91ED41Bcd0FcC1b0E141], value=0, sender=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b])
+			 => [event] Transfer(Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C], Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], 4115475)
+			 => [return (true)]
+		 => [call] USDC.transfer(address,uint256)(Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519], 411547) (addr=USDC [0xC7f2Cf4845C6db0e1a1e91ED41Bcd0FcC1b0E141], value=0, sender=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b])
+			 => [event] Transfer(Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519], 411547)
+			 => [return (true)]
+		 => [call] StandardPositionAdapter.ownerOf(uint256)(0) (addr=0x856e75e9c0Da547F9753c17746D6cc139b668e5c, value=<nil>, sender=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b])
+			 => [return (Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C])]
+		 => [call] ERC20Adapter.release(address,uint256)(Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C], 7839) (addr=0xDc82c0362A241Aa94d53546648EACe48C9773dAa, value=0, sender=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b])
+			 => [call] COLL.transferFrom(address,address,uint256)(Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C], 7839) (addr=COLL [0xdaE97900D4B184c5D2012dcdB658c008966466DD], value=0, sender=0xDc82c0362A241Aa94d53546648EACe48C9773dAa)
+				 => [event] Transfer(Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C], 7839)
+				 => [return (true)]
+			 => [return ()]
+		 => [call] StandardPositionAdapter.burn(uint256)(0) (addr=0x856e75e9c0Da547F9753c17746D6cc139b668e5c, value=0, sender=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b])
+			 => [return ()]
+		 => [event] LoanRepaid(0, Alice [0x3150d9893b1c0bf6F48E591d2d873DdA3A88Ac7C], 3919500, 195975)
+		 => [return ()]
+	 => [call] StdCheats.stopPrank()() (addr=0x7109709ECfa91a80626fF3989D68f67F5b1DD12D, value=0, sender=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519])
+		 => [return ()]
+	 => [return ()]
+
+[Property Test Execution Trace]
+[Execution Trace]
+ => [call] Admin.property_balanceCoversAvailable()() (addr=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519], value=0, sender=0x10000)
+	 => [call] USDC.balanceOf(address)(Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b]) (addr=USDC [0xC7f2Cf4845C6db0e1a1e91ED41Bcd0FcC1b0E141], value=<nil>, sender=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519])
+		 => [return (99999784428)]
+	 => [call] Market.availableLiquidity()() (addr=Market [0x5EfD028dd0751F9Ed1b3c8B058B02E47f3fbd80b], value=<nil>, sender=Admin [0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519])
+		 => [return (100000000000)]
+	 => [return (false)]
+
+⇾ [Worker 6] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ [Worker 0] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:      49s, calls:       2928 (   133/sec), seq/s:      0, branches:   1842, corpus:    45, failures: 2/34, gas/s:      8445633
+⇾ [Worker 2] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:      52s, calls:       4481 (   516/sec), seq/s:      4, branches:   1854, corpus:    47, failures: 3/48, gas/s:     31917040
+⇾ [Worker 4] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ [Worker 3] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:      55s, calls:       6008 (   507/sec), seq/s:      4, branches:   1921, corpus:    50, failures: 6/63, gas/s:     32506164
+⇾ fuzz: elapsed:      58s, calls:       7780 (   585/sec), seq/s:      5, branches:   1929, corpus:    52, failures: 6/80, gas/s:     37096442
+⇾ fuzz: elapsed:    1m01s, calls:       9823 (   672/sec), seq/s:      6, branches:   1935, corpus:    54, failures: 6/101, gas/s:     40839380
+⇾ [Worker 8] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:    1m04s, calls:      12195 (   789/sec), seq/s:      7, branches:   1938, corpus:    54, failures: 7/124, gas/s:     49429758
+⇾ fuzz: elapsed:    1m07s, calls:      15702 (  1160/sec), seq/s:     11, branches:   1942, corpus:    56, failures: 7/159, gas/s:     71936002
+⇾ fuzz: elapsed:    1m10s, calls:      19337 (  1211/sec), seq/s:     12, branches:   1949, corpus:    58, failures: 7/196, gas/s:     74285482
+⇾ fuzz: elapsed:    1m14s, calls:      22793 (  1059/sec), seq/s:     10, branches:   1949, corpus:    58, failures: 7/231, gas/s:     67289026
+⇾ [Worker 5] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:    1m17s, calls:      25244 (   815/sec), seq/s:      7, branches:   1956, corpus:    60, failures: 8/254, gas/s:     51641110
+⇾ [Worker 1] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:    1m20s, calls:      28709 (  1145/sec), seq/s:     11, branches:   1960, corpus:    61, failures: 8/290, gas/s:     70229451
+⇾ fuzz: elapsed:    1m23s, calls:      33445 (  1577/sec), seq/s:     15, branches:   1963, corpus:    62, failures: 9/337, gas/s:     98111715
+⇾ [Worker 7] Shrinking complete after 5000 attempts (limit: 5000)
+⇾ fuzz: elapsed:    1m26s, calls:      38233 (  1583/sec), seq/s:     15, branches:   1963, corpus:    62, failures: 10/385, gas/s:     97325670
+⇾ fuzz: elapsed:    1m29s, calls:      43711 (  1808/sec), seq/s:     17, branches:   1963, corpus:    62, failures: 10/438, gas/s:    111917649
+⇾ fuzz: elapsed:    1m32s, calls:      48910 (  1732/sec), seq/s:     16, branches:   1986, corpus:    64, failures: 10/489, gas/s:    107744814
+⇾ fuzz: elapsed:    1m35s, calls:      53941 (  1670/sec), seq/s:     16, branches:   1994, corpus:    67, failures: 10/540, gas/s:    106139308
+⇾ fuzz: elapsed:    1m38s, calls:      59242 (  1749/sec), seq/s:     17, branches:   2004, corpus:    70, failures: 10/593, gas/s:    108546492
+⇾ fuzz: elapsed:    1m41s, calls:      64999 (  1914/sec), seq/s:     19, branches:   2012, corpus:    72, failures: 10/651, gas/s:    116708291
+⇾ fuzz: elapsed:    1m44s, calls:      70451 (  1798/sec), seq/s:     17, branches:   2012, corpus:    72, failures: 10/705, gas/s:    109197882
+⇾ fuzz: elapsed:    1m47s, calls:      75963 (  1832/sec), seq/s:     18, branches:   2016, corpus:    73, failures: 10/761, gas/s:    112430419
+⇾ fuzz: elapsed:    1m50s, calls:      81634 (  1885/sec), seq/s:     18, branches:   2016, corpus:    73, failures: 10/818, gas/s:    117189992
+⇾ fuzz: elapsed:    1m53s, calls:      86961 (  1763/sec), seq/s:     16, branches:   2016, corpus:    73, failures: 10/869, gas/s:    108834450
+⇾ fuzz: elapsed:    1m56s, calls:      92218 (  1747/sec), seq/s:     17, branches:   2017, corpus:    74, failures: 10/923, gas/s:    109538457

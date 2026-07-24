@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Flattened for Remix Deployment
-// Red Chips LoanContract - Individual Loan Escrow
+// OpenAsset Market LoanContract - Individual Loan Escrow
 pragma solidity 0.8.20;
 
 // ============================================================================
@@ -275,7 +275,7 @@ interface ILendingMarket {
  * - Origination fee (0.5% to treasury)
  * - Interest calculation
  * 
- * @custom:security-contact security@redchips.io
+ * @custom:security-contact security@openasset.market
  */
 contract LoanContract is ILoanContract, ReentrancyGuard {
     using SafeERC20 for IERC20;

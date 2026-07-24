@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 import * as fs from "fs";
 
 /**
- * Red Chips Protocol - Contract Verification Script
+ * OpenAsset Market Protocol - Contract Verification Script
  * Uses Etherscan V2 API for contract verification
  * 
  * Usage:
@@ -58,7 +58,7 @@ const CHAINLINK_ETH_USD: Record<number, string> = {
 };
 
 async function main() {
-  console.log("\n🔍 Red Chips Protocol - Contract Verification\n");
+  console.log("\n🔍 OpenAsset Market Protocol - Contract Verification\n");
   console.log("=".repeat(50));
 
   const network = await ethers.provider.getNetwork();

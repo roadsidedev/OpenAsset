@@ -1,6 +1,6 @@
 /**
  * @file ContractAbis.ts
- * @description Production-grade ABI definitions for all Red Chips contracts
+  * @description Production-grade ABI definitions for all OpenAsset Market contracts
  * These are extracted from compiled contract ABIs and provide full type safety
  */
 

@@ -1,4 +1,4 @@
-# Red Chips - Remix Deployment Guide
+# OpenAsset Market - Remix Deployment Guide
 
 ## 📁 Flattened Contracts
 

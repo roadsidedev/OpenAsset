@@ -2,7 +2,7 @@ import { ethers, run } from "hardhat";
 import { Contract } from "ethers";
 
 /**
- * Red Chips Protocol - Testnet Deployment Script with Auto-Verification
+ * OpenAsset Market Protocol - Testnet Deployment Script with Auto-Verification
  *
  * Deploys and verifies:
  * 1. LoanContract implementation (for minimal proxy)
@@ -55,7 +55,7 @@ const TESTNET_CONFIG: Record<number, {
 };
 
 async function main(): Promise<DeploymentResult> {
-  console.log("\n🚀 Red Chips Protocol - Testnet Deployment\n");
+  console.log("\n🚀 OpenAsset Market Protocol - Testnet Deployment\n");
   console.log("=".repeat(50));
 
   // Get deployer
