@@ -47,8 +47,9 @@ function timeUntil(timestampSec: string | number): string {
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { authenticated, ready } = usePrivy();
   const { login } = usePrivy();
+  const isReady = ready !== false;
 
-  if (!ready) {
+  if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Skeleton className="h-10 w-40 bg-muted" />
@@ -66,7 +67,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
             Connect your wallet to view your active loans and markets you&apos;ve created.
           </p>
           <button
-            onClick={() => login()}
+            type="button"
+            onClick={async () => { try { await login(); } catch (e) { console.error(e); } }}
             className="rounded-2xl bg-ice-300 text-slate-900 px-6 py-2.5 text-sm font-semibold hover:bg-ice-400 transition-colors"
           >
             Connect Wallet

@@ -34,13 +34,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           appearance: {
             theme: 'dark',
             accentColor: '#A8D8FF',
-            loginModal: {
-              showFirstSocials: true,
-              showPasskeys: false,
-              showOtherWallets: true,
-            },
+            logo: undefined,
           },
-          loginMethods: ['wallet', 'email'],
         }}
       >
         <QueryClientProvider client={queryClient}>

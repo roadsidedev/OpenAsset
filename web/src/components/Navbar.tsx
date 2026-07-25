@@ -25,7 +25,9 @@ export function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isReady = privyReady && !authLoading;
+  // When Privy is not configured, privyReady is undefined — treat as ready
+  // so the sign-in button is still functional via the fallback auth gate
+  const isReady = privyReady !== false && !authLoading;
 
   const handleLogout = () => {
     backendLogout();
@@ -44,19 +46,31 @@ export function Navbar() {
     { label: "Account", href: "/account", icon: User },
   ];
 
+  const handleLogin = async () => {
+    try {
+      await login();
+    } catch (err) {
+      console.error("Privy login failed:", err);
+    }
+  };
+
   const renderAuthButton = (compact = false) => {
     if (!isReady) {
       return <div className={cn("animate-pulse rounded-2xl bg-muted", compact ? "h-8 w-16" : "h-9 w-28")} />;
     }
     if (!authenticated) {
       return (
-        <Button
-          onClick={() => login()}
-          variant="secondary"
-          className={cn("rounded-2xl font-medium", compact ? "h-8 px-3 text-xs" : "px-4 text-sm")}
+        <button
+          type="button"
+          onClick={handleLogin}
+          className={cn(
+            "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl font-medium transition-all",
+            "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+            compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
+          )}
         >
           Sign In
-        </Button>
+        </button>
       );
     }
     if (!isBackendAuthenticated) {
