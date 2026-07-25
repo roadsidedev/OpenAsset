@@ -1,119 +1,106 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Search } from "lucide-react";
 import { useMarkets } from "@/hooks/useMarkets";
+import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
+import { ProtocolStatsDashboard } from "@/components/ProtocolStatsDashboard";
+import { cn } from "@/lib/utils";
+
+const FILTERS = ["All Markets", "Active", "High LTV", "Low APR"] as const;
+type Filter = (typeof FILTERS)[number];
 
 export default function MarketsPage() {
   const [start, setStart] = useState(0);
-  const [filter, setFilter] = useState<"all" | "gaming" | "memes" | "nft">("all");
-  const { data, isLoading, error } = useMarkets(start, 20);
+  const [filter, setFilter] = useState<Filter>("All Markets");
+  const [search, setSearch] = useState("");
+  const { data, isLoading, error } = useMarkets(start, 50);
+
+  const allMarkets = data?.markets || [];
+
+  const filteredMarkets = allMarkets.filter((m) => {
+    if (filter === "Active" && !m.active) return false;
+    if (filter === "High LTV" && m.ltvBps < 7000) return false;
+    if (filter === "Low APR" && m.aprBps > 1500) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        m.marketAddress.toLowerCase().includes(q) ||
+        m.collateralAsset.toLowerCase().includes(q) ||
+        m.loanAsset.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20 md:pb-0">
-      <main className="container mx-auto px-6 py-12">
-        <div>
-          <h1 className="text-3xl font-bold">Lending Markets</h1>
-          <p className="mt-2 text-zinc-400">
-            Browse active markets or create your own to earn yield.
-          </p>
+    <div className="min-h-screen">
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
+        {/* Protocol Stats Dashboard */}
+        <ProtocolStatsDashboard />
+
+        {/* Header + Search */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Explore Markets</h1>
+            <p className="text-sm text-muted-foreground">
+              Permissionless & compliant isolated lending pools for any tokenized asset
+            </p>
+          </div>
+
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search assets, chains, adapters..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-2xl border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 focus:border-transparent placeholder:text-muted-foreground"
+            />
+          </div>
         </div>
 
-        {/* Filters */}
-        <div className="mt-8 flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-          {(["all", "gaming", "memes", "nft"] as const).map((type) => (
+        {/* Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-medium scrollbar-hide">
+          {FILTERS.map((f) => (
             <button
-              key={type}
-              onClick={() => setFilter(type)}
-              className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                filter === type
-                  ? "border-red-500 bg-red-500/10"
-                  : "border-white/10 text-zinc-400 hover:bg-white/10"
-              }`}
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "whitespace-nowrap rounded-xl px-4 py-2 transition-colors",
+                filter === f
+                  ? "bg-primary text-primary-foreground font-bold"
+                  : "bg-card border border-border text-muted-foreground hover:border-ice-300/50 hover:text-foreground"
+              )}
             >
-              {type === "all" ? "All Assets" : type.charAt(0).toUpperCase() + type.slice(1)}
+              {f}
             </button>
           ))}
         </div>
 
-        {/* Market Grid */}
+        {/* Error */}
         {error && (
-          <div className="mt-8 rounded-lg bg-red-500/10 border border-red-500/50 p-4 text-red-400">
+          <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
             Error loading markets: {error.message}
           </div>
         )}
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+
+        {/* Markets Grid */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {isLoading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <MarketCardSkeleton key={i} />
               ))
-            : data?.markets && data.markets.length > 0
-            ? data.markets.map((market: any) => (
-                <div
-                  key={market.marketAddress}
-                  className="group relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/50 p-6 transition hover:border-red-500/50 hover:bg-zinc-900"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-xl">
-                        💼
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">Market {market.marketAddress.slice(0, 6)}</h3>
-                        <p className="text-xs text-zinc-500">{market.collateralAsset.slice(0, 8)}</p>
-                      </div>
-                    </div>
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs ${
-                      market.active
-                        ? "bg-green-500/10 text-green-400"
-                        : "bg-zinc-500/10 text-zinc-400"
-                    }`}>
-                      {market.active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-2 gap-4 border-t border-white/5 pt-6">
-                    <div>
-                      <p className="text-xs text-zinc-500">LTV</p>
-                      <p className="text-lg font-medium">{(market.ltvBps / 100).toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-zinc-500">APR</p>
-                      <p className="text-lg font-medium text-green-400">
-                        {(market.aprBps / 100).toFixed(1)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-zinc-500">Duration</p>
-                      <p className="text-lg font-medium">{Math.floor(market.durationSeconds / 86400)} Days</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-zinc-500">Liquidity</p>
-                      <p className="text-lg font-medium text-sm">
-                        {parseFloat(market.liquidity.available).toFixed(2)} <span className="text-xs text-zinc-500">USDC</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex gap-3">
-                    <Link
-                      href={`/borrow/${market.marketAddress}`}
-                      className="flex-1 rounded-lg bg-white py-2.5 text-center text-sm font-semibold text-black transition hover:bg-zinc-200"
-                    >
-                      Borrow
-                    </Link>
-                    <button className="flex-1 rounded-lg border border-white/10 py-2.5 text-sm font-semibold transition hover:bg-white/5">
-                      Supply
-                    </button>
-                  </div>
-                </div>
+            : filteredMarkets.length > 0
+            ? filteredMarkets.map((market) => (
+                <MarketCard key={market.marketAddress} market={market} />
               ))
             : (
-              <div className="col-span-full text-center py-12">
-                <p className="text-zinc-400">No markets found</p>
-              </div>
-            )}
+                <div className="col-span-full text-center py-16">
+                  <p className="text-muted-foreground text-sm">No markets found</p>
+                </div>
+              )}
         </div>
       </main>
     </div>

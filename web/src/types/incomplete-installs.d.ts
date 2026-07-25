@@ -10,6 +10,7 @@ declare module 'viem' {
   export function toHex(value: string | number | bigint): `0x${string}`;
   export function isAddress(value: string): boolean;
   export function getAddress(value: string): string;
+  export function parseAbi(abis: readonly string[]): any;
   export type Address = `0x${string}`;
   export type Hash = `0x${string}`;
   export const zeroAddress: Address;
@@ -36,6 +37,8 @@ declare module 'wagmi' {
   export function useWalletClient(): { data?: any };
   export function usePublicClient(): any;
   export function useSwitchChain(): any;
+  export function http(url?: string): any;
+  export function createConfig(config: any): any;
   export const WagmiProvider: any;
 }
 
@@ -57,6 +60,7 @@ declare module 'viem/utils' {
 
 declare module '@privy-io/react-auth' {
   export function usePrivy(): any;
+  export function useWallets(): any;
   export const PrivyProvider: any;
 }
 
@@ -68,4 +72,5 @@ declare module '@privy-io/wagmi' {
 declare module '@tanstack/react-query' {
   export const QueryClient: any;
   export const QueryClientProvider: any;
+  export function useQuery<T = any>(options: any): any;
 }

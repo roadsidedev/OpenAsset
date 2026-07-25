@@ -1,6 +1,7 @@
-'use client';
+"use client";
 
-import { AdapterBadge } from './AdapterBadge';
+import { AdapterBadge } from "./AdapterBadge";
+import { cn } from "@/lib/utils";
 
 export interface Adapter {
   address: string;
@@ -35,16 +36,16 @@ export function AdapterSelector({
   return (
     <div className="space-y-3">
       <div>
-        <label className="block text-sm font-medium text-zinc-200">
-          {label} {required && <span className="text-red-400">*</span>}
+        <label className="block text-sm font-medium text-foreground">
+          {label} {required && <span className="text-destructive">*</span>}
         </label>
         {description && (
-          <p className="mt-1 text-xs text-zinc-500">{description}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         )}
       </div>
 
       {deprecationWarning && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
           {deprecationWarning}
         </div>
       )}
@@ -54,30 +55,31 @@ export function AdapterSelector({
           <button
             key={adapter.address}
             onClick={() => onSelect(adapter.address)}
-            className={`w-full rounded-lg border p-3 text-left transition-all ${
+            className={cn(
+              "w-full rounded-xl border p-3 text-left transition-all",
               selected === adapter.address
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-zinc-700 bg-zinc-900/50 hover:border-zinc-600'
-            }`}
+                ? "border-ice-400 bg-ice-50 dark:bg-ice-900/20"
+                : "border-border bg-muted/30 hover:border-ice-300/50"
+            )}
           >
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-sm font-medium text-zinc-200">{adapter.name}</span>
-                <span className="ml-2 text-xs text-zinc-500">
+                <span className="text-sm font-medium text-foreground">{adapter.name}</span>
+                <span className="ml-2 text-xs text-muted-foreground font-mono">
                   {adapter.address.slice(0, 6)}...{adapter.address.slice(-4)}
                 </span>
               </div>
               <AdapterBadge verified={adapter.verified} deprecated={adapter.deprecated} />
             </div>
             {adapter.auditReference && (
-              <p className="mt-1 text-xs text-zinc-500">Audit: {adapter.auditReference}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Audit: {adapter.auditReference}</p>
             )}
           </button>
         ))}
       </div>
 
       {selected && (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-foreground font-mono">
           Selected: {selected.slice(0, 6)}...{selected.slice(-4)}
         </p>
       )}
