@@ -8,14 +8,15 @@ import { cn } from "@/lib/utils";
 export function CreateMarketFAB() {
   const pathname = usePathname();
 
-  // Hide on create-market page, and on mobile (FAB is built into bottom nav)
+  // Hide on create-market page; mobile FAB is handled inside Navbar
   if (pathname === "/create-market") return null;
 
   return (
     <Link
       href="/create-market"
       className={cn(
-        "fixed bottom-6 right-6 z-50 hidden md:flex",
+        "fixed z-50 hidden md:flex",
+        "bottom-6 right-6",
         "h-14 w-14 items-center justify-center rounded-full",
         "bg-ice-300 text-slate-900 shadow-glow",
         "transition-all duration-200 hover:scale-105 hover:bg-ice-400 active:scale-95",

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Briefcase, Plus, Menu, LogOut, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Briefcase, Plus, Menu, LogOut, Sun, Moon, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
@@ -34,8 +34,14 @@ export function Navbar() {
 
   const NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: LayoutDashboard },
-    { label: "Positions", href: "/positions", icon: Briefcase },
-    { label: "Portfolio", href: "/portfolio", icon: LayoutDashboard },
+    { label: "Portfolio", href: "/portfolio", icon: Briefcase },
+    { label: "Account", href: "/account", icon: User },
+  ];
+
+  const MOBILE_NAV_ITEMS = [
+    { label: "Markets", href: "/markets", icon: LayoutDashboard },
+    { label: "Portfolio", href: "/portfolio", icon: Briefcase },
+    { label: "Account", href: "/account", icon: User },
   ];
 
   const renderAuthButton = (compact = false) => {
@@ -121,7 +127,6 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Theme Toggle */}
             <Button
               onClick={toggleTheme}
               variant="ghost"
@@ -132,10 +137,8 @@ export function Navbar() {
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
 
-            {/* Sign In / Wallet */}
             {renderAuthButton()}
 
-            {/* Hamburger — far right, after sign-in */}
             <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
               <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
                 <Menu className="h-4.5 w-4.5" />
@@ -146,89 +149,71 @@ export function Navbar() {
       </header>
 
       {/* Mobile Top Nav */}
-      <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border glass px-4 md:hidden">
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border glass px-4 md:hidden">
         <Link href="/markets" className="flex items-center gap-0.5">
           <span className="text-xl font-bold tracking-tighter text-ice-500 dark:text-ice-300">o</span>
           <span className="text-2xl font-extrabold tracking-tighter text-foreground">A</span>
         </Link>
 
-        <div className="flex items-center gap-2">
-          {/* Sign In */}
+        <div className="flex items-center gap-1.5">
+          {/* Theme Toggle — visible on mobile */}
+          <Button
+            onClick={toggleTheme}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+
           {renderAuthButton(true)}
 
-          {/* Hamburger — far right */}
           <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
-              <Menu className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <Menu className="h-4 w-4" />
             </Button>
           </HamburgerMenu>
         </div>
       </header>
 
-      {/* Mobile Bottom Nav — Twitter-style with FAB slot */}
+      {/* Mobile Bottom Nav — Twitter-style */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border glass md:hidden">
-        <div className="flex h-16 items-stretch">
-          {/* Nav item 1: Markets */}
-          <Link
-            href="/markets"
-            className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors",
-              pathname === "/markets" || pathname?.startsWith("/markets/")
-                ? "text-ice-500 dark:text-ice-300"
-                : "text-muted-foreground"
-            )}
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            Markets
-          </Link>
-
-          {/* Nav item 2: Positions */}
-          <Link
-            href="/positions"
-            className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors",
-              pathname === "/positions"
-                ? "text-ice-500 dark:text-ice-300"
-                : "text-muted-foreground"
-            )}
-          >
-            <Briefcase className="h-5 w-5" />
-            Positions
-          </Link>
-
-          {/* Center FAB slot — Twitter-style elevated button */}
-          <div className="flex flex-1 items-center justify-center">
-            <Link
-              href="/create-market"
-              className={cn(
-                "flex h-12 w-12 -mt-5 items-center justify-center rounded-full",
-                "bg-ice-300 text-slate-900 shadow-lg shadow-ice-300/25",
-                "transition-all duration-200 active:scale-90",
-                "focus:outline-none"
-              )}
-            >
-              <Plus className="h-6 w-6 stroke-[2.5]" />
-            </Link>
-          </div>
-
-          {/* Nav item 3: Portfolio */}
-          <Link
-            href="/portfolio"
-            className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors",
-              pathname === "/portfolio"
-                ? "text-ice-500 dark:text-ice-300"
-                : "text-muted-foreground"
-            )}
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            Portfolio
-          </Link>
-
-          {/* Nav item 4: empty spacer for symmetry */}
-          <div className="flex flex-1" />
+        <div className="grid grid-cols-3 h-14">
+          {MOBILE_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
+                  isActive ? "text-ice-500 dark:text-ice-300" : "text-muted-foreground"
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       </nav>
+
+      {/* Mobile FAB — Twitter-style bottom-right */}
+      <Link
+        href="/create-market"
+        className={cn(
+          "fixed z-50 md:hidden",
+          "right-4 bottom-[4.5rem]",
+          "flex h-14 w-14 items-center justify-center rounded-full",
+          "bg-ice-300 text-slate-900 shadow-lg shadow-ice-300/25",
+          "transition-all duration-200 active:scale-90",
+          "focus:outline-none"
+        )}
+        title="Create Market"
+      >
+        <Plus className="h-6 w-6 stroke-[2.5]" />
+      </Link>
     </>
   );
 }

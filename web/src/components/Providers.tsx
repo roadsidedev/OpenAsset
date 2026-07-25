@@ -14,8 +14,6 @@ const queryClient = new QueryClient();
 export function Providers({ children }: { children: React.ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
-  // If no App ID is provided (e.g. during build), render children without Privy/Wagmi
-  // This prevents build failures due to invalid App ID validation
   if (!appId || appId === 'test-app-id' || appId.startsWith('clp000')) {
     return (
       <ThemeProvider>
@@ -36,7 +34,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
           appearance: {
             theme: 'dark',
             accentColor: '#A8D8FF',
+            loginModal: {
+              showFirstSocials: true,
+              showPasskeys: false,
+              showOtherWallets: true,
+            },
           },
+          loginMethods: ['wallet', 'email'],
         }}
       >
         <QueryClientProvider client={queryClient}>
