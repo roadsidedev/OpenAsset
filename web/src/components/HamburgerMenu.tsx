@@ -7,12 +7,8 @@ import {
   Mail,
   Info,
   Github,
-  Sun,
-  Moon,
   ExternalLink,
-  X,
 } from "lucide-react";
-import { useTheme } from "@/components/ThemeProvider";
 import {
   Sheet,
   SheetContent,
@@ -36,8 +32,6 @@ const MENU_ITEMS = [
 ];
 
 export function HamburgerMenu({ children, open, onOpenChange }: HamburgerMenuProps) {
-  const { theme, toggleTheme } = useTheme();
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>{children}</SheetTrigger>
@@ -72,20 +66,6 @@ export function HamburgerMenu({ children, open, onOpenChange }: HamburgerMenuPro
                 );
               })}
             </div>
-          </div>
-
-          <div className="border-t border-border px-6 py-4">
-            <button
-              onClick={toggleTheme}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              {theme === "dark" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
-              <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
-            </button>
           </div>
         </div>
       </SheetContent>

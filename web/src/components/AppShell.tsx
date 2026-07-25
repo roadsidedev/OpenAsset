@@ -37,11 +37,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/markets" className="hover:text-foreground transition-colors">
               Markets
             </Link>
-            <Link href="/dashboard" className="hover:text-foreground transition-colors">
-              Dashboard
+            <Link href="/positions" className="hover:text-foreground transition-colors">
+              Positions
             </Link>
-            <Link href="/adapters" className="hover:text-foreground transition-colors">
-              Adapters
+            <Link href="/portfolio" className="hover:text-foreground transition-colors">
+              Portfolio
             </Link>
           </div>
         </div>

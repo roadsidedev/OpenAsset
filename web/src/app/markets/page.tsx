@@ -8,21 +8,28 @@ import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 import { ProtocolStatsDashboard } from "@/components/ProtocolStatsDashboard";
 import { cn } from "@/lib/utils";
 
-const FILTERS = ["All Markets", "Active", "High LTV", "Low APR"] as const;
-type Filter = (typeof FILTERS)[number];
+const CATEGORY_TABS = [
+  "All Markets",
+  "RWA",
+  "Tokenized Equities",
+  "Tokens",
+  "NFT",
+] as const;
+
+type Category = (typeof CATEGORY_TABS)[number];
 
 export default function MarketsPage() {
   const [start, setStart] = useState(0);
-  const [filter, setFilter] = useState<Filter>("All Markets");
+  const [category, setCategory] = useState<Category>("All Markets");
   const [search, setSearch] = useState("");
   const { data, isLoading, error } = useMarkets(start, 50);
 
   const allMarkets = data?.markets || [];
 
   const filteredMarkets = allMarkets.filter((m) => {
-    if (filter === "Active" && !m.active) return false;
-    if (filter === "High LTV" && m.ltvBps < 7000) return false;
-    if (filter === "Low APR" && m.aprBps > 1500) return false;
+    // Category filter — since the API doesn't return category metadata,
+    // we show all markets under "All Markets" and filter client-side
+    // when category tabs map to asset types or adapter patterns.
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -37,7 +44,7 @@ export default function MarketsPage() {
   return (
     <div className="min-h-screen">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
-        {/* Protocol Stats Dashboard */}
+        {/* Protocol Stats Dashboard — top of page */}
         <ProtocolStatsDashboard />
 
         {/* Header + Search */}
@@ -61,20 +68,20 @@ export default function MarketsPage() {
           </div>
         </div>
 
-        {/* Filter Pills */}
+        {/* Category Filter Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-medium scrollbar-hide">
-          {FILTERS.map((f) => (
+          {CATEGORY_TABS.map((tab) => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={tab}
+              onClick={() => setCategory(tab)}
               className={cn(
                 "whitespace-nowrap rounded-xl px-4 py-2 transition-colors",
-                filter === f
+                category === tab
                   ? "bg-primary text-primary-foreground font-bold"
                   : "bg-card border border-border text-muted-foreground hover:border-ice-300/50 hover:text-foreground"
               )}
             >
-              {f}
+              {tab}
             </button>
           ))}
         </div>
@@ -98,7 +105,7 @@ export default function MarketsPage() {
               ))
             : (
                 <div className="col-span-full text-center py-16">
-                  <p className="text-muted-foreground text-sm">No markets found</p>
+                  <p className="text-muted-foreground text-sm">No markets found in this category</p>
                 </div>
               )}
         </div>
