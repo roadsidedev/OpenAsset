@@ -27,9 +27,6 @@ export default function MarketsPage() {
   const allMarkets = data?.markets || [];
 
   const filteredMarkets = allMarkets.filter((m) => {
-    // Category filter — since the API doesn't return category metadata,
-    // we show all markets under "All Markets" and filter client-side
-    // when category tabs map to asset types or adapter patterns.
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -43,32 +40,11 @@ export default function MarketsPage() {
 
   return (
     <div className="min-h-screen">
-      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-6">
         {/* Platform Stats Dashboard */}
         <PlatformStatsDashboard />
 
-        {/* Header + Search */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Explore Markets</h1>
-            <p className="text-sm text-muted-foreground">
-              Permissionless & compliant isolated lending pools for any tokenized asset
-            </p>
-          </div>
-
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search assets, chains, adapters..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-2xl border border-border bg-card pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 focus:border-transparent placeholder:text-muted-foreground"
-            />
-          </div>
-        </div>
-
-        {/* Category Filter Tabs */}
+        {/* Category Tabs + Search */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-medium scrollbar-hide">
           {CATEGORY_TABS.map((tab) => (
             <button
@@ -84,6 +60,21 @@ export default function MarketsPage() {
               {tab}
             </button>
           ))}
+
+          {/* Search — circular on mobile, pill on desktop, aligned right */}
+          <div className="relative ml-auto shrink-0">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={cn(
+                "h-9 border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 focus:border-transparent placeholder:text-muted-foreground",
+                "w-9 rounded-full pl-9 pr-0 md:w-56 md:rounded-2xl md:pl-9 md:pr-3"
+              )}
+            />
+          </div>
         </div>
 
         {/* Error */}
