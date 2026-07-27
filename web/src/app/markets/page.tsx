@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
-import { ProtocolStatsDashboard } from "@/components/ProtocolStatsDashboard";
+import { PlatformStatsDashboard } from "@/components/PlatformStatsDashboard";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_TABS = [
@@ -44,8 +44,8 @@ export default function MarketsPage() {
   return (
     <div className="min-h-screen">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
-        {/* Protocol Stats Dashboard — top of page */}
-        <ProtocolStatsDashboard />
+        {/* Platform Stats Dashboard */}
+        <PlatformStatsDashboard />
 
         {/* Header + Search */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

@@ -22,6 +22,8 @@ import {
   History,
   Download,
   Activity,
+  KeyRound,
+  CheckCircle2,
 } from "lucide-react";
 
 function formatAmount(value: string | undefined, decimals = 18): string {
@@ -40,7 +42,7 @@ function formatAmount(value: string | undefined, decimals = 18): string {
   }
 }
 
-type SubTab = "overview" | "config" | "transactions" | "settings";
+type SubTab = "overview" | "config" | "activity" | "settings";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { authenticated, ready } = usePrivy();
@@ -91,8 +93,30 @@ function AccountContent() {
   const [subTab, setSubTab] = useState<SubTab>("overview");
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const { user } = usePrivy();
+  const [exportPassword, setExportPassword] = useState("");
+  const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
+  const { user, exportWallet, logout: privyLogout } = usePrivy();
   const { address } = useAccount();
+
+  // Detect embedded wallet (Privy-managed) vs external wallet (MetaMask, etc.)
+  const isEmbeddedWallet = user?.wallet?.walletClientType === "privy" || user?.wallet?.connectorType === "embedded";
+
+  const handleLogout = () => {
+    privyLogout();
+  };
+
+  const handleExportWallet = async () => {
+    if (!exportPassword || !exportWallet) return;
+    setExportStatus("exporting");
+    try {
+      await exportWallet(exportPassword);
+      setExportStatus("done");
+      setExportPassword("");
+    } catch (err) {
+      console.error("Wallet export failed:", err);
+      setExportStatus("error");
+    }
+  };
 
   const { data: loansData, isLoading: loansLoading } = useLoans(
     { borrower: address, status: "ACTIVE" },
@@ -112,7 +136,7 @@ function AccountContent() {
   const SUB_TABS: { id: SubTab; label: string; icon: any }[] = [
     { id: "overview", label: "Overview", icon: Activity },
     { id: "config", label: "Config & Rules", icon: Settings },
-    { id: "transactions", label: "Transactions", icon: History },
+    { id: "activity", label: "Activity", icon: History },
     { id: "settings", label: "Settings & Export", icon: Download },
   ];
 
@@ -294,8 +318,8 @@ function AccountContent() {
           </div>
         )}
 
-        {/* Sub-tab: Transactions */}
-        {subTab === "transactions" && (
+        {/* Sub-tab: Activity */}
+        {subTab === "activity" && (
           <div className="p-6 rounded-3xl border border-border bg-card space-y-4">
             <h3 className="text-sm font-bold">On-Chain Activity Log</h3>
             <div className="text-center py-12 text-muted-foreground text-xs">
@@ -312,16 +336,79 @@ function AccountContent() {
               <h3 className="text-sm font-bold">Wallet & Security</h3>
               <p className="text-xs text-muted-foreground">Manage your wallet connection and export settings.</p>
               <div className="space-y-3">
-                <button className="w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-border text-xs font-semibold hover:bg-accent transition-colors text-left">
+                <button
+                  onClick={() => navigator.clipboard.writeText(address || "")}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-border text-xs font-semibold hover:bg-accent transition-colors text-left"
+                >
                   <Copy className="h-4 w-4" />
                   Copy Wallet Address
                 </button>
-                <button className="w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-destructive/30 bg-destructive/5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-destructive/30 bg-destructive/5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left"
+                >
                   <Wallet className="h-4 w-4" />
                   Disconnect Wallet
                 </button>
               </div>
             </div>
+
+            {/* Wallet Export — embedded wallets only */}
+            {isEmbeddedWallet && (
+              <div className="p-6 rounded-3xl border border-border bg-card space-y-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-ice-500" />
+                  <h3 className="text-sm font-bold">Export Wallet</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Export your embedded wallet private key. This is only available for Privy-managed wallets.
+                </p>
+                {exportStatus === "done" ? (
+                  <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Wallet exported successfully
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <input
+                      type="password"
+                      value={exportPassword}
+                      onChange={(e) => {
+                        setExportPassword(e.target.value);
+                        if (exportStatus === "error") setExportStatus("idle");
+                      }}
+                      placeholder="Set export password"
+                      className="w-full rounded-2xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 placeholder:text-muted-foreground"
+                    />
+                    {exportStatus === "error" && (
+                      <p className="text-xs text-destructive">Export failed. Please try again.</p>
+                    )}
+                    <button
+                      onClick={handleExportWallet}
+                      disabled={!exportPassword || exportStatus === "exporting"}
+                      className={cn(
+                        "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-semibold transition-colors",
+                        exportPassword && exportStatus !== "exporting"
+                          ? "bg-ice-300 text-slate-900 hover:bg-ice-400"
+                          : "bg-muted text-muted-foreground cursor-not-allowed"
+                      )}
+                    >
+                      {exportStatus === "exporting" ? (
+                        <>
+                          <Skeleton className="h-3.5 w-3.5 rounded-full bg-slate-400" />
+                          Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" />
+                          Export Private Key
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Briefcase, Plus, Menu, LogOut, Sun, Moon, User } from "lucide-react";
+import { LayoutDashboard, Briefcase, Plus, Menu, Sun, Moon, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
@@ -16,9 +16,6 @@ export function Navbar() {
   const pathname = usePathname();
   const { login, logout: privyLogout, authenticated, ready: privyReady } = usePrivy();
   const {
-    isAuthenticated: isBackendAuthenticated,
-    signLoginMessage,
-    isSigning,
     logout: backendLogout,
     user,
     isLoading: authLoading,
@@ -74,20 +71,6 @@ export function Navbar() {
         </button>
       );
     }
-    if (!isBackendAuthenticated) {
-      return (
-        <Button
-          onClick={() => signLoginMessage()}
-          disabled={isSigning}
-          className={cn(
-            "rounded-2xl bg-ice-300 text-slate-900 hover:bg-ice-400 font-semibold",
-            compact ? "h-8 px-3 text-xs" : "px-4 text-sm"
-          )}
-        >
-          {isSigning ? "Signing..." : "Sign"}
-        </Button>
-      );
-    }
     return (
       <div className="flex items-center gap-2">
         <span className={cn(
@@ -96,14 +79,17 @@ export function Navbar() {
         )}>
           {user?.wallet?.address?.slice(0, compact ? 4 : 6)}...{user?.wallet?.address?.slice(-4)}
         </span>
-        <Button
+        <button
+          type="button"
           onClick={handleLogout}
-          size="icon"
-          variant="ghost"
-          className={cn("text-muted-foreground hover:text-foreground", compact ? "h-7 w-7" : "h-8 w-8")}
+          className={cn(
+            "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl font-medium transition-all",
+            "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+            compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
+          )}
         >
-          <LogOut className={cn(compact ? "h-3 w-3" : "h-4 w-4")} />
-        </Button>
+          Sign Out
+        </button>
       </div>
     );
   };
