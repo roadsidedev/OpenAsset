@@ -47,17 +47,9 @@ function timeUntil(timestampSec: string | number): string {
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { authenticated, ready } = usePrivy();
   const { login } = usePrivy();
-  const isReady = ready !== false;
 
-  if (!isReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Skeleton className="h-10 w-40 bg-muted" />
-      </div>
-    );
-  }
-
-  if (!authenticated) {
+  // Show login if Privy is not ready, not configured, or user is not authenticated.
+  if (ready !== true || !authenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
