@@ -72,25 +72,17 @@ export function Navbar() {
       );
     }
     return (
-      <div className="flex items-center gap-2">
-        <span className={cn(
-          "border border-border bg-muted/50 font-mono text-muted-foreground",
-          compact ? "rounded-full px-2 py-1 text-xs" : "rounded-2xl px-3 py-1.5 text-xs"
-        )}>
-          {user?.wallet?.address?.slice(0, compact ? 4 : 6)}...{user?.wallet?.address?.slice(-4)}
-        </span>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className={cn(
-            "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl font-medium transition-all active-press",
-            "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-            compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
-          )}
-        >
-          Sign Out
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={handleLogout}
+        className={cn(
+          "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl font-medium transition-all active-press",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
+        )}
+      >
+        Sign Out
+      </button>
     );
   };
 
