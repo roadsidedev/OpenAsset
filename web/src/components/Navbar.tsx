@@ -10,6 +10,7 @@ import { useAuthApi } from "@/hooks/useAuthApi";
 import { useTheme } from "@/components/ThemeProvider";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
 import { useState } from "react";
+import Image from "next/image";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -113,12 +114,16 @@ export function Navbar() {
       <header className="sticky top-0 z-40 hidden border-b border-border glass md:block">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-8">
-            <Link href="/markets" className="flex items-center gap-0.5 group focus:outline-none">
-              <span className="text-2xl font-bold tracking-tighter text-ice-500 dark:text-ice-300 group-hover:scale-105 transition-transform">
-                o
-              </span>
-              <span className="text-3xl font-extrabold tracking-tighter text-foreground group-hover:scale-105 transition-transform">
-                A
+            <Link href="/markets" className="flex items-center gap-2 group focus:outline-none">
+              <Image
+                src="/openasset-logo.png"
+                alt="OpenAsset Market"
+                width={36}
+                height={36}
+                className="group-hover:scale-105 transition-transform"
+              />
+              <span className="text-xl font-bold tracking-tight text-foreground group-hover:scale-105 transition-transform">
+                OpenAsset
               </span>
             </Link>
 
@@ -164,9 +169,16 @@ export function Navbar() {
 
       {/* Mobile Top Nav */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border glass px-4 md:hidden">
-        <Link href="/markets" className="flex items-center gap-0.5">
-          <span className="text-xl font-bold tracking-tighter text-ice-500 dark:text-ice-300">o</span>
-          <span className="text-2xl font-extrabold tracking-tighter text-foreground">A</span>
+        <Link href="/markets" className="flex items-center gap-2">
+          <Image
+            src="/openasset-logo.png"
+            alt="OpenAsset Market"
+            width={30}
+            height={30}
+          />
+          <span className="text-lg font-bold tracking-tight text-foreground">
+            OpenAsset
+          </span>
         </Link>
 
         <div className="flex items-center gap-1.5">
