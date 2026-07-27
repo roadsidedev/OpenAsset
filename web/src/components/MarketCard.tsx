@@ -62,7 +62,7 @@ export function MarketCard({ market, className }: MarketCardProps) {
             <Badge
               variant={market.active ? "default" : "secondary"}
               className={cn(
-                "shrink-0 text-[10px] font-semibold rounded-full px-2.5 py-0.5",
+                "shrink-0 text-xs font-semibold rounded-full px-2.5 py-0.5",
                 market.active
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                   : "bg-muted text-muted-foreground"
@@ -75,19 +75,19 @@ export function MarketCard({ market, className }: MarketCardProps) {
           {/* Stats Grid */}
           <div className="grid grid-cols-2 gap-3 rounded-2xl bg-muted/50 p-3 text-xs">
             <div>
-              <span className="text-muted-foreground block text-[10px]">Total Liquidity</span>
+              <span className="text-muted-foreground block text-xs">Total Liquidity</span>
               <span className="font-bold text-foreground">{formatLiquidity(market.liquidity.total)}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Borrow APR</span>
+              <span className="text-muted-foreground block text-xs">Borrow APR</span>
               <span className="font-bold text-ice-600 dark:text-ice-300">{formatApr(market.aprBps)}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Max LTV</span>
+              <span className="text-muted-foreground block text-xs">Max LTV</span>
               <span className="font-bold text-foreground">{formatLtv(market.ltvBps)}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Available</span>
+              <span className="text-muted-foreground block text-xs">Available</span>
               <span className="font-bold text-foreground">{formatLiquidity(market.liquidity.available)}</span>
             </div>
           </div>
@@ -97,7 +97,7 @@ export function MarketCard({ market, className }: MarketCardProps) {
         <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
           <span>Duration: {formatDuration(market.durationSeconds)}</span>
           <span className="font-semibold text-foreground flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-            View Pool <span className="text-[10px]">→</span>
+            View Pool <span className="text-xs">→</span>
           </span>
         </div>
       </div>

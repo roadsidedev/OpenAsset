@@ -9,7 +9,7 @@ import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { MARKET_STATUS } from "@/lib/contractAbis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Clock, Shield, Zap, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Warning, CheckCircle } from "@phosphor-icons/react";
 
 function formatLtv(ltvBps: number) {
   return `${(ltvBps / 100).toFixed(1)}%`;
@@ -74,7 +74,7 @@ export default function MarketDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-dvh">
         <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-6">
           <Skeleton className="h-6 w-32 bg-muted" />
           <Skeleton className="h-40 w-full rounded-3xl bg-muted" />
@@ -93,10 +93,10 @@ export default function MarketDetailPage() {
 
   if (error || !market) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="text-center space-y-4">
-          <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
-          <h2 className="text-xl font-bold text-foreground">Market Not Found</h2>
+          <Warning className="h-12 w-12 text-destructive mx-auto" />
+          <h2 className="text-xl font-bold text-foreground text-balance">Market Not Found</h2>
           <p className="text-muted-foreground text-sm">
             The market you&apos;re looking for doesn&apos;t exist or isn&apos;t available.
           </p>
@@ -112,7 +112,7 @@ export default function MarketDetailPage() {
   const isPaused = statusLabel !== "ACTIVE";
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
         {/* Back Navigation */}
         <Link
@@ -127,7 +127,7 @@ export default function MarketDetailPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-6 rounded-3xl border border-border bg-card">
           <div className="space-y-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-foreground">
+              <h1 className="text-2xl font-bold text-foreground text-balance">
                 Market {market.marketAddress.slice(0, 10)}...
               </h1>
               <span className="text-xs px-3 py-1 rounded-full bg-ice-50 dark:bg-ice-900/30 text-ice-700 dark:text-ice-300 font-semibold">
@@ -135,12 +135,12 @@ export default function MarketDetailPage() {
               </span>
               {isPaused ? (
                 <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
+                  <Warning className="h-3 w-3" />
                   {statusLabel.replace("PAUSED_", "Paused: ")}
                 </span>
               ) : (
                 <span className="text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
+                  <CheckCircle className="h-3 w-3" />
                   Active
                 </span>
               )}
@@ -202,7 +202,7 @@ export default function MarketDetailPage() {
                   <circle cx="600" cy="20" r="4" fill="#A8D8FF" />
                 </svg>
                 {/* Labels */}
-                <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[10px] text-muted-foreground px-2 pb-1">
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-muted-foreground px-2 pb-1">
                   <span>30d ago</span>
                   <span>20d</span>
                   <span>10d</span>
@@ -218,23 +218,23 @@ export default function MarketDetailPage() {
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div className="p-3 rounded-2xl bg-muted/50">
-                  <span className="text-muted-foreground block text-[10px] mb-1">Asset Type</span>
+                  <span className="text-muted-foreground block text-xs mb-1">Asset Type</span>
                   <span className="font-bold text-foreground">
                     {market.assetType === 0 ? "ERC20" : market.assetType === 1 ? "ERC721" : "ERC1155"}
                   </span>
                 </div>
                 <div className="p-3 rounded-2xl bg-muted/50">
-                  <span className="text-muted-foreground block text-[10px] mb-1">Oracle</span>
+                  <span className="text-muted-foreground block text-xs mb-1">Oracle</span>
                   <span className="font-bold text-foreground">
                     {market.oracleType === 0 ? "TWAP" : market.oracleType === 1 ? "Chainlink" : "Manual"}
                   </span>
                 </div>
                 <div className="p-3 rounded-2xl bg-muted/50">
-                  <span className="text-muted-foreground block text-[10px] mb-1">Duration</span>
+                  <span className="text-muted-foreground block text-xs mb-1">Duration</span>
                   <span className="font-bold text-foreground">{formatDuration(market.durationSeconds)}</span>
                 </div>
                 <div className="p-3 rounded-2xl bg-muted/50">
-                  <span className="text-muted-foreground block text-[10px] mb-1">Status</span>
+                  <span className="text-muted-foreground block text-xs mb-1">Status</span>
                   <span className={cn(
                     "font-bold",
                     isPaused ? "text-amber-500" : "text-emerald-500"
@@ -253,7 +253,7 @@ export default function MarketDetailPage() {
 
               {isPaused && (
                 <div className="flex items-start gap-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                  <Warning className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                   <span className="text-amber-700 dark:text-amber-400">
                     This market is currently paused ({statusLabel}). Borrowing is temporarily unavailable.
                   </span>
@@ -275,19 +275,19 @@ export default function MarketDetailPage() {
               {/* Stats */}
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-muted/50 text-xs">
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">LTV</span>
+                  <span className="text-muted-foreground block text-xs">LTV</span>
                   <span className="font-bold text-foreground">{formatLtv(market.ltvBps)}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">APR</span>
+                  <span className="text-muted-foreground block text-xs">APR</span>
                   <span className="font-bold text-ice-600 dark:text-ice-300">{formatApr(market.aprBps)}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">Duration</span>
+                  <span className="text-muted-foreground block text-xs">Duration</span>
                   <span className="font-bold text-foreground">{formatDuration(market.durationSeconds)}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">Available</span>
+                  <span className="text-muted-foreground block text-xs">Available</span>
                   <span className="font-bold text-foreground">
                     {formatLiquidity(market.liquidity.available)} USDC
                   </span>
@@ -356,7 +356,7 @@ export default function MarketDetailPage() {
                 onClick={handleRequestLoan}
                 disabled={isTxLoading || !collateralAmount || !userAddress || isPaused}
                 className={cn(
-                  "w-full py-3.5 rounded-2xl font-bold text-sm transition-all",
+                  "w-full py-3.5 rounded-2xl font-bold text-sm transition-premium active-press",
                   isTxLoading || !collateralAmount || !userAddress || isPaused
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-ice-300 dark:bg-ice-400 text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 shadow-glow"

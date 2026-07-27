@@ -12,10 +12,10 @@ import { cn } from "@/lib/utils";
 import {
   Wallet,
   Briefcase,
-  Layers,
+  StackSimple,
   Clock,
-  ExternalLink,
-} from "lucide-react";
+  ArrowSquareOut,
+} from "@phosphor-icons/react";
 
 function formatAmount(value: string | undefined, decimals = 18): string {
   if (!value) return "0.00";
@@ -51,17 +51,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Show login if Privy is not ready, not configured, or user is not authenticated.
   if (ready !== true || !authenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="text-center space-y-4">
           <Wallet className="h-12 w-12 text-muted-foreground mx-auto" />
-          <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
+            <h1 className="text-2xl font-bold text-foreground text-balance">Portfolio</h1>
           <p className="text-muted-foreground text-sm max-w-md">
             Connect your wallet to view your active loans and markets you&apos;ve created.
           </p>
           <button
             type="button"
             onClick={async () => { try { await login(); } catch (e) { console.error(e); } }}
-            className="rounded-2xl bg-ice-300 text-slate-900 px-6 py-2.5 text-sm font-semibold hover:bg-ice-400 transition-colors"
+            className="rounded-2xl bg-ice-300 text-slate-900 px-6 py-2.5 text-sm font-semibold hover:bg-ice-400 transition-premium active-press"
           >
             Connect Wallet
           </button>
@@ -101,12 +101,12 @@ function PortfolioContent() {
     : [];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
+          <h1 className="text-2xl font-bold text-foreground text-balance">Portfolio</h1>
             <p className="text-sm text-muted-foreground">
               Track active debt positions and markets you have launched
             </p>
@@ -145,7 +145,7 @@ function PortfolioContent() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div className="p-5 rounded-2xl border border-border bg-card">
                 <div className="flex items-center gap-2 mb-2">
-                  <Layers className="h-4 w-4 text-ice-500" />
+                  <StackSimple className="h-4 w-4 text-ice-500" />
                   <span className="text-xs text-muted-foreground">Active Loans</span>
                 </div>
                 <span className="text-xl font-bold text-foreground">
@@ -236,7 +236,7 @@ function PortfolioContent() {
                           href={`/markets/${loan.marketAddress}`}
                           className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
                         >
-                          Manage <ExternalLink className="h-3.5 w-3.5" />
+                          Manage <ArrowSquareOut className="h-3.5 w-3.5" />
                         </Link>
                       </div>
                     ))}
@@ -293,7 +293,7 @@ function PortfolioContent() {
                   </div>
                 ) : myMarkets.length === 0 ? (
                   <div className="py-12 text-center">
-                    <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <StackSimple className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground text-sm mb-2">You don&apos;t own any markets yet.</p>
                     <Link href="/create-market" className="text-sm text-ice-500 hover:text-ice-600 font-medium">
                       Create your first market
@@ -329,7 +329,7 @@ function PortfolioContent() {
                           href={`/markets/${market.marketAddress}`}
                           className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
                         >
-                          View <ExternalLink className="h-3.5 w-3.5" />
+                          View <ArrowSquareOut className="h-3.5 w-3.5" />
                         </Link>
                       </div>
                     ))}

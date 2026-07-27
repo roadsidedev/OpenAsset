@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
@@ -39,7 +39,7 @@ export default function MarketsPage() {
   });
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-6">
         {/* Platform Stats Dashboard */}
         <PlatformStatsDashboard />
@@ -63,7 +63,7 @@ export default function MarketsPage() {
 
           {/* Search — circular on mobile, pill on desktop, aligned right */}
           <div className="relative ml-auto shrink-0">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <MagnifyingGlass className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search..."

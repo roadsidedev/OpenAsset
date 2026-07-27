@@ -14,14 +14,14 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-black text-white">
-      <h2 className="text-2xl font-bold">Something went wrong!</h2>
-      <p className="mt-2 text-zinc-400">
-        We apologize for the inconvenience. Please try again.
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background text-foreground">
+      <h2 className="text-2xl font-bold">Connection failed</h2>
+      <p className="mt-2 text-muted-foreground">
+        Please try again. If the problem persists, check your network connection.
       </p>
       <button
         onClick={() => reset()}
-        className="mt-6 rounded-full bg-red-600 px-6 py-2 font-semibold transition hover:bg-red-500"
+        className="mt-6 rounded-full bg-ice-300 dark:bg-ice-400 px-6 py-2 font-semibold text-slate-900 transition-premium hover:bg-ice-400 dark:hover:bg-ice-300 active-press"
       >
         Try again
       </button>

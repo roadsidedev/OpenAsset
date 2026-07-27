@@ -20,8 +20,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-2xl focus:bg-ice-300 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-slate-900"
+      >
+        Skip to content
+      </a>
       <Navbar />
-      <div className="pb-16 md:pb-0">{children}</div>
+      <div className="pb-16 md:pb-0">
+        <main id="main-content">{children}</main>
+      </div>
       <CreateMarketFAB />
 
       <footer className="hidden border-t border-border bg-background/50 py-8 px-4 md:block">
@@ -32,10 +40,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>— Market Infrastructure</span>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="/docs" className="hover:text-foreground transition-colors">Docs</Link>
-            <Link href="/markets" className="hover:text-foreground transition-colors">Markets</Link>
-            <Link href="/portfolio" className="hover:text-foreground transition-colors">Portfolio</Link>
-            <Link href="/account" className="hover:text-foreground transition-colors">Account</Link>
+            <Link href="/docs" className="hover:text-foreground transition-premium">Docs</Link>
+            <Link href="/markets" className="hover:text-foreground transition-premium">Markets</Link>
+            <Link href="/portfolio" className="hover:text-foreground transition-premium">Portfolio</Link>
+            <Link href="/account" className="hover:text-foreground transition-premium">Account</Link>
+          </div>
+          <div className="flex items-center gap-6">
+            <Link href="/privacy" className="hover:text-foreground transition-premium">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-foreground transition-premium">Terms of Service</Link>
           </div>
         </div>
       </footer>

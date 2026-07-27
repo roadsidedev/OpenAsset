@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AdapterBadge } from "@/components/adapters/AdapterBadge";
 import { ADAPTER_TYPES } from "@/lib/contractAbis";
 import { cn } from "@/lib/utils";
-import { Blocks, ExternalLink } from "lucide-react";
+import { PuzzlePiece } from "@phosphor-icons/react";
 
 interface AdapterInfo {
   adapterAddress: string;
@@ -39,13 +39,13 @@ export default function AdaptersPage() {
       : MOCK_ADAPTERS.filter((a) => ADAPTER_TYPES[a.adapterType] === filter);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-8 space-y-8">
         {/* Header */}
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <Blocks className="h-6 w-6 text-ice-500" />
-            <h1 className="text-2xl font-bold text-foreground">Adapter Registry</h1>
+            <PuzzlePiece className="h-6 w-6 text-ice-500" />
+            <h1 className="text-2xl font-bold text-foreground text-balance">Adapter Registry</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             Browse all registered adapters. Verified adapters have been audited and reviewed.
@@ -99,7 +99,7 @@ export default function AdaptersPage() {
 
         {filtered.length === 0 && (
           <div className="text-center py-16">
-            <Blocks className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <PuzzlePiece className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground text-sm">No adapters found for this filter.</p>
           </div>
         )}

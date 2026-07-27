@@ -2,7 +2,7 @@
 
 import { useProtocolStats, formatTvl } from "@/hooks/useProtocolStats";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, BarChart3, Layers, Activity } from "lucide-react";
+import { TrendUp, ChartBar, StackSimple, Pulse } from "@phosphor-icons/react";
 
 export function ProtocolStatsDashboard() {
   const { data, isLoading } = useProtocolStats();
@@ -26,23 +26,23 @@ export function ProtocolStatsDashboard() {
     {
       label: "Total Value Locked",
       value: formatTvl(data.tvl),
-      icon: TrendingUp,
+      icon: TrendUp,
       accent: true,
     },
     {
       label: "Active Markets",
       value: data.activeMarkets.toString(),
-      icon: Layers,
+      icon: StackSimple,
     },
     {
       label: "Markets Created",
       value: data.totalMarkets.toString(),
-      icon: BarChart3,
+      icon: ChartBar,
     },
     {
       label: "Protocol Status",
       value: "Live",
-      icon: Activity,
+      icon: Pulse,
       live: true,
     },
   ];
@@ -62,7 +62,7 @@ export function ProtocolStatsDashboard() {
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`text-xl font-bold ${
+                className={`text-xl font-bold tabular-nums ${
                   stat.accent
                     ? "text-ice-600 dark:text-ice-300"
                     : stat.live

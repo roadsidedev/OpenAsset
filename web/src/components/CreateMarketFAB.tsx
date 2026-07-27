@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 export function CreateMarketFAB() {
@@ -19,7 +19,7 @@ export function CreateMarketFAB() {
         "bottom-6 right-6",
         "h-14 w-14 items-center justify-center rounded-full",
         "bg-ice-300 text-slate-900 shadow-glow",
-        "transition-all duration-200 hover:scale-105 hover:bg-ice-400 active:scale-95",
+        "transition-all duration-200 hover:scale-105 hover:bg-ice-400 active-press",
         "focus:outline-none focus:ring-2 focus:ring-ice-400 focus:ring-offset-2"
       )}
       title="Create Market"

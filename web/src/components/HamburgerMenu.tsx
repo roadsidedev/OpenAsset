@@ -3,12 +3,12 @@
 import Link from "next/link";
 import {
   BookOpen,
-  Blocks,
-  Mail,
+  PuzzlePiece,
+  Envelope,
   Info,
-  Github,
-  ExternalLink,
-} from "lucide-react";
+  GithubLogo,
+  ArrowSquareOut,
+} from "@phosphor-icons/react";
 import {
   Sheet,
   SheetContent,
@@ -25,10 +25,10 @@ interface HamburgerMenuProps {
 
 const MENU_ITEMS = [
   { label: "Docs", href: "/docs", icon: BookOpen },
-  { label: "Adapter Registry", href: "/adapters", icon: Blocks },
+  { label: "Adapter Registry", href: "/adapters", icon: PuzzlePiece },
   { label: "About", href: "/about", icon: Info },
-  { label: "Contact", href: "mailto:team@openasset.io", icon: Mail, external: true },
-  { label: "GitHub", href: "https://github.com/openasset-market", icon: Github, external: true },
+  { label: "Contact", href: "mailto:team@openasset.io", icon: Envelope, external: true },
+  { label: "GitHub", href: "https://github.com/openasset-market", icon: GithubLogo, external: true },
 ];
 
 export function HamburgerMenu({ children, open, onOpenChange }: HamburgerMenuProps) {
@@ -60,7 +60,7 @@ export function HamburgerMenu({ children, open, onOpenChange }: HamburgerMenuPro
                     <Icon className="h-4 w-4 shrink-0" />
                     <span className="flex-1">{item.label}</span>
                     {item.external && (
-                      <ExternalLink className="h-3.5 w-3.5 opacity-40" />
+                      <ArrowSquareOut className="h-3.5 w-3.5 opacity-40" />
                     )}
                   </Link>
                 );

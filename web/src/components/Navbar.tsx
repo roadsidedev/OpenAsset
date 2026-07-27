@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Briefcase, Plus, Menu, Sun, Moon, User } from "lucide-react";
+import { SquaresFour, Briefcase, Plus, List, Sun, Moon, User } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
@@ -33,13 +33,13 @@ export function Navbar() {
   };
 
   const NAV_ITEMS = [
-    { label: "Markets", href: "/markets", icon: LayoutDashboard },
+    { label: "Markets", href: "/markets", icon: SquaresFour },
     { label: "Portfolio", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
 
   const MOBILE_NAV_ITEMS = [
-    { label: "Markets", href: "/markets", icon: LayoutDashboard },
+    { label: "Markets", href: "/markets", icon: SquaresFour },
     { label: "Portfolio", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
@@ -62,7 +62,7 @@ export function Navbar() {
           type="button"
           onClick={handleLogin}
           className={cn(
-            "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl font-medium transition-all",
+            "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl font-medium transition-all active-press",
             "bg-secondary text-secondary-foreground hover:bg-secondary/80",
             compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
           )}
@@ -75,7 +75,7 @@ export function Navbar() {
       <div className="flex items-center gap-2">
         <span className={cn(
           "border border-border bg-muted/50 font-mono text-muted-foreground",
-          compact ? "rounded-full px-2 py-1 text-[10px]" : "rounded-2xl px-3 py-1.5 text-xs"
+          compact ? "rounded-full px-2 py-1 text-xs" : "rounded-2xl px-3 py-1.5 text-xs"
         )}>
           {user?.wallet?.address?.slice(0, compact ? 4 : 6)}...{user?.wallet?.address?.slice(-4)}
         </span>
@@ -83,7 +83,7 @@ export function Navbar() {
           type="button"
           onClick={handleLogout}
           className={cn(
-            "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl font-medium transition-all",
+            "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl font-medium transition-all active-press",
             "bg-secondary text-secondary-foreground hover:bg-secondary/80",
             compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
           )}
@@ -146,7 +146,7 @@ export function Navbar() {
 
             <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
               <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
-                <Menu className="h-4.5 w-4.5" />
+                <List className={cn("h-4.5 w-4.5 transition-premium", menuOpen && "rotate-90")} />
               </Button>
             </HamburgerMenu>
           </div>
@@ -182,7 +182,7 @@ export function Navbar() {
 
           <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-              <Menu className="h-4 w-4" />
+              <List className={cn("h-4 w-4 transition-premium", menuOpen && "rotate-90")} />
             </Button>
           </HamburgerMenu>
         </div>
@@ -199,7 +199,7 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
+                  "flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
                   isActive ? "text-ice-500 dark:text-ice-300" : "text-muted-foreground"
                 )}
               >
@@ -219,7 +219,7 @@ export function Navbar() {
           "right-4 bottom-[4.5rem]",
           "flex h-14 w-14 items-center justify-center rounded-full",
           "bg-ice-300 text-slate-900 shadow-lg shadow-ice-300/25",
-          "transition-all duration-200 active:scale-90",
+          "transition-all duration-200 active-press",
           "focus:outline-none"
         )}
         title="Create Market"

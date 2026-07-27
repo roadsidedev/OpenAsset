@@ -14,17 +14,17 @@ import {
   ArrowUpRight,
   Copy,
   Wallet,
-  TrendingUp,
-  Layers,
+  TrendUp,
+  StackSimple,
   Shield,
   Clock,
-  Settings,
-  History,
+  GearSix,
+  ClockCounterClockwise,
   Download,
-  Activity,
-  KeyRound,
-  CheckCircle2,
-} from "lucide-react";
+  Pulse,
+  Key,
+  CheckCircle,
+} from "@phosphor-icons/react";
 
 function formatAmount(value: string | undefined, decimals = 18): string {
   if (!value) return "0.00";
@@ -52,10 +52,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // This covers: Privy loading, Privy missing, and genuinely unauthenticated.
   if (ready !== true || !authenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="text-center space-y-4">
           <Wallet className="h-12 w-12 text-muted-foreground mx-auto" />
-          <h1 className="text-2xl font-bold text-foreground">Account Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground text-balance">Account Dashboard</h1>
           <p className="text-muted-foreground text-sm max-w-md">
             Connect your wallet to manage your account, deposits, withdrawals, and settings.
           </p>
@@ -127,14 +127,14 @@ function AccountContent() {
   const totalLiquidity = myMarkets.reduce((s: bigint, m: any) => s + BigInt(m.liquidity?.available || 0), BigInt(0));
 
   const SUB_TABS: { id: SubTab; label: string; icon: any }[] = [
-    { id: "overview", label: "Overview", icon: Activity },
-    { id: "config", label: "Config & Rules", icon: Settings },
-    { id: "activity", label: "Activity", icon: History },
+    { id: "overview", label: "Overview", icon: Pulse },
+    { id: "config", label: "Config & Rules", icon: GearSix },
+    { id: "activity", label: "Activity", icon: ClockCounterClockwise },
     { id: "settings", label: "Settings & Export", icon: Download },
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
         {/* Account Header */}
         <div className="p-6 md:p-8 rounded-3xl border border-border bg-card flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-soft">
@@ -144,10 +144,10 @@ function AccountContent() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold text-foreground">
+                <h1 className="text-xl font-bold text-foreground text-balance">
                   {user?.email?.address || "Account"}
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold">
                   Connected
                 </span>
               </div>
@@ -166,7 +166,7 @@ function AccountContent() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setDepositOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:bg-slate-800 dark:hover:bg-white transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:bg-slate-800 dark:hover:bg-white transition-premium active-press"
             >
               <ArrowDownLeft className="h-4 w-4" /> Deposit Funds
             </button>
@@ -183,7 +183,7 @@ function AccountContent() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <div className="p-5 rounded-2xl border border-border bg-card">
             <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-ice-500" />
+              <TrendUp className="h-4 w-4 text-ice-500" />
               <span className="text-xs text-muted-foreground">Total Asset Value</span>
             </div>
             <span className="text-xl font-bold text-foreground">
@@ -205,7 +205,7 @@ function AccountContent() {
           </div>
           <div className="p-5 rounded-2xl border border-border bg-card">
             <div className="flex items-center gap-2 mb-2">
-              <Layers className="h-4 w-4 text-ice-500" />
+              <StackSimple className="h-4 w-4 text-ice-500" />
               <span className="text-xs text-muted-foreground">Net Yield APY</span>
             </div>
             <span className="text-xl font-bold text-ice-600 dark:text-ice-300">
@@ -302,7 +302,7 @@ function AccountContent() {
                 <div key={label} className="flex items-center justify-between p-3.5 rounded-2xl bg-muted/50">
                   <div>
                     <div className="font-bold text-foreground">{label}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{desc}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
                   </div>
                   <input type="checkbox" defaultChecked={checked as boolean} className="w-4 h-4 accent-ice-500 rounded" />
                 </div>
@@ -316,7 +316,7 @@ function AccountContent() {
           <div className="p-6 rounded-3xl border border-border bg-card space-y-4">
             <h3 className="text-sm font-bold">On-Chain Activity Log</h3>
             <div className="text-center py-12 text-muted-foreground text-xs">
-              <History className="h-12 w-12 mx-auto mb-4 opacity-40" />
+              <ClockCounterClockwise className="h-12 w-12 mx-auto mb-4 opacity-40" />
               <p>Transaction history will appear here once you have activity.</p>
             </div>
           </div>
@@ -350,7 +350,7 @@ function AccountContent() {
             {isEmbeddedWallet && (
               <div className="p-6 rounded-3xl border border-border bg-card space-y-4">
                 <div className="flex items-center gap-2">
-                  <KeyRound className="h-4 w-4 text-ice-500" />
+                  <Key className="h-4 w-4 text-ice-500" />
                   <h3 className="text-sm font-bold">Export Wallet</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -358,7 +358,7 @@ function AccountContent() {
                 </p>
                 {exportStatus === "done" ? (
                   <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                    <CheckCircle2 className="h-4 w-4" />
+                    <CheckCircle className="h-4 w-4" />
                     Wallet exported successfully
                   </div>
                 ) : (

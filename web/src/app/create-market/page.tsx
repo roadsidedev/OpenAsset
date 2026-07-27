@@ -8,7 +8,7 @@ import { parseUnits } from "viem";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { cn } from "@/lib/utils";
-import { Rocket, ArrowLeft, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning } from "@phosphor-icons/react";
 
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_MARKET_FACTORY_V2_ADDRESS || "";
 
@@ -97,13 +97,13 @@ export default function CreateMarketPage() {
   const progress = (step / 8) * 100;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <main className="mx-auto max-w-2xl px-4 py-8 md:px-8 space-y-8">
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <Rocket className="h-6 w-6 text-ice-500" />
-            <h1 className="text-2xl font-bold text-foreground">Launch a Market</h1>
+            <h1 className="text-2xl font-bold text-foreground text-balance">Launch a Market</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             Configure flat parameters and deploy an isolated lending market
@@ -125,7 +125,7 @@ export default function CreateMarketPage() {
                     : "bg-muted text-muted-foreground"
                 )}
               >
-                {s < step ? <CheckCircle2 className="h-4 w-4" /> : s}
+                    {s < step ? <CheckCircle className="h-4 w-4" /> : s}
               </div>
             ))}
           </div>
@@ -211,7 +211,7 @@ export default function CreateMarketPage() {
               </div>
               {formData.enableCompliance && (
                 <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <Warning className="h-4 w-4 mt-0.5 shrink-0" />
                   No compliance adapter deployed yet. Disable compliance or deploy one first.
                 </div>
               )}
@@ -375,7 +375,7 @@ export default function CreateMarketPage() {
         {/* Error */}
         {(error || hookError) && (
           <div className="flex items-start gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <Warning className="h-4 w-4 mt-0.5 shrink-0" />
             {error || hookError?.message}
           </div>
         )}
@@ -392,7 +392,7 @@ export default function CreateMarketPage() {
           {step > 1 ? (
             <button
               onClick={handleBack}
-              className="flex items-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+              className="flex items-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-premium active-press"
             >
               <ArrowLeft className="h-4 w-4" />
               Back
@@ -403,7 +403,7 @@ export default function CreateMarketPage() {
           {step < 8 ? (
             <button
               onClick={handleNext}
-              className="flex items-center gap-2 rounded-2xl bg-ice-300 dark:bg-ice-400 px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors shadow-glow"
+              className="flex items-center gap-2 rounded-2xl bg-ice-300 dark:bg-ice-400 px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-premium active-press shadow-glow"
             >
               Continue
               <ArrowRight className="h-4 w-4" />
@@ -416,7 +416,7 @@ export default function CreateMarketPage() {
                 "flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold transition-all",
                 isDeploying || !FACTORY_ADDRESS
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
-                  : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-glow"
+                  : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-glow active-press"
               )}
             >
               <Rocket className="h-4 w-4" />
