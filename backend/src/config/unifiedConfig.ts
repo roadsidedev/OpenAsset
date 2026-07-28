@@ -16,15 +16,16 @@ const envSchema = z.object({
   
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   
-  // Contract Addresses (chainId:address format for multi-chain)
-  MARKET_FACTORY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  LOAN_IMPLEMENTATION_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  NFT_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  CHAINLINK_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  ORACLE_ROUTER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  UNISWAP_V3_TWAP_WRAPPER_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  TREASURY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
-  ADAPTER_REGISTRY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).or(z.literal('')).default(''),
+  // Contract Addresses (chainId:address format for multi-chain, e.g. "84532:0x...;11155111:0x...")
+  MARKET_FACTORY_ADDRESS: z.string().default(''),
+  LOAN_IMPLEMENTATION_ADDRESS: z.string().default(''),
+  NFT_ORACLE_ADDRESS: z.string().default(''),
+  CHAINLINK_ORACLE_ADDRESS: z.string().default(''),
+  ORACLE_ROUTER_ADDRESS: z.string().default(''),
+  UNISWAP_V3_TWAP_WRAPPER_ADDRESS: z.string().default(''),
+  TREASURY_ADDRESS: z.string().default(''),
+  ADAPTER_REGISTRY_ADDRESS: z.string().default(''),
+  MARKET_DEPLOYER_ADDRESS: z.string().default(''),
   
   // Alert Services
   SENDGRID_API_KEY: z.string().optional(),
@@ -124,6 +125,7 @@ export const config = {
     chainlinkOracle: parseContractAddresses(env.CHAINLINK_ORACLE_ADDRESS),
     oracleRouter: parseContractAddresses(env.ORACLE_ROUTER_ADDRESS),
     uniswapV3TWAPWrapper: parseContractAddresses(env.UNISWAP_V3_TWAP_WRAPPER_ADDRESS),
+    marketDeployer: parseContractAddresses(env.MARKET_DEPLOYER_ADDRESS),
     treasury: parseContractAddresses(env.TREASURY_ADDRESS),
     adapterRegistry: parseContractAddresses(env.ADAPTER_REGISTRY_ADDRESS),
   },
