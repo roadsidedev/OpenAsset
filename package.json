@@ -1,0 +1,12 @@
+{
+  "name": "openasset",
+  "private": true,
+  "scripts": {
+    "build": "cd backend && npm install && npm run build",
+    "start": "cd backend && npm run start",
+    "dev": "cd backend && npm run dev"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  }
+}
