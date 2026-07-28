@@ -4,7 +4,40 @@
  */
 
 export const MARKET_FACTORY_ABI = [
-  'function createMarket(tuple(address lpAddress, address collateralAsset, address assetAdapter, address oracleAdapter, address complianceAdapter, address liquidationAdapter, address positionAdapter, address lendingAsset, uint256 ltvBasisPoints, uint256 aprBasisPoints, uint256 durationSeconds, uint256 gracePeriodHours, bool enableHealthFactor, uint256 healthFactorThreshold, bool enableCircuitBreaker, uint256 pauseThresholdBps, uint256 lookbackPeriodSeconds, uint256 resumeThresholdBps, uint256 cooldownSeconds) config, uint256 initialLiquidity) external returns (address)',
+  {
+    name: 'createMarket',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'config',
+        type: 'tuple',
+        components: [
+          { name: 'lpAddress', type: 'address' },
+          { name: 'collateralAsset', type: 'address' },
+          { name: 'assetAdapter', type: 'address' },
+          { name: 'oracleAdapter', type: 'address' },
+          { name: 'complianceAdapter', type: 'address' },
+          { name: 'liquidationAdapter', type: 'address' },
+          { name: 'positionAdapter', type: 'address' },
+          { name: 'lendingAsset', type: 'address' },
+          { name: 'ltvBasisPoints', type: 'uint256' },
+          { name: 'aprBasisPoints', type: 'uint256' },
+          { name: 'durationSeconds', type: 'uint256' },
+          { name: 'gracePeriodHours', type: 'uint256' },
+          { name: 'enableHealthFactor', type: 'bool' },
+          { name: 'healthFactorThreshold', type: 'uint256' },
+          { name: 'enableCircuitBreaker', type: 'bool' },
+          { name: 'pauseThresholdBps', type: 'uint256' },
+          { name: 'lookbackPeriodSeconds', type: 'uint256' },
+          { name: 'resumeThresholdBps', type: 'uint256' },
+          { name: 'cooldownSeconds', type: 'uint256' },
+        ],
+      },
+      { name: 'initialLiquidity', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
   'function getMarketCount() external view returns (uint256)',
   'function getAllMarkets() external view returns (address[])',
   'function isMarket(address) external view returns (bool)',
@@ -37,8 +70,29 @@ export const LENDING_MARKET_ABI = [
 ] as const;
 
 export const ADAPTER_REGISTRY_ABI = [
-  'function getAdapterInfo(address adapter) external view returns (tuple(address adapterAddress, uint8 adapterType, address registeredBy, bool verified, bool deprecated, string auditReference, uint256 registeredAt, uint256 totalValueSecured))',
-  'function isSelectable(address adapter) external view returns (bool)',
+  {
+    name: 'getAdapterInfo',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'adapter', type: 'address' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'adapterAddress', type: 'address' },
+          { name: 'adapterType', type: 'uint8' },
+          { name: 'registeredBy', type: 'address' },
+          { name: 'verified', type: 'bool' },
+          { name: 'deprecated', type: 'bool' },
+          { name: 'auditReference', type: 'string' },
+          { name: 'registeredAt', type: 'uint256' },
+          { name: 'totalValueSecured', type: 'uint256' },
+        ],
+      },
+    ],
+  },
+  'function isSelectable(address) external view returns (bool)',
   'function getAllAdapters() external view returns (address[])',
   'function getAdaptersByType(uint8 adapterType) external view returns (address[])',
   'function getTotalAdapterCount() external view returns (uint256)',
@@ -110,3 +164,7 @@ export const MARKET_STATUS: Record<number, string> = {
   2: 'PAUSED_STALE_ORACLE',
   3: 'PAUSED_MANUAL',
 };
+
+// Pre-typed ABIs for use with viem readContract/writeContract (no parseAbi needed)
+export const MARKET_FACTORY_ABI_TYPED = MARKET_FACTORY_ABI as any;
+export const ADAPTER_REGISTRY_ABI_TYPED = ADAPTER_REGISTRY_ABI as any;

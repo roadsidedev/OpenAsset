@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAccount, usePublicClient } from "wagmi";
 import { type Address, parseAbi } from "viem";
 import { AdapterBadge } from "@/components/adapters/AdapterBadge";
-import { ADAPTER_REGISTRY_ABI, ADAPTER_TYPES } from "@/lib/contractAbis";
+import { ADAPTER_REGISTRY_ABI_TYPED, ADAPTER_TYPES } from "@/lib/contractAbis";
 import { getContract } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 import { PuzzlePiece } from "@phosphor-icons/react";
@@ -41,7 +41,7 @@ export default function AdaptersPage() {
       try {
         const addresses = await publicClient.readContract({
           address: registryAddress as Address,
-          abi: parseAbi(ADAPTER_REGISTRY_ABI),
+          abi: ADAPTER_REGISTRY_ABI_TYPED,
           functionName: "getAllAdapters",
         }) as string[];
 
@@ -49,7 +49,7 @@ export default function AdaptersPage() {
         for (const addr of addresses) {
           const info = await publicClient.readContract({
             address: registryAddress as Address,
-            abi: parseAbi(ADAPTER_REGISTRY_ABI),
+            abi: ADAPTER_REGISTRY_ABI_TYPED,
             functionName: "getAdapterInfo",
             args: [addr as Address],
           }) as [string, number, string, boolean, boolean, string, bigint, bigint];

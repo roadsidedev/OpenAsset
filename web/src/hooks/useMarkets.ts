@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient, useAccount } from 'wagmi';
 import { type Address, parseAbi } from 'viem';
-import { MARKET_FACTORY_ABI, LENDING_MARKET_ABI } from '@/lib/contractAbis';
+import { MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI } from '@/lib/contractAbis';
 import { getContract } from '@/lib/contracts';
 
 export interface Market {
@@ -35,7 +35,7 @@ async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClie
 
   const marketAddresses = await publicClient.readContract({
     address: factoryAddress as Address,
-    abi: parseAbi(MARKET_FACTORY_ABI),
+    abi: MARKET_FACTORY_ABI_TYPED,
     functionName: 'getAllMarkets',
   }) as string[];
 

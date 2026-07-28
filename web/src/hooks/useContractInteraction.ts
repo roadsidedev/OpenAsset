@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { usePublicClient, useWalletClient } from 'wagmi';
 import { parseAbi, type Address } from 'viem';
-import { MARKET_FACTORY_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
+import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
 
 export const useContractInteraction = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +59,7 @@ export const useContractInteraction = () => {
 
         const hash = await walletClient.writeContract({
           address: factoryAddress as Address,
-          abi: parseAbi(MARKET_FACTORY_ABI),
+          abi: MARKET_FACTORY_ABI_TYPED,
           functionName: 'createMarket',
           args: [marketConfig, initialLiquidity],
         });
@@ -254,7 +254,7 @@ export const useContractInteraction = () => {
       if (!publicClient) throw new Error('Public client not available');
       return publicClient.readContract({
         address: registryAddress as Address,
-        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'getAdapterInfo',
         args: [adapterAddress as Address],
       });
@@ -267,7 +267,7 @@ export const useContractInteraction = () => {
       if (!publicClient) throw new Error('Public client not available');
       return publicClient.readContract({
         address: registryAddress as Address,
-        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'getAdaptersByType',
         args: [adapterType],
       });
@@ -280,7 +280,7 @@ export const useContractInteraction = () => {
       if (!publicClient) throw new Error('Public client not available');
       return publicClient.readContract({
         address: registryAddress as Address,
-        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'getAllAdapters',
       });
     },
@@ -292,7 +292,7 @@ export const useContractInteraction = () => {
       if (!publicClient) throw new Error('Public client not available');
       return publicClient.readContract({
         address: registryAddress as Address,
-        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'isSelectable',
         args: [adapterAddress as Address],
       });
