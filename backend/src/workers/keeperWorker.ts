@@ -24,7 +24,14 @@ export class KeeperWorker implements Worker {
 
     try {
       const chainId = config.keeper.chainId || 11155111;
-      this.service = new KeeperService(prisma, getProvider(chainId), chainId, {
+      let provider;
+      try {
+        provider = getProvider(chainId);
+      } catch {
+        logger.warn({ chainId }, 'No RPC URL for keeper chain, skipping keeper service');
+        return;
+      }
+      this.service = new KeeperService(prisma, provider, chainId, {
         privateKey: config.keeper.privateKey,
         maxGasPriceGwei: config.keeper.maxGasPriceGwei || 100,
         pollIntervalMs: config.keeper.pollIntervalMs || 30_000,

@@ -62,7 +62,10 @@ export class LifecycleManager extends EventEmitter {
         recordWorkerRun(name, duration, error as Error);
         logger.error({ err: error, worker: name }, 'Worker failed to start');
         healthTracker.updateWorker(name, { isHealthy: false, error: String(error) });
-        throw error;
+        if (name === 'api') {
+          throw error;
+        }
+        logger.warn({ worker: name }, 'Non-critical worker failed, continuing startup');
       }
     }
     
