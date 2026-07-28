@@ -55,8 +55,21 @@ const env = envSchema.parse(process.env);
 function parseRpcUrls(input: string): Map<number, string[]> {
   const result = new Map<number, string[]>();
   
-  if (input.includes(':')) {
-    // Multi-chain format: "1:url1,url2;11155111:url3,url4"
+  // Method 1: Per-chain env vars (most Docker-safe, no special chars)
+  // e.g. RPC_URL_84532=https://..., RPC_URL_11155111=https://...
+  for (const [key, value] of Object.entries(process.env)) {
+    const match = key.match(/^RPC_URL_(\d+)$/);
+    if (match && value) {
+      const chainId = parseInt(match[1], 10);
+      if (!isNaN(chainId)) {
+        result.set(chainId, [value]);
+      }
+    }
+  }
+  if (result.size > 0) return result;
+  
+  // Method 2: Multi-chain format "chainId:url;chainId:url"
+  if (input.includes(':') && input.includes(';')) {
     const parts = input.split(';');
     for (const part of parts) {
       const [chainIdStr, ...urlParts] = part.split(':');
@@ -66,7 +79,7 @@ function parseRpcUrls(input: string): Map<number, string[]> {
       }
     }
   } else {
-    // Single chain - use CHAIN_IDS or default to Sepolia
+    // Method 3: Single URL with CHAIN_IDS
     const chainIds = env.CHAIN_IDS 
       ? env.CHAIN_IDS.split(',').map(s => parseInt(s.trim(), 10))
       : [11155111];
