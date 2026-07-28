@@ -215,7 +215,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             AssetHandler.AssetType(uint8(assetType)),
             collateralAsset,
             borrower,
-            assetType == AssetType.ERC721 ? tokenId : collateralAmount,
+            assetType == AssetType.ERC20 ? collateralAmount : tokenId,
             erc1155Amount
         );
         
@@ -273,8 +273,8 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             uint256 marketPayment = repaymentAmount > platformShare ? repaymentAmount - platformShare : 0;
             uint256 lpShare = marketPayment > principal ? marketPayment - principal : 0;
             
-            // Send to lending market and treasury (cap to what we actually received)
-            loanToken.safeTransfer(lendingMarket, principal + lpShare);
+            // Send to lending market: cap at actual available amount (not artificial principal)
+            loanToken.safeTransfer(lendingMarket, marketPayment);
             loanToken.safeTransfer(protocolTreasury, platformShare > repaymentAmount ? repaymentAmount : platformShare);
             
             // Transfer all collateral to liquidator
@@ -391,12 +391,12 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
                 loanToken.safeTransfer(protocolTreasury, platformShare);
             }
             
-            // Transfer all collateral to liquidator (tokenId = collateralAmount for ERC1155)
+            // Transfer all collateral to liquidator
             AssetHandler.transferAssetOut(
                 AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
-                collateralAmount,
+                tokenId,
                 erc1155Amount
             );
             
@@ -428,12 +428,12 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             loanToken.safeTransfer(lendingMarket, principal + lpShare);
             loanToken.safeTransfer(protocolTreasury, platformShare);
             
-            // Transfer seized collateral to liquidator (tokenId = collateralAmount for ERC1155)
+            // Transfer seized collateral to liquidator
             AssetHandler.transferAssetOut(
                 AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
-                collateralAmount,
+                tokenId,
                 totalCollateralSeized
             );
             
@@ -443,7 +443,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
                     AssetHandler.AssetType(uint8(assetType)),
                     collateralAsset,
                     borrower,
-                    collateralAmount,
+                    tokenId,
                     surplus
                 );
             }

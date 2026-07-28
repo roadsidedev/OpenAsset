@@ -54,50 +54,76 @@ interface IProofOfReserve {
  * - PoR indicates reserves are insufficient (if PoR is configured)
  */
 contract NAVOracleAdapter is IOracleAdapter {
-    INAVProvider public immutable navProvider;
-    IProofOfReserve public immutable proofOfReserve; // may be address(0)
-    uint256 public immutable maxStaleness;
+    address public immutable factory;
 
-    // Token decimals for converting NAV per share to price
-    uint8 public immutable tokenDecimals;
+    struct MarketConfig {
+        INAVProvider navProvider;
+        IProofOfReserve proofOfReserve;
+        uint256 maxStaleness;
+        uint8 tokenDecimals;
+    }
 
-    constructor(
+    mapping(address => MarketConfig) public marketConfigs;
+
+    modifier onlyFactory() {
+        require(msg.sender == factory, "Only factory");
+        _;
+    }
+
+    constructor(address _factory) {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+    }
+
+    function configure(address market, address) external onlyFactory {
+        require(market != address(0), "Invalid market");
+        // Asset parameter unused — NAV adapter is configured per-provider via registerProvider()
+    }
+
+    /**
+     * @notice Register a NAV provider for a specific market
+     * @param market Address of the LendingMarket contract
+     * @param _navProvider NAV provider contract address
+     * @param _proofOfReserve Proof of Reserve contract address (address(0) if none)
+     * @param _maxStaleness Maximum age before price is considered stale
+     * @param _tokenDecimals Token decimals for NAV normalization
+     */
+    function registerProvider(
+        address market,
         address _navProvider,
         address _proofOfReserve,
         uint256 _maxStaleness,
         uint8 _tokenDecimals
-    ) {
+    ) external onlyFactory {
+        require(market != address(0), "Invalid market");
         require(_navProvider != address(0), "Invalid NAV provider");
-        navProvider = INAVProvider(_navProvider);
-        proofOfReserve = _proofOfReserve != address(0)
-            ? IProofOfReserve(_proofOfReserve)
-            : IProofOfReserve(address(0));
-        maxStaleness = _maxStaleness > 0 ? _maxStaleness : 3600;
-        tokenDecimals = _tokenDecimals;
+        marketConfigs[market] = MarketConfig({
+            navProvider: INAVProvider(_navProvider),
+            proofOfReserve: _proofOfReserve != address(0) ? IProofOfReserve(_proofOfReserve) : IProofOfReserve(address(0)),
+            maxStaleness: _maxStaleness > 0 ? _maxStaleness : 3600,
+            tokenDecimals: _tokenDecimals
+        });
     }
 
     /// @inheritdoc IOracleAdapter
     function getPrice() external view override returns (uint256 price, bool isTrusted, uint256 updatedAt) {
-        try navProvider.getNAV() returns (uint256 nav, uint256 navUpdatedAt, bool isStale) {
+        MarketConfig storage config = marketConfigs[msg.sender];
+        if (address(config.navProvider) == address(0)) return (0, false, 0);
+
+        try config.navProvider.getNAV() returns (uint256 nav, uint256 navUpdatedAt, bool isStale) {
             if (nav == 0 || isStale) return (0, false, navUpdatedAt);
 
-            // Convert NAV per share to USD price with 18 decimals
-            // NAV is already in USD terms for most fund tokens
-            price = _normalizeDecimals(nav, tokenDecimals);
+            price = _normalizeDecimals(nav, config.tokenDecimals);
             updatedAt = navUpdatedAt;
 
-            // Staleness check
-            bool isFresh = (block.timestamp - navUpdatedAt) <= maxStaleness;
+            bool isFresh = (block.timestamp - navUpdatedAt) <= config.maxStaleness;
 
-            // Optional: Proof of Reserve verification
             bool reservesValid = true;
-            if (address(proofOfReserve) != address(0)) {
-                try proofOfReserve.getReserve() returns (uint256 reserve, uint256 reserveUpdatedAt) {
-                    // Basic sanity: reserve should be > 0
+            if (address(config.proofOfReserve) != address(0)) {
+                try config.proofOfReserve.getReserve() returns (uint256 reserve, uint256) {
                     reservesValid = reserve > 0;
-                    // In production: compare reserve against outstanding token supply
                 } catch {
-                    reservesValid = false; // PoR read failed = don't trust
+                    reservesValid = false;
                 }
             }
 
@@ -108,10 +134,12 @@ contract NAVOracleAdapter is IOracleAdapter {
     }
 
     /// @inheritdoc IOracleAdapter
-    function getHistoricalPrice(uint256 secondsAgo) external view override returns (uint256) {
-        try navProvider.getNAV() returns (uint256 nav, uint256 navUpdatedAt2, bool isStale2) {
+    function getHistoricalPrice(uint256) external view override returns (uint256) {
+        MarketConfig storage config = marketConfigs[msg.sender];
+        if (address(config.navProvider) == address(0)) return 0;
+        try config.navProvider.getNAV() returns (uint256 nav, uint256, bool) {
             if (nav == 0) return 0;
-            return _normalizeDecimals(nav, tokenDecimals);
+            return _normalizeDecimals(nav, config.tokenDecimals);
         } catch {
             return 0;
         }

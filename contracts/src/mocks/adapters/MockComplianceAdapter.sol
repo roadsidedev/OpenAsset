@@ -9,14 +9,9 @@ import "../../interfaces/adapters/IComplianceAdapter.sol";
  * @dev Implements IComplianceAdapter for testing the core engine
  */
 contract MockComplianceAdapter is IComplianceAdapter {
-    // Default eligibility for addresses not explicitly configured
     bool public defaultEligible;
-
-    // Per-address eligibility overrides
     mapping(address => bool) public addressEligibility;
     mapping(address => bool) public hasOverride;
-
-    // Configurable: if true, isEligible will revert (for testing fail-closed behavior)
     bool public shouldRevert;
     string public revertMessage;
 
@@ -25,6 +20,10 @@ contract MockComplianceAdapter is IComplianceAdapter {
 
     constructor(bool _defaultEligible) {
         defaultEligible = _defaultEligible;
+    }
+
+    function configure(address) external {
+        // No-op for test mock
     }
 
     function setAddressEligible(address participant, bool eligible) external {

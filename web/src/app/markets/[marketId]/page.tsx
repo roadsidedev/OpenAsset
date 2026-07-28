@@ -64,7 +64,14 @@ export default function MarketDetailPage() {
     if (!userAddress) return;
     if (!market) return;
     try {
-      const result = await requestLoan(market.marketAddress, collateralAmount);
+      // Approve collateral for asset adapter, then request loan
+      const amount = BigInt(parseFloat(collateralAmount) * 1e18);
+      const result = await requestLoan(
+        market.marketAddress,
+        market.collateralAsset,
+        amount.toString(),
+        market.assetAdapter || ""
+      );
       setTxHash(result.txHash);
       setTimeout(() => router.push("/dashboard"), 2000);
     } catch (err) {

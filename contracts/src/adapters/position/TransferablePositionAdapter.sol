@@ -1,28 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/adapters/IPositionAdapter.sol";
+import "../../interfaces/adapters/IPositionAdapterInit.sol";
 import "../../interfaces/adapters/IComplianceAdapter.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
  * @title TransferablePositionAdapter
- * @notice Reference position adapter — transferable ERC721 with compliance hook
+ * @notice Reference position adapter — transferable ERC721 with compliance hook (clone template)
  * @dev Implements IPositionAdapter as a standard transferable ERC721.
+ *      Uses clone template pattern: constructor runs on implementation,
+ *      initialize() is called on each cloned instance.
+ *
  *      When a ComplianceAdapter is attached, every transfer calls
  *      complianceAdapter.isEligible(recipient) — if it returns false,
  *      the transfer reverts.
- *
- * Use case: crypto-native collateral markets (gaming tokens, memes, generic
- * NFT collateral) where there's no eligibility rule to bypass and the
- * secondary-market/composability upside is highest (selling a position,
- * using it as collateral elsewhere, atomic refinancing).
  */
-contract TransferablePositionAdapter is ERC721, IPositionAdapter {
-    address public immutable factory;
+contract TransferablePositionAdapter is ERC721, IPositionAdapterInit, Initializable {
+    address public factory;
     mapping(address => bool) public authorizedMarkets;
 
-    IComplianceAdapter public immutable complianceAdapter;
+    IComplianceAdapter public complianceAdapter;
+
+    string private _adapterName;
+    string private _adapterSymbol;
 
     modifier onlyMarket() {
         require(authorizedMarkets[msg.sender], "Unauthorized");
@@ -34,13 +36,32 @@ contract TransferablePositionAdapter is ERC721, IPositionAdapter {
         _;
     }
 
-    constructor(address _factory, address _complianceAdapter) ERC721("OpenAsset Market Transferable Position", "rcTP") {
+    /// @notice Template constructor — only runs on implementation contract
+    constructor() ERC721("", "") {
+        factory = address(0xdead);
+    }
+
+    /**
+     * @notice Initialize cloned instance (called by factory after minimal proxy deployment)
+     * @param _factory Address of the MarketFactory
+     * @param _complianceAdapter Address of the ComplianceAdapter (address(0) if none)
+     */
+    function initialize(address _factory, address _complianceAdapter) external initializer {
         require(_factory != address(0), "Invalid factory");
         factory = _factory;
         complianceAdapter = IComplianceAdapter(_complianceAdapter);
+        _adapterName = "OpenAsset Market Transferable Position";
+        _adapterSymbol = "rcTP";
     }
 
-    /// @notice Register a market to use this adapter (callable only by factory)
+    function name() public view override returns (string memory) {
+        return bytes(_adapterName).length > 0 ? _adapterName : super.name();
+    }
+
+    function symbol() public view override returns (string memory) {
+        return bytes(_adapterSymbol).length > 0 ? _adapterSymbol : super.symbol();
+    }
+
     function registerMarket(address market) external onlyFactory {
         require(market != address(0), "Invalid market");
         authorizedMarkets[market] = true;

@@ -84,15 +84,19 @@ const config: HardhatUserConfig = {
     },
   },
 
-  // Contract verification - Etherscan V2 API (single key works across all networks)
+  // Etherscan V2 API (migrated from V1 to V2 format)
   etherscan: {
-    apiKey: ETHERSCAN_API_KEY,
+    apiKey: {
+      sepolia: ETHERSCAN_API_KEY,
+      baseSepolia: BASESCAN_API_KEY,
+      base: BASESCAN_API_KEY,
+    },
     customChains: [
       {
         network: "baseSepolia",
         chainId: 84532,
         urls: {
-          apiURL: "https://api-sepolia.basescan.org/api",
+          apiURL: "https://api-sepolia.basescan.org/v2/api",
           browserURL: "https://sepolia.basescan.org",
         },
       },
@@ -107,9 +111,9 @@ const config: HardhatUserConfig = {
     ],
   },
 
-  // Source verification
+  // Etherscan V2 API (single key)
   sourcify: {
-    enabled: true,
+    enabled: false,
   },
 
   paths: {

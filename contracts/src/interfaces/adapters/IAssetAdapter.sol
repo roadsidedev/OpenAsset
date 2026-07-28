@@ -10,8 +10,17 @@ pragma solidity ^0.8.20;
  * escrow and release operations to the market's configured AssetAdapter.
  * The engine independently verifies balance deltas after each call
  * (Section 4, Adapter Trust Model).
+ *
+ * Multi-tenancy: A single adapter instance serves many markets. The
+ * factory calls configure() once per market at deployment time.
  */
 interface IAssetAdapter {
+    /**
+     * @notice Configure the adapter for a specific market
+     * @param market Address of the LendingMarket contract
+     * @param collateralToken Address of the collateral token for this market
+     */
+    function configure(address market, address collateralToken) external;
     /**
      * @notice Escrow collateral from the sender to the lending market
      * @dev Must transfer `amountOrId` of the collateral asset from `from`

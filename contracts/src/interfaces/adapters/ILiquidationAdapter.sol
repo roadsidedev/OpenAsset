@@ -15,8 +15,17 @@ pragma solidity ^0.8.20;
  * The engine verifies that:
  *   recoveredForLP + returnedToHolder reconciles against the actual asset
  *   received back from escrow (Section 4, Adapter Trust Model).
+ *
+ * Multi-tenancy: A single adapter instance serves many markets. The
+ * factory calls configure() once per market at deployment time.
  */
 interface ILiquidationAdapter {
+    /**
+     * @notice Configure the adapter for a specific market
+     * @param market Address of the LendingMarket contract
+     * @param assetAdapter Address of the market's Asset Adapter for collateral orchestration
+     */
+    function configure(address market, address assetAdapter) external;
     /**
      * @notice Execute liquidation of a defaulted loan
      * @dev Must return both values to enforce the gradual liquidation shape.

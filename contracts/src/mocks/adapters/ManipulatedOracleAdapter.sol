@@ -26,6 +26,10 @@ contract ManipulatedOracleAdapter is IOracleAdapter {
         lastUpdatedAt = block.timestamp;
     }
 
+    function configure(address, address) external {
+        // No-op for test mock
+    }
+
     function setManipulation(uint256 _manipulatedPrice) external {
         manipulatedPrice = _manipulatedPrice;
         manipulationActive = true;

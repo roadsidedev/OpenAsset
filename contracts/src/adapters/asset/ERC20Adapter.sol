@@ -7,36 +7,60 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ERC20Adapter
- * @notice Reference asset adapter for ERC20 collateral
+ * @notice Multi-tenant asset adapter for ERC20 collateral
  * @dev Implements IAssetAdapter with SafeERC20 for secure transfers.
- *      Stores the collateral token address at construction — never uses msg.sender as the token.
+ *      Uses the multi-tenancy pattern: the factory calls configure() once per market,
+ *      storing the market's collateral token address in a mapping keyed by market.
  *      Escrow pulls from borrower to market; release pulls from market to recipient.
  */
 contract ERC20Adapter is IAssetAdapter {
     using SafeERC20 for IERC20;
 
-    IERC20 public immutable collateralToken;
+    address public immutable factory;
 
-    constructor(address _collateralToken) {
-        require(_collateralToken != address(0), "Invalid token");
-        collateralToken = IERC20(_collateralToken);
+    struct MarketConfig {
+        IERC20 token;
+    }
+
+    mapping(address => MarketConfig) public marketConfigs;
+
+    modifier onlyFactory() {
+        require(msg.sender == factory, "Only factory");
+        _;
+    }
+
+    constructor(address _factory) {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+    }
+
+    function configure(address market, address collateralToken) external onlyFactory {
+        require(market != address(0), "Invalid market");
+        require(collateralToken != address(0), "Invalid token");
+        marketConfigs[market] = MarketConfig({ token: IERC20(collateralToken) });
     }
 
     /// @notice Escrow ERC20 collateral from borrower to the calling market
     function escrow(address from, uint256 amountOrId) external override {
-        collateralToken.safeTransferFrom(from, msg.sender, amountOrId);
+        IERC20 token = marketConfigs[msg.sender].token;
+        require(address(token) != address(0), "Unconfigured market");
+        token.safeTransferFrom(from, msg.sender, amountOrId);
     }
 
     /// @notice Release ERC20 collateral from market to recipient
     function release(address to, uint256 amountOrId) external override {
-        collateralToken.safeTransferFrom(msg.sender, to, amountOrId);
+        IERC20 token = marketConfigs[msg.sender].token;
+        require(address(token) != address(0), "Unconfigured market");
+        token.safeTransferFrom(msg.sender, to, amountOrId);
     }
 
     /// @notice Check if ERC20 transfer would succeed
     function isTransferable(address from, address to, uint256 amountOrId) external view override returns (bool) {
         if (from == address(0) || to == address(0)) return false;
-        uint256 balance = collateralToken.balanceOf(from);
-        uint256 allowance = collateralToken.allowance(from, address(this));
+        IERC20 token = marketConfigs[msg.sender].token;
+        if (address(token) == address(0)) return false;
+        uint256 balance = token.balanceOf(from);
+        uint256 allowance = token.allowance(from, address(this));
         return balance >= amountOrId && allowance >= amountOrId;
     }
 }

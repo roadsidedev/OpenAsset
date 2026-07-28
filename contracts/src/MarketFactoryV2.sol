@@ -30,9 +30,7 @@ contract MarketFactoryV2 is ReentrancyGuard {
 
     // ============ Constants ============
 
-    uint256 public constant MIN_CREATION_FEE = 0.05 ether;
-    uint256 public constant FEE_PERCENT_BPS = 100; // 1%
-    uint256 public constant MAX_CREATION_FEE = 0.5 ether;
+    uint256 public constant CREATION_FEE_BPS = 50; // 0.5% in lending asset terms
     uint256 public constant BPS_DENOMINATOR = 10000;
 
     // ============ Structs ============
@@ -188,13 +186,23 @@ contract MarketFactoryV2 is ReentrancyGuard {
         );
 
         // Register position adapter for this market before transferring liquidity
-        _registerMarketWithAdapters(marketAddress, config);
+        _configureAdapters(marketAddress, config);
 
-        // Transfer liquidity to market in lending asset terms
-        IERC20(config.lendingAsset).safeTransferFrom(msg.sender, marketAddress, initialLiquidity);
+        // Calculate creation fee in lending asset terms
+        uint256 creationFee = (initialLiquidity * CREATION_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 netLiquidity = initialLiquidity - creationFee;
+
+        // Transfer net liquidity to market and creation fee to treasury
+        IERC20(config.lendingAsset).safeTransferFrom(msg.sender, marketAddress, netLiquidity);
+        if (creationFee > 0) {
+            IERC20(config.lendingAsset).safeTransferFrom(msg.sender, protocolTreasury, creationFee);
+        }
 
         // Initialize market liquidity
-        LendingMarketV2(marketAddress).initializeLiquidity(initialLiquidity, config.lpAddress);
+        LendingMarketV2(marketAddress).initializeLiquidity(netLiquidity, config.lpAddress);
+
+        // Call configure() on each adapter to wire market-specific config
+        _configureAdapters(marketAddress, config);
 
         // Register market
         allMarkets.push(marketAddress);
@@ -217,27 +225,45 @@ contract MarketFactoryV2 is ReentrancyGuard {
         ));
         configHashToMarket[configHash] = marketAddress;
 
-        emit MarketCreated(marketAddress, config.lpAddress, config.collateralAsset, initialLiquidity, 0);
+        emit MarketCreated(marketAddress, config.lpAddress, config.collateralAsset, netLiquidity, creationFee);
     }
 
     /**
-     * @notice Register the new market with its adapters that require authorization
+     * @notice Configure the new market's adapters with market-specific parameters
+     * @dev Calls configure() on each adapter to enable multi-tenancy.
+     *      Each adapter stores market-scoped configuration keyed by market address.
      */
-    function _registerMarketWithAdapters(address marketAddress, MarketConfig memory config) internal {
-        address[] memory adapters = new address[](5);
-        adapters[0] = config.positionAdapter;
-        adapters[1] = config.liquidationAdapter;
-        adapters[2] = config.assetAdapter;
-        adapters[3] = config.oracleAdapter;
-        adapters[4] = config.complianceAdapter;
+    function _configureAdapters(address marketAddress, MarketConfig memory config) internal {
+        // Configure Asset Adapter (token address)
+        if (config.assetAdapter != address(0)) {
+            IAssetAdapter(config.assetAdapter).configure(marketAddress, config.collateralAsset);
+        }
 
-        for (uint256 i = 0; i < adapters.length; i++) {
-            if (adapters[i] == address(0)) continue;
-            (bool success, ) = adapters[i].call(
+        // Configure Oracle Adapter (asset address for price feed lookup)
+        if (config.oracleAdapter != address(0)) {
+            IOracleAdapter(config.oracleAdapter).configure(marketAddress, config.collateralAsset);
+        }
+
+        // Configure Compliance Adapter (no extra params beyond market identity)
+        if (config.complianceAdapter != address(0)) {
+            IComplianceAdapter(config.complianceAdapter).configure(marketAddress);
+        }
+
+        // Configure Liquidation Adapter (reference to market's Asset Adapter + market address)
+        if (config.liquidationAdapter != address(0)) {
+            ILiquidationAdapter(config.liquidationAdapter).configure(marketAddress, config.assetAdapter);
+        }
+
+        // Configure Position Adapter (authorize market on cloned template)
+        if (config.positionAdapter != address(0)) {
+            (bool success, ) = config.positionAdapter.call(
                 abi.encodeWithSignature("registerMarket(address)", marketAddress)
             );
-            // Silently skip if the adapter doesn't implement registerMarket
+            require(success, "Position adapter registration failed");
         }
+
+        // Grant delegated approval for Asset Adapter to move collateral from market
+        IERC20(config.collateralAsset).approve(config.assetAdapter, type(uint256).max);
     }
 
     // ============ Validation Matrix ============
@@ -344,10 +370,7 @@ contract MarketFactoryV2 is ReentrancyGuard {
     // ============ View Functions ============
 
     function calculateCreationFee(uint256 totalDeposit) public pure returns (uint256) {
-        uint256 percentFee = (totalDeposit * FEE_PERCENT_BPS) / BPS_DENOMINATOR;
-        if (percentFee < MIN_CREATION_FEE) return MIN_CREATION_FEE;
-        if (percentFee > MAX_CREATION_FEE) return MAX_CREATION_FEE;
-        return percentFee;
+        return (totalDeposit * CREATION_FEE_BPS) / BPS_DENOMINATOR;
     }
 
     function getMarketCount() external view returns (uint256) {

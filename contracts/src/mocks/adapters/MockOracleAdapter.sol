@@ -6,21 +6,18 @@ import "../../interfaces/adapters/IOracleAdapter.sol";
 /**
  * @title MockOracleAdapter
  * @notice Test-only oracle adapter with settable price and trust status
- * @dev Implements IOracleAdapter for testing the core engine
+ * @dev Implements IOracleAdapter for testing the core engine.
+ *      configure() is a no-op; tests control global state directly.
  */
 contract MockOracleAdapter is IOracleAdapter {
     uint256 public currentPrice;
     bool public isTrustedStatus;
     uint256 public lastUpdatedAt;
 
-    // Configurable: if true, getPrice will revert (for testing fallback/pause)
     bool public shouldRevert;
     string public revertMessage;
 
-    // Configurable: historical prices (secondsAgo => price)
     mapping(uint256 => uint256) public historicalPrices;
-
-    // Configurable: price change between consecutive reads (for testing price-bounds check)
     bool public enforcePriceConsistency;
     uint256 public lastReturnedPrice;
 
@@ -31,6 +28,10 @@ contract MockOracleAdapter is IOracleAdapter {
         currentPrice = _initialPrice;
         isTrustedStatus = _initialTrusted;
         lastUpdatedAt = block.timestamp;
+    }
+
+    function configure(address, address) external {
+        // No-op for test mock
     }
 
     function setPrice(uint256 _price) external {

@@ -1,0 +1,19 @@
+{
+  "network": "sepolia",
+  "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
+  "timestamp": "2026-07-28T08:45:58.210Z",
+  "contracts": {
+    "adapterRegistry": "0x43c4Dd1975B7AEcE2c0b632D2Ff2d8576d31C49F",
+    "marketDeployer": "0xAEf469a4ab0c51D6fa5b5Fd1368d2e3b85ecC602",
+    "marketFactory": "0x95599a74Ae215d8208f7Bb6A8e680B0C58F03c67",
+    "erc20Adapter": "0x2296a019079BA10E4430DC8012504d92B5B8A795",
+    "erc721Adapter": "0x590667a3f38300b9D54e5A8c5D2A12767B244949",
+    "chainlinkAdapter": "0x47518aBb5eDE5e05BcF428c397a0998b68Ed939b",
+    "standardPosition": "0x63b60CF11F1833fE8EaC8bC8A7C795159a154d4E",
+    "soulboundPosition": "0xc0c571b98891163b704A06AE0648A969f47Bf797",
+    "transferablePosition": "0xA34C6BC828789ee963B492b9AC68675DA0E1252B",
+    "dexSwapLiquidation": "0xc9eF65E04Eb1358E24f21a2F31639BB455E846E5",
+    "nftAuctionLiquidation": "0x1bb47bB68C33262DB13F0D72181658a97526056e"
+  },
+  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. Position adapters are clone templates cloned per market by the factory."
+}

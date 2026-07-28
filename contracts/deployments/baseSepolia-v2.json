@@ -1,20 +1,20 @@
 {
-    "network":  "baseSepolia",
-    "deployer":  "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
-    "timestamp":  "2026-07-24T13:50:36.019Z",
-    "contracts":  {
-                      "adapterRegistry":  "0x47638415A8fd5AB1a7F2625BA172cB6065BBA448",
-                      "marketFactory":  "0xbFe3F5E898A059D0B399C8826A00dbe1e03608fd",
-                      "erc20Adapter":  "0xf94feB842E777d9Aad490c38890c6520A68AF52C",
-                      "erc721Adapter":  "0xa24807251FdF1467D184e5bDA74A19eA96EEB822",
-                      "standardPosition":  "0x3D1F31C4AA2419184d6A56367816cE892167AFfE",
-                      "soulboundPosition":  "0xE24E121F044aDeaE9a5224c0b1Ea4aD79BF0F1Ce",
-                      "transferablePosition":  "0xF1a56c7D0485476AF12B93AEbc6d769D449ebb66",
-                      "dexSwapLiquidation":  "0x0615642340e70f0a48BC1BCB8bfb5551Ec055Fec",
-                      "nftAuctionLiquidation":  "0x2910b2f6851A210453CB43ED4E3A9fF7E138d881",
-                      "marketDeployer":  "0x745f6f79362B88dc2a9475fF64Dc6DB7140D3741",
-                      "erc20AdapterWETH":  "0xBc09566675D50d7622545CBA2eD5D135Ae52e578",
-                      "erc20AdapterUSDC":  "0xd0448DE8c5bCA1B8f17359F28F301EADC4F4CBc3"
-                  },
-    "note":  "ERC20Adapter and ERC721Adapter are deployed on the deployer address. For production, deploy one instance per distinct collateral token."
+  "network": "baseSepolia",
+  "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
+  "timestamp": "2026-07-27T18:15:43.773Z",
+  "contracts": {
+    "adapterRegistry": "0x4207cE033a9c88F23a7a70Fc7D5031540c8F2023",
+    "marketDeployer": "0x08D56e1f00448DC6D381149985a6dA1cFa4A4191",
+    "marketFactory": "0xd011C620776a1FaE2F7caC7D15bD0291D1ee4b5a",
+    "erc20Adapter": "0xB35Ddb2A465344D05EBC7Eb9F6A42995B3075d9B",
+    "erc721Adapter": "0xa64273c87Ca6845D24670863b832fDc4fb044363",
+    "chainlinkAdapter": "0x9f01Fb9928FDfcD5e15E4d607E990FB07DF524CB",
+    "uniswapV3TWAPAdapter": "0x525499534bcd103aD19552079D1d80aD209988Aa",
+    "standardPosition": "0x54bf0b87bA15Ff9cBA95396C295Fc355e4574335",
+    "soulboundPosition": "0x001C29355522d3C43378FE3535BC1DB4Ec21B1F6",
+    "transferablePosition": "0x99e208eCE2b4513ef8A893B94709A67b2F26A5BA",
+    "dexSwapLiquidation": "0xEC78903A3c72d536B0952A2b77939FbFA1e4e28e",
+    "nftAuctionLiquidation": "0x2497d012A3B95E2d9D4B290d5948771A3eaC6b45"
+  },
+  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. Position adapters are clone templates cloned per market by the factory."
 }

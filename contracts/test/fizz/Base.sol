@@ -92,9 +92,9 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
         factory = new MarketFactoryV2(admin, admin, address(registry), deployer);
         factory.addLendingAsset(address(lendingAsset));
 
-        assetAdapter = new ERC20Adapter(address(collateralAsset));
+        assetAdapter = new ERC20Adapter(address(factory));
         oracleAdapter = new MockOracle();
-        positionAdapter = new StandardPositionAdapter(address(factory));
+        positionAdapter = new StandardPositionAdapter();
         liquidationAdapter = new DEXSwapLiquidationAdapter(address(factory));
 
         registry.registerAdapter(address(assetAdapter), AdapterRegistry.AdapterType.ASSET);

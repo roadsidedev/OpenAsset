@@ -11,8 +11,17 @@ pragma solidity ^0.8.20;
  * signal to decide whether to act on it. The engine does not need to know WHY
  * a price is untrusted (weekend gap, sequencer outage, staleness) — only whether
  * to pause via the circuit breaker.
+ *
+ * Multi-tenancy: A single adapter instance serves many markets. The
+ * factory calls configure() once per market at deployment time.
  */
 interface IOracleAdapter {
+    /**
+     * @notice Configure the adapter for a specific market
+     * @param market Address of the LendingMarket contract
+     * @param asset Address of the collateral asset to price for this market
+     */
+    function configure(address market, address asset) external;
     /**
      * @notice Get the current price and trust status
      * @dev isTrusted covers staleness, sequencer-liveness (on L2s), AND

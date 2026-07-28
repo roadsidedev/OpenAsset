@@ -1,13 +1,14 @@
 /**
  * @file deployV2.ts
- * @description Production deployment script for OpenAsset Market V2 adapter-based architecture.
+ * @description Production deployment script for OpenAsset Market V2 multi-tenant adapter architecture.
  *
- * Changes from v1:
- * - ERC20Adapter and ERC721Adapter now require the collateral token address in constructor
- * - Position adapters now require the factory address in constructor
- * - MarketFactoryV2.createMarket now takes (MarketConfig, initialLiquidity) instead of (config + msg.value)
+ * Changes from v1 constructor-per-instance pattern:
+ * - All adapters use multi-tenancy: one instance, many markets via configure()
+ * - Position adapters are clone templates (deploy template, factory clones per market)
+ * - ERC20Adapter, ERC721Adapter, ChainlinkAdapter etc. take factory address, not collateral/feed
  *
  * Usage:
+ *   npx hardhat run scripts/deployV2.ts --network sepolia
  *   npx hardhat run scripts/deployV2.ts --network baseSepolia
  *   npx hardhat run scripts/deployV2.ts --network mainnet
  */
@@ -21,22 +22,37 @@ interface DeploymentConfig {
   owner: string;
   protocolTreasury: string;
   lendingAssets: string[];
-  chainlinkFeeds: Record<string, string>;
+  sepoliaChainlinkFeeds?: Record<string, string>;
+  baseChainlinkFeeds?: Record<string, string>;
   l2Sequencer?: string;
+  uniswapV3QuoteToken?: string; // Address of quote token for TWAP
 }
 
 const CONFIGS: Record<string, DeploymentConfig> = {
+  sepolia: {
+    auditGovernance: "",
+    owner: "",
+    protocolTreasury: "",
+    lendingAssets: [
+      "0x8267cF9254734C6Eb452a7bb9AAF97B392258b21", // USDC on Sepolia (example)
+    ],
+    sepoliaChainlinkFeeds: {
+      "ETH/USD": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+      "BTC/USD": "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
+    },
+  },
   baseSepolia: {
     auditGovernance: "",
     owner: "",
     protocolTreasury: "",
     lendingAssets: [
-      "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
     ],
-    chainlinkFeeds: {
+    baseChainlinkFeeds: {
       "ETH/USD": "0x4aDC670858AB637A1Cc5265Da8Ccb001f40b83E2",
     },
     l2Sequencer: "0xC1D817391E9c771E82fd1Fe6dC8aBD066a8c1C6Ba",
+    uniswapV3QuoteToken: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC
   },
   mainnet: {
     auditGovernance: "",
@@ -46,7 +62,7 @@ const CONFIGS: Record<string, DeploymentConfig> = {
       "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
       "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
     ],
-    chainlinkFeeds: {
+    baseChainlinkFeeds: {
       "ETH/USD": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
       "WBTC/USD": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
     },
@@ -88,55 +104,58 @@ async function deployMarketFactory(config: DeploymentConfig, registryAddress: st
   return { contract: factory, address };
 }
 
-async function deployReferenceAdapters(factoryAddress: string) {
-  console.log("\n=== Deploying Reference Adapters ===");
+async function deployReferenceAdapters(factoryAddress: string, config: DeploymentConfig) {
+  console.log("\n=== Deploying Multi-Tenant Reference Adapters ===");
   const deployed: Record<string, string> = {};
 
-  // --- Asset Adapters (require collateral token address — deploy per-collateral) ---
-  // Since each ERC20Adapter is bound to a specific collateral token, we deploy
-  // one instance per asset. The config's `chainlinkFeeds` keys serve as the
-  // collateral token allowlist. For testnets, we deploy a generic placeholder
-  // on the deployer's address (which gets replaced per-asset in production).
+  // --- Asset Adapters (multi-tenant: one instance per factory, all tokens) ---
   const ERC20Factory = await ethers.getContractFactory("ERC20Adapter");
-  const ERC721Factory = await ethers.getContractFactory("ERC721Adapter");
-  const [deployer] = await ethers.getSigners();
-
-  // Deploy a reference ERC20Adapter on deployer's address.
-  // In production, replace with the actual collateral token:
-  //   const wbtcAdapter = await ERC20Factory.deploy("0xWBTC_ADDRESS");
-  //   const ethAdapter   = await ERC20Factory.deploy("0xWETH_ADDRESS");
-  const erc20 = await ERC20Factory.deploy(deployer.address);
+  const erc20 = await ERC20Factory.deploy(factoryAddress);
   await erc20.waitForDeployment();
   deployed.erc20Adapter = await erc20.getAddress();
-  console.log(`  ERC20Adapter (ref, on deployer): ${deployed.erc20Adapter}`);
-  console.log(`    ⚠ Replace with per-collateral adapter per asset in production`);
+  console.log(`  ERC20Adapter: ${deployed.erc20Adapter}`);
 
-  // Same for ERC721: deploy with a valid NFT collection or the deployer address
-  const erc721 = await ERC721Factory.deploy(deployer.address);
+  const ERC721Factory = await ethers.getContractFactory("ERC721Adapter");
+  const erc721 = await ERC721Factory.deploy(factoryAddress);
   await erc721.waitForDeployment();
   deployed.erc721Adapter = await erc721.getAddress();
-  console.log(`  ERC721Adapter (ref, on deployer): ${deployed.erc721Adapter}`);
+  console.log(`  ERC721Adapter: ${deployed.erc721Adapter}`);
 
-  // --- Position Adapters (require factory address) ---
+  // --- Oracle Adapters (multi-tenant) ---
+  const ChainlinkFactory = await ethers.getContractFactory("ChainlinkAdapter");
+  const chainlink = await ChainlinkFactory.deploy(factoryAddress);
+  await chainlink.waitForDeployment();
+  deployed.chainlinkAdapter = await chainlink.getAddress();
+  console.log(`  ChainlinkAdapter: ${deployed.chainlinkAdapter}`);
+
+  if (config.uniswapV3QuoteToken) {
+    const UniswapTWAPFactory = await ethers.getContractFactory("UniswapV3TWAPAdapter");
+    const uniswap = await UniswapTWAPFactory.deploy(600, config.uniswapV3QuoteToken, factoryAddress);
+    await uniswap.waitForDeployment();
+    deployed.uniswapV3TWAPAdapter = await uniswap.getAddress();
+    console.log(`  UniswapV3TWAPAdapter: ${deployed.uniswapV3TWAPAdapter}`);
+  }
+
+  // --- Position Adapters (clone templates — constructor sets sentinel, factory clones per market) ---
   const StandardPos = await ethers.getContractFactory("StandardPositionAdapter");
-  const standard = await StandardPos.deploy(factoryAddress);
+  const standard = await StandardPos.deploy();
   await standard.waitForDeployment();
   deployed.standardPosition = await standard.getAddress();
-  console.log(`  StandardPositionAdapter: ${deployed.standardPosition}`);
+  console.log(`  StandardPositionAdapter (template): ${deployed.standardPosition}`);
 
   const SoulboundPos = await ethers.getContractFactory("SoulboundPositionAdapter");
-  const soulbound = await SoulboundPos.deploy(factoryAddress);
+  const soulbound = await SoulboundPos.deploy();
   await soulbound.waitForDeployment();
   deployed.soulboundPosition = await soulbound.getAddress();
-  console.log(`  SoulboundPositionAdapter: ${deployed.soulboundPosition}`);
+  console.log(`  SoulboundPositionAdapter (template): ${deployed.soulboundPosition}`);
 
   const TransferablePos = await ethers.getContractFactory("TransferablePositionAdapter");
-  const transferable = await TransferablePos.deploy(factoryAddress, ethers.ZeroAddress);
+  const transferable = await TransferablePos.deploy();
   await transferable.waitForDeployment();
   deployed.transferablePosition = await transferable.getAddress();
-  console.log(`  TransferablePositionAdapter: ${deployed.transferablePosition}`);
+  console.log(`  TransferablePositionAdapter (template): ${deployed.transferablePosition}`);
 
-  // --- Liquidation Adapters (require owner address) ---
+  // --- Liquidation Adapters (multi-tenant, orchestrate through Asset Adapter) ---
   const DEXSwap = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
   const dexSwap = await DEXSwap.deploy(factoryAddress);
   await dexSwap.waitForDeployment();
@@ -154,7 +173,6 @@ async function deployReferenceAdapters(factoryAddress: string) {
 
 async function registerAdapters(
   registryAddress: string,
-  factoryAddress: string,
   deployed: Record<string, string>
 ) {
   console.log("\n=== Registering Adapters in Registry ===");
@@ -163,6 +181,7 @@ async function registerAdapters(
   const adapterMap: Array<{ address: string; type: number; name: string }> = [
     { address: deployed.erc20Adapter, type: 0, name: "ERC20Adapter" },
     { address: deployed.erc721Adapter, type: 0, name: "ERC721Adapter" },
+    { address: deployed.chainlinkAdapter, type: 1, name: "ChainlinkAdapter" },
     { address: deployed.standardPosition, type: 4, name: "StandardPositionAdapter" },
     { address: deployed.soulboundPosition, type: 4, name: "SoulboundPositionAdapter" },
     { address: deployed.transferablePosition, type: 4, name: "TransferablePositionAdapter" },
@@ -170,26 +189,19 @@ async function registerAdapters(
     { address: deployed.nftAuctionLiquidation, type: 3, name: "NFTAuctionLiquidationAdapter" },
   ];
 
+  if (deployed.uniswapV3TWAPAdapter) {
+    adapterMap.push({ address: deployed.uniswapV3TWAPAdapter, type: 1, name: "UniswapV3TWAPAdapter" });
+  }
+
   for (const adapter of adapterMap) {
     console.log(`  Registering ${adapter.name}...`);
     const tx = await registry.registerAdapter(adapter.address, adapter.type);
     await tx.wait();
-    const vtx = await registry.markVerified(adapter.address, "Internal audit #1");
+    const vtx = await registry.markVerified(adapter.address, "OpenAsset internal audit — multi-tenant reference adapter");
     await vtx.wait();
   }
 
-  console.log(`  Total adapters registered: ${adapterMap.length}`);
-
-  // Register the factory as the authorized market creator on position adapters
-  console.log("\n=== Authorizing factory on position adapters ===");
-  for (const key of ["standardPosition", "soulboundPosition", "transferablePosition"]) {
-    if (deployed[key]) {
-      const adapter = await ethers.getContractAt("StandardPositionAdapter", deployed[key]);
-      // if registerMarket exists, register the factory itself as market (for testing)
-      // In production, markets register themselves during createMarket
-      console.log(`  ${deployed[key]}: auto-registration via createMarket`);
-    }
-  }
+  console.log(`  Total adapters registered and verified: ${adapterMap.length}`);
 }
 
 async function configureLendingAssets(factoryAddress: string, lendingAssets: string[]) {
@@ -199,20 +211,6 @@ async function configureLendingAssets(factoryAddress: string, lendingAssets: str
     console.log(`  Adding ${asset}...`);
     const tx = await factory.addLendingAsset(asset);
     await tx.wait();
-  }
-}
-
-async function verifyContract(address: string, constructorArgs: any[]) {
-  try {
-    console.log(`  Verifying ${address}...`);
-    await run("verify:verify", { address, constructorArguments: constructorArgs });
-    console.log(`  ✓ Verified ${address}`);
-  } catch (error: any) {
-    if (error.message?.includes("Already Verified")) {
-      console.log(`  ✓ Already verified: ${address}`);
-    } else {
-      console.log(`  ✗ Failed to verify ${address}: ${error.message}`);
-    }
   }
 }
 
@@ -228,7 +226,6 @@ async function main() {
       owner: deployer.address,
       protocolTreasury: deployer.address,
       lendingAssets: [],
-      chainlinkFeeds: {},
     };
   }
 
@@ -247,14 +244,14 @@ async function main() {
   const { address: registryAddress } = await deployAdapterRegistry(config);
 
   // 2. Deploy MarketDeployer + MarketFactoryV2
-  const { address: deployerAddress, contract: deployerContract } = await deployMarketDeployer();
+  const { address: deployerAddress } = await deployMarketDeployer();
   const { address: factoryAddress } = await deployMarketFactory(config, registryAddress, deployerAddress);
 
-  // 3. Deploy reference adapters (with factory address for permissioned adapters)
-  const deployedAdapters = await deployReferenceAdapters(factoryAddress);
+  // 3. Deploy multi-tenant reference adapters
+  const deployedAdapters = await deployReferenceAdapters(factoryAddress, config);
 
   // 4. Register and verify adapters
-  await registerAdapters(registryAddress, factoryAddress, deployedAdapters);
+  await registerAdapters(registryAddress, deployedAdapters);
 
   // 5. Configure lending assets
   await configureLendingAssets(factoryAddress, config.lendingAssets);
@@ -270,7 +267,7 @@ async function main() {
       marketFactory: factoryAddress,
       ...deployedAdapters,
     },
-    note: "ERC20Adapter and ERC721Adapter are deployed on the deployer address. For production, deploy one instance per distinct collateral token.",
+    note: "Multi-tenant adapter architecture: one instance per adapter type serves all markets. Position adapters are clone templates cloned per market by the factory.",
   };
 
   const outputDir = path.join(__dirname, "..", "deployments");
@@ -286,16 +283,22 @@ async function main() {
   console.log(`========================================`);
   console.log(`AdapterRegistry:          ${registryAddress}`);
   console.log(`MarketFactoryV2:          ${factoryAddress}`);
-  console.log(`ERC20Adapter (ref):       ${deployedAdapters.erc20Adapter}`);
-  console.log(`StandardPositionAdapter:  ${deployedAdapters.standardPosition}`);
+  console.log(`ERC20Adapter:             ${deployedAdapters.erc20Adapter}`);
+  console.log(`ERC721Adapter:            ${deployedAdapters.erc721Adapter}`);
+  console.log(`ChainlinkAdapter:         ${deployedAdapters.chainlinkAdapter}`);
+  console.log(`StandardPosition:         ${deployedAdapters.standardPosition}`);
+  console.log(`SoulboundPosition:        ${deployedAdapters.soulboundPosition}`);
+  console.log(`TransferablePosition:     ${deployedAdapters.transferablePosition}`);
   console.log(`DEXSwapLiquidation:       ${deployedAdapters.dexSwapLiquidation}`);
+  console.log(`NFTAuctionLiquidation:    ${deployedAdapters.nftAuctionLiquidation}`);
+  if (deployedAdapters.uniswapV3TWAPAdapter) {
+    console.log(`UniswapV3TWAPAdapter:     ${deployedAdapters.uniswapV3TWAPAdapter}`);
+  }
   console.log(`LendingAssets:            ${config.lendingAssets.length} configured`);
   console.log(`========================================`);
-  console.log(`\n⚠️  ERC20Adapter was deployed with ZeroAddress — deploy per-collateral:\n`);
-  console.log(`   const ERC20 = await ethers.getContractFactory("ERC20Adapter");`);
-  console.log(`   const usdcAdapter = await ERC20.deploy("0xUSDC_ADDRESS");`);
-  console.log(`\n⚠️  After market creation, position adapters auto-register via createMarket().`);
-  console.log(`   If deploying adapters separately, call adapter.registerMarket(marketAddr).\n`);
+  console.log(`\nPosition adapters are clone templates. The Factory deploys`);
+  console.log(`EIP-1167 minimal proxies and calls initialize() per market.`);
+  console.log(`All other adapters are multi-tenant — configure() per market.\n`);
 }
 
 main()

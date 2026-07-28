@@ -10,20 +10,13 @@ import "../../interfaces/adapters/ILiquidationAdapter.sol";
  *      Supports both synchronous and async modes.
  */
 contract MockLiquidationAdapter is ILiquidationAdapter {
-    // Configurable behavior
     bool public isAsync;
     uint256 public cureWindow;
-
-    // Settable return values
     uint256 public mockRecoveredForLP;
     uint256 public mockReturnedToHolder;
-
-    // Tracking
     uint256 public lastLiquidatedLoanId;
     uint256 public lastDebtOwed;
     uint256 public liquidationCount;
-
-    // Configurable: if true, liquidate will revert
     bool public shouldRevert;
     string public revertMessage;
 
@@ -32,6 +25,10 @@ contract MockLiquidationAdapter is ILiquidationAdapter {
     constructor(bool _isAsync, uint256 _cureWindow) {
         isAsync = _isAsync;
         cureWindow = _cureWindow;
+    }
+
+    function configure(address, address) external {
+        // No-op for test mock
     }
 
     function setMockReturns(uint256 _recoveredForLP, uint256 _returnedToHolder) external {

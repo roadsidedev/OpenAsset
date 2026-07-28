@@ -20,6 +20,7 @@ interface AdapterSelectorProps {
   onSelect: (address: string) => void;
   required?: boolean;
   deprecationWarning?: string;
+  loading?: boolean;
 }
 
 export function AdapterSelector({

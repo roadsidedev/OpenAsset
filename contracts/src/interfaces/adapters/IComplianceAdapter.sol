@@ -15,8 +15,16 @@ pragma solidity ^0.8.20;
  * - Position transfer (only for TransferablePosition markets, per Validation Matrix)
  *
  * FAIL-CLOSED: any revert from isEligible() is treated as false.
+ *
+ * Multi-tenancy: A single adapter instance serves many markets. The
+ * factory calls configure() once per market at deployment time.
  */
 interface IComplianceAdapter {
+    /**
+     * @notice Configure the adapter for a specific market
+     * @param market Address of the LendingMarket contract
+     */
+    function configure(address market) external;
     /**
      * @notice Check if a participant is eligible to borrow or hold a position
      * @dev Returns false on any error (fail-closed). The engine never

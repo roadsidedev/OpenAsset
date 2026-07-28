@@ -1,25 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/adapters/IPositionAdapter.sol";
+import "../../interfaces/adapters/IPositionAdapterInit.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
  * @title SoulboundPositionAdapter
- * @notice Reference position adapter — non-transferable ERC721
+ * @notice Reference position adapter — non-transferable ERC721 (clone template)
  * @dev Implements IPositionAdapter as a soulbound (non-transferable) ERC721.
+ *      Uses clone template pattern: constructor runs on implementation,
+ *      initialize() is called on each cloned instance.
+ *
  *      Transfer always reverts — the position can never change hands.
- *
- * Default for any market with a non-null Compliance Adapter:
- * RWA, tokenized equities, any issuer-permissioned asset.
- *
- * Gets wallet visibility, cross-market enumeration via standard NFT tooling,
- * and third-party/institutional reporting compatibility, with zero
- * compliance-bypass risk since it can never change hands.
+ *      Default for any market with a non-null Compliance Adapter.
  */
-contract SoulboundPositionAdapter is ERC721, IPositionAdapter {
-    address public immutable factory;
+contract SoulboundPositionAdapter is ERC721, IPositionAdapterInit, Initializable {
+    address public factory;
     mapping(address => bool) public authorizedMarkets;
+
+    string private _adapterName;
+    string private _adapterSymbol;
 
     modifier onlyMarket() {
         require(authorizedMarkets[msg.sender], "Unauthorized");
@@ -31,12 +32,32 @@ contract SoulboundPositionAdapter is ERC721, IPositionAdapter {
         _;
     }
 
-    constructor(address _factory) ERC721("OpenAsset Market Soulbound Position", "rcSBP") {
-        require(_factory != address(0), "Invalid factory");
-        factory = _factory;
+    /// @notice Template constructor — only runs on implementation contract
+    constructor() ERC721("", "") {
+        factory = address(0xdead);
     }
 
-    /// @notice Register a market to use this adapter (callable only by factory)
+    /**
+     * @notice Initialize cloned instance (called by factory after minimal proxy deployment)
+     * @param _factory Address of the MarketFactory
+     * @param complianceAdapter Address of ComplianceAdapter (unused — soulbound blocks all transfers)
+     */
+    function initialize(address _factory, address complianceAdapter) external initializer {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+        _adapterName = "OpenAsset Market Soulbound Position";
+        _adapterSymbol = "rcSBP";
+        // complianceAdapter is intentionally unused — soulbound blocks all transfers regardless
+    }
+
+    function name() public view override returns (string memory) {
+        return bytes(_adapterName).length > 0 ? _adapterName : super.name();
+    }
+
+    function symbol() public view override returns (string memory) {
+        return bytes(_adapterSymbol).length > 0 ? _adapterSymbol : super.symbol();
+    }
+
     function registerMarket(address market) external onlyFactory {
         require(market != address(0), "Invalid market");
         authorizedMarkets[market] = true;

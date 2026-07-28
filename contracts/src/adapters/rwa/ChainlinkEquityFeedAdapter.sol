@@ -25,52 +25,70 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
  */
 contract ChainlinkEquityFeedAdapter is IOracleAdapter {
 
-    AggregatorV3Interface public immutable feed;
-    uint256 public immutable maxStaleness;
-    address public immutable l2Sequencer; // L2 sequencer uptime feed (address(0) on L1)
+    address public immutable factory;
 
-    // Trading window config (24/5)
-    uint256 public immutable tradingWindowStart; // seconds from Monday 00:00 UTC
-    uint256 public immutable tradingWindowEnd;   // seconds from Monday 00:00 UTC (Friday close)
+    struct MarketConfig {
+        AggregatorV3Interface feed;
+        uint256 maxStaleness;
+        address l2Sequencer;
+        uint8 feedDecimals;
+    }
 
-    // Cache
-    uint8 private immutable feedDecimals;
+    mapping(address => MarketConfig) public marketConfigs;
 
-    // L2 sequencer uptime feed returns 1 if up, 0 if down
-    // Max acceptable staleness for the sequencer feed itself
-    uint256 public constant SEQUENCER_MAX_STALENESS = 3600; // 1 hour
+    uint256 public constant SEQUENCER_MAX_STALENESS = 3600;
 
-    constructor(
+    modifier onlyFactory() {
+        require(msg.sender == factory, "Only factory");
+        _;
+    }
+
+    constructor(address _factory) {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+    }
+
+    function configure(address market, address) external onlyFactory {
+        require(market != address(0), "Invalid market");
+    }
+
+    /**
+     * @notice Register a Chainlink equity feed for a specific market
+     * @param market Address of the LendingMarket contract
+     * @param _feed Chainlink AggregatorV3Interface feed address
+     * @param _maxStaleness Maximum age before price is considered stale
+     * @param _l2Sequencer L2 sequencer uptime feed address (address(0) on L1)
+     */
+    function registerFeed(
+        address market,
         address _feed,
         uint256 _maxStaleness,
         address _l2Sequencer
-    ) {
-        feed = AggregatorV3Interface(_feed);
-        maxStaleness = _maxStaleness > 0 ? _maxStaleness : 3600;
-        l2Sequencer = _l2Sequencer;
-
-        feedDecimals = _getFeedDecimals();
-
-        // Trading window: Monday 00:00 to Friday 23:59 UTC
-        // Monday 00:00 = 0, Friday 23:59 = 5 * 86400 - 1 = 431999
-        tradingWindowStart = 0;
-        tradingWindowEnd = 5 * 86400 - 1;
+    ) external onlyFactory {
+        require(market != address(0), "Invalid market");
+        require(_feed != address(0), "Invalid feed");
+        marketConfigs[market] = MarketConfig({
+            feed: AggregatorV3Interface(_feed),
+            maxStaleness: _maxStaleness > 0 ? _maxStaleness : 3600,
+            l2Sequencer: _l2Sequencer,
+            feedDecimals: _getFeedDecimals(_feed)
+        });
     }
 
     /// @inheritdoc IOracleAdapter
     function getPrice() external view override returns (uint256 price, bool isTrusted, uint256 updatedAt) {
-        // 1. Check if we're in a trading window (24/5)
+        MarketConfig storage config = marketConfigs[msg.sender];
+        if (address(config.feed) == address(0)) return (0, false, 0);
+
         if (!_isWithinTradingWindow()) {
             return (0, false, 0);
         }
 
-        // 2. Check L2 sequencer uptime (if on L2)
-        if (address(l2Sequencer) != address(0) && !_isSequencerUp()) {
+        if (address(config.l2Sequencer) != address(0) && !_isSequencerUp(config.l2Sequencer)) {
             return (0, false, 0);
         }
 
-        // 3. Fetch price from Chainlink
-        try feed.latestRoundData() returns (
+        try config.feed.latestRoundData() returns (
             uint80 roundId,
             int256 answer,
             uint256,
@@ -80,27 +98,24 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
             if (answer <= 0) return (0, false, 0);
             if (answeredInRound < roundId) return (0, false, 0);
 
-            price = _normalizeDecimals(uint256(answer), feedDecimals);
+            price = _normalizeDecimals(uint256(answer), config.feedDecimals);
             updatedAt = updatedAtRound;
 
-            // 4. Staleness check — equity feeds update every ~10-60 min during trading
-            isTrusted = (block.timestamp - updatedAtRound) <= maxStaleness;
+            isTrusted = (block.timestamp - updatedAtRound) <= config.maxStaleness;
         } catch {
             return (0, false, 0);
         }
     }
 
     /// @inheritdoc IOracleAdapter
-    function getHistoricalPrice(uint256 secondsAgo) external view override returns (uint256) {
-        try feed.latestRoundData() returns (
-            uint80,
-            int256 answer,
-            uint256,
-            uint256,
-            uint80
+    function getHistoricalPrice(uint256) external view override returns (uint256) {
+        MarketConfig storage config = marketConfigs[msg.sender];
+        if (address(config.feed) == address(0)) return 0;
+        try config.feed.latestRoundData() returns (
+            uint80, int256 answer, uint256, uint256, uint80
         ) {
             if (answer <= 0) return 0;
-            return _normalizeDecimals(uint256(answer), feedDecimals);
+            return _normalizeDecimals(uint256(answer), config.feedDecimals);
         } catch {
             return 0;
         }
@@ -130,29 +145,26 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
      * @dev On L2s, if the sequencer goes down, oracle feeds can freeze at stale values.
      *      We check the Chainlink L2 sequencer uptime feed.
      */
-    function _isSequencerUp() internal view returns (bool) {
-        try AggregatorV3Interface(l2Sequencer).latestRoundData() returns (
+    function _isSequencerUp(address _l2Sequencer) internal view returns (bool) {
+        try AggregatorV3Interface(_l2Sequencer).latestRoundData() returns (
             uint80,
             int256 answer,
             uint256,
             uint256 updatedAt,
             uint80
         ) {
-            // answer == 1 means sequencer is up
-            // Also check staleness of the sequencer feed itself
             bool isUp = answer == 1;
             bool isFresh = (block.timestamp - updatedAt) <= SEQUENCER_MAX_STALENESS;
             return isUp && isFresh;
         } catch {
-            // If we can't read the sequencer feed, assume it's down (fail-closed)
             return false;
         }
     }
 
     // ============ Helpers ============
 
-    function _getFeedDecimals() internal view returns (uint8) {
-        try feed.decimals() returns (uint8 d) {
+    function _getFeedDecimals(address _feed) internal view returns (uint8) {
+        try AggregatorV3Interface(_feed).decimals() returns (uint8 d) {
             return d;
         } catch {
             return 8;

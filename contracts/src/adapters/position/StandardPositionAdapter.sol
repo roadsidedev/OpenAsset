@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/adapters/IPositionAdapter.sol";
+import "../../interfaces/adapters/IPositionAdapterInit.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
  * @title StandardPositionAdapter
  * @notice Reference position adapter — no token, plain mapping
- * @dev Implements IPositionAdapter with minimal gas overhead.
+ * @dev Implements IPositionAdapterInit with minimal gas overhead.
  *      Positions are tracked in a mapping with no ERC721 minting.
- *      Cheapest gas, lowest complexity.
+ *      Uses clone template pattern: constructor runs on implementation,
+ *      initialize() is called on each cloned instance after minimal proxy deploy.
  *
  * Default use case: simple crypto-native markets with no compliance
  * requirement and no need for secondary-market/tooling benefits.
  */
-contract StandardPositionAdapter is IPositionAdapter {
-    address public immutable factory;
+contract StandardPositionAdapter is IPositionAdapterInit, Initializable {
+    address public factory;
     mapping(address => bool) public authorizedMarkets;
 
-    // loanId => owner
     mapping(uint256 => address) public positionOwners;
 
     modifier onlyMarket() {
@@ -30,12 +31,22 @@ contract StandardPositionAdapter is IPositionAdapter {
         _;
     }
 
-    constructor(address _factory) {
-        require(_factory != address(0), "Invalid factory");
-        factory = _factory;
+    /// @notice Template constructor — only runs on implementation contract
+    constructor() {
+        factory = address(0xdead); // Mark as template (not a clone)
     }
 
-    /// @notice Register a market to use this adapter (callable only by factory)
+    /**
+     * @notice Initialize cloned instance (called by factory after minimal proxy deployment)
+     * @param _factory Address of the MarketFactory
+     * @param complianceAdapter Address of ComplianceAdapter (unused, only for interface conformance)
+     */
+    function initialize(address _factory, address complianceAdapter) external initializer {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+        // complianceAdapter is intentionally unused — StandardPositionAdapter has no compliance hook
+    }
+
     function registerMarket(address market) external onlyFactory {
         require(market != address(0), "Invalid market");
         authorizedMarkets[market] = true;

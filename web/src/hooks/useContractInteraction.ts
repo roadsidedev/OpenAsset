@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { usePublicClient, useWalletClient } from 'wagmi';
-import { parseAbi, Address } from 'viem';
-import { MARKET_FACTORY_ABI, LENDING_MARKET_ABI } from '@/lib/contractAbis';
+import { parseAbi, type Address } from 'viem';
+import { MARKET_FACTORY_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
 
 export const useContractInteraction = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,6 +13,22 @@ export const useContractInteraction = () => {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const approveToken = useCallback(
+    async (tokenAddress: string, spenderAddress: string, amount: bigint) => {
+      if (!walletClient) throw new Error('Wallet not connected');
+      if (!publicClient) throw new Error('Public client not available');
+
+      const hash = await walletClient.writeContract({
+        address: tokenAddress as Address,
+        abi: parseAbi(ERC20_APPROVE_ABI),
+        functionName: 'approve',
+        args: [spenderAddress as Address, amount],
+      });
+      return publicClient.waitForTransactionReceipt({ hash });
+    },
+    [walletClient, publicClient]
+  );
+
   const createMarket = useCallback(
     async (marketConfig: any, factoryAddress: string, initialLiquidity: bigint) => {
       setIsLoading(true);
@@ -20,6 +36,26 @@ export const useContractInteraction = () => {
       try {
         if (!walletClient) throw new Error('Wallet not connected');
         if (!publicClient) throw new Error('Public client not available');
+
+        // If there's initial liquidity, approve the factory to spend it first
+        if (initialLiquidity > BigInt(0) && marketConfig.lendingAsset) {
+          const allowance = await publicClient.readContract({
+            address: marketConfig.lendingAsset as Address,
+            abi: parseAbi(ERC20_APPROVE_ABI),
+            functionName: 'allowance',
+            args: [walletClient.account.address, factoryAddress as Address],
+          }) as bigint;
+
+          if (allowance < initialLiquidity) {
+            const approveHash = await walletClient.writeContract({
+              address: marketConfig.lendingAsset as Address,
+              abi: parseAbi(ERC20_APPROVE_ABI),
+              functionName: 'approve',
+              args: [factoryAddress as Address, initialLiquidity],
+            });
+            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          }
+        }
 
         const hash = await walletClient.writeContract({
           address: factoryAddress as Address,
@@ -42,18 +78,36 @@ export const useContractInteraction = () => {
   );
 
   const depositLiquidity = useCallback(
-    async (marketAddress: string, amount: string) => {
+    async (marketAddress: string, lendingAsset: string, amount: bigint) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
         if (!publicClient) throw new Error('Public client not available');
 
+        // Approve the market to spend lendingAsset
+        const allowance = await publicClient.readContract({
+          address: lendingAsset as Address,
+          abi: parseAbi(ERC20_APPROVE_ABI),
+          functionName: 'allowance',
+          args: [walletClient.account.address, marketAddress as Address],
+        }) as bigint;
+
+        if (allowance < amount) {
+          const approveHash = await walletClient.writeContract({
+            address: lendingAsset as Address,
+            abi: parseAbi(ERC20_APPROVE_ABI),
+            functionName: 'approve',
+            args: [marketAddress as Address, amount],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+
         const hash = await walletClient.writeContract({
           address: marketAddress as Address,
           abi: parseAbi(LENDING_MARKET_ABI),
           functionName: 'depositLiquidity',
-          args: [BigInt(amount)],
+          args: [amount],
         });
 
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -70,18 +124,40 @@ export const useContractInteraction = () => {
   );
 
   const requestLoan = useCallback(
-    async (marketAddress: string, collateralAmount: string) => {
+    async (marketAddress: string, collateralAddress: string, collateralAmount: string, assetAdapter: string) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
         if (!publicClient) throw new Error('Public client not available');
 
+        const amount = BigInt(collateralAmount);
+
+        // Approve the asset adapter to escrow collateral
+        if (assetAdapter) {
+          const allowance = await publicClient.readContract({
+            address: collateralAddress as Address,
+            abi: parseAbi(ERC20_APPROVE_ABI),
+            functionName: 'allowance',
+            args: [walletClient.account.address, assetAdapter as Address],
+          }) as bigint;
+
+          if (allowance < amount) {
+            const approveHash = await walletClient.writeContract({
+              address: collateralAddress as Address,
+              abi: parseAbi(ERC20_APPROVE_ABI),
+              functionName: 'approve',
+              args: [assetAdapter as Address, amount],
+            });
+            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          }
+        }
+
         const hash = await walletClient.writeContract({
           address: marketAddress as Address,
           abi: parseAbi(LENDING_MARKET_ABI),
           functionName: 'requestLoan',
-          args: [BigInt(collateralAmount)],
+          args: [amount],
         });
 
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -98,12 +174,31 @@ export const useContractInteraction = () => {
   );
 
   const repay = useCallback(
-    async (marketAddress: string, loanId: string) => {
+    async (marketAddress: string, lendingAsset: string, loanId: string, totalRepayment: bigint) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
         if (!publicClient) throw new Error('Public client not available');
+
+        if (totalRepayment > BigInt(0)) {
+          const allowance = await publicClient.readContract({
+            address: lendingAsset as Address,
+            abi: parseAbi(ERC20_APPROVE_ABI),
+            functionName: 'allowance',
+            args: [walletClient.account.address, marketAddress as Address],
+          }) as bigint;
+
+          if (allowance < totalRepayment) {
+            const approveHash = await walletClient.writeContract({
+              address: lendingAsset as Address,
+              abi: parseAbi(ERC20_APPROVE_ABI),
+              functionName: 'approve',
+              args: [marketAddress as Address, totalRepayment],
+            });
+            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          }
+        }
 
         const hash = await walletClient.writeContract({
           address: marketAddress as Address,
@@ -153,12 +248,69 @@ export const useContractInteraction = () => {
     [walletClient, publicClient, clearError]
   );
 
+  // Adapter Registry read functions
+  const getAdapterRegistryInfo = useCallback(
+    async (registryAddress: string, adapterAddress: string) => {
+      if (!publicClient) throw new Error('Public client not available');
+      return publicClient.readContract({
+        address: registryAddress as Address,
+        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        functionName: 'getAdapterInfo',
+        args: [adapterAddress as Address],
+      });
+    },
+    [publicClient]
+  );
+
+  const getAdaptersByType = useCallback(
+    async (registryAddress: string, adapterType: number) => {
+      if (!publicClient) throw new Error('Public client not available');
+      return publicClient.readContract({
+        address: registryAddress as Address,
+        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        functionName: 'getAdaptersByType',
+        args: [adapterType],
+      });
+    },
+    [publicClient]
+  );
+
+  const getAllAdapters = useCallback(
+    async (registryAddress: string) => {
+      if (!publicClient) throw new Error('Public client not available');
+      return publicClient.readContract({
+        address: registryAddress as Address,
+        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        functionName: 'getAllAdapters',
+      });
+    },
+    [publicClient]
+  );
+
+  const isSelectable = useCallback(
+    async (registryAddress: string, adapterAddress: string) => {
+      if (!publicClient) throw new Error('Public client not available');
+      return publicClient.readContract({
+        address: registryAddress as Address,
+        abi: parseAbi(ADAPTER_REGISTRY_ABI),
+        functionName: 'isSelectable',
+        args: [adapterAddress as Address],
+      });
+    },
+    [publicClient]
+  );
+
   return {
+    approveToken,
     createMarket,
     depositLiquidity,
     requestLoan,
     repay,
     liquidate,
+    getAdapterRegistryInfo,
+    getAdaptersByType,
+    getAllAdapters,
+    isSelectable,
     isLoading,
     error,
     clearError,

@@ -19,6 +19,10 @@ contract MaliciousAssetAdapter is IAssetAdapter {
         theftAmount = _theftAmount;
     }
 
+    function configure(address, address) external {
+        // No-op for test mock
+    }
+
     function escrow(address from, uint256 amountOrId) external override {
         uint256 actual = amountOrId - theftAmount;
         IERC20(msg.sender).safeTransferFrom(from, msg.sender, actual);
@@ -51,12 +55,15 @@ contract ReentrancyAttackerAdapter is IAssetAdapter {
         attackMode = true;
     }
 
+    function configure(address, address) external {
+        // No-op for test mock
+    }
+
     function escrow(address from, uint256 amountOrId) external override {
         IERC20(msg.sender).safeTransferFrom(from, msg.sender, amountOrId);
 
-        // Attempt reentrancy
         if (attackMode && lendingMarket != address(0)) {
-            attackMode = false; // Prevent infinite loop
+            attackMode = false;
             try IReentrancyTarget(lendingMarket).repay(attackLoanId) {} catch {}
         }
     }

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAccount, usePublicClient } from "wagmi";
+import { type Address, parseAbi } from "viem";
 import { AdapterBadge } from "@/components/adapters/AdapterBadge";
-import { ADAPTER_TYPES } from "@/lib/contractAbis";
+import { ADAPTER_REGISTRY_ABI, ADAPTER_TYPES } from "@/lib/contractAbis";
+import { getContract } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
 import { PuzzlePiece } from "@phosphor-icons/react";
 
@@ -15,28 +18,66 @@ interface AdapterInfo {
   registeredAt: number;
 }
 
-// Mock data — in production, fetch from /api/v1/adapters
-const MOCK_ADAPTERS: AdapterInfo[] = [
-  { adapterAddress: "0x0000000000000000000000000000000000000001", adapterType: 0, verified: true, deprecated: false, auditReference: "Internal #1", registeredAt: 1700000000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000002", adapterType: 1, verified: true, deprecated: false, auditReference: "Internal #1", registeredAt: 1700000000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000003", adapterType: 1, verified: true, deprecated: false, auditReference: "", registeredAt: 1700001000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000005", adapterType: 3, verified: true, deprecated: false, auditReference: "Internal #1", registeredAt: 1700002000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000006", adapterType: 3, verified: true, deprecated: false, auditReference: "", registeredAt: 1700003000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000007", adapterType: 4, verified: true, deprecated: false, auditReference: "Internal #1", registeredAt: 1700004000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000008", adapterType: 4, verified: true, deprecated: false, auditReference: "Internal #1", registeredAt: 1700005000 },
-  { adapterAddress: "0x0000000000000000000000000000000000000009", adapterType: 4, verified: true, deprecated: false, auditReference: "Internal #1", registeredAt: 1700006000 },
-  { adapterAddress: "0x000000000000000000000000000000000000DEAD", adapterType: 3, verified: false, deprecated: true, auditReference: "", registeredAt: 1690000000 },
-];
-
 const TYPE_FILTERS = ["All", "ASSET", "ORACLE", "COMPLIANCE", "LIQUIDATION", "POSITION"] as const;
 
 export default function AdaptersPage() {
+  const { chain } = useAccount();
+  const chainId = chain?.id;
+  const publicClient = usePublicClient();
   const [filter, setFilter] = useState<string>("All");
+  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadAdapters() {
+      const registryAddress = getContract(chainId, "adapterRegistry");
+      if (!registryAddress || !publicClient) {
+        setError("No AdapterRegistry found for this chain");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const addresses = await publicClient.readContract({
+          address: registryAddress as Address,
+          abi: parseAbi(ADAPTER_REGISTRY_ABI),
+          functionName: "getAllAdapters",
+        }) as string[];
+
+        const results: AdapterInfo[] = [];
+        for (const addr of addresses) {
+          const info = await publicClient.readContract({
+            address: registryAddress as Address,
+            abi: parseAbi(ADAPTER_REGISTRY_ABI),
+            functionName: "getAdapterInfo",
+            args: [addr as Address],
+          }) as [string, number, string, boolean, boolean, string, bigint, bigint];
+
+          results.push({
+            adapterAddress: addr,
+            adapterType: Number(info[1]),
+            verified: info[3],
+            deprecated: info[4],
+            auditReference: info[5],
+            registeredAt: Number(info[6]),
+          });
+        }
+        setAdapters(results);
+      } catch (err: any) {
+        setError(err.message || "Failed to load adapters from registry");
+        console.warn("Failed to load adapters:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAdapters();
+  }, [chainId, publicClient]);
 
   const filtered =
     filter === "All"
-      ? MOCK_ADAPTERS
-      : MOCK_ADAPTERS.filter((a) => ADAPTER_TYPES[a.adapterType] === filter);
+      ? adapters
+      : adapters.filter((a) => ADAPTER_TYPES[a.adapterType] === filter);
 
   return (
     <div className="min-h-dvh">
@@ -48,7 +89,8 @@ export default function AdaptersPage() {
             <h1 className="text-2xl font-bold text-foreground text-balance">Adapter Registry</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Browse all registered adapters. Verified adapters have been audited and reviewed.
+            Browse all registered adapters. Data sourced from AdapterRegistry on-chain.
+            {chainId ? ` Chain: ${chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : chainId}` : ""}
           </p>
         </div>
 
@@ -69,6 +111,22 @@ export default function AdaptersPage() {
             </button>
           ))}
         </div>
+
+        {/* Loading */}
+        {loading && (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-24 rounded-2xl bg-muted/50 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {error && !loading && (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive">
+            {error}
+          </div>
+        )}
 
         {/* Adapter Cards Grid */}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -97,10 +155,12 @@ export default function AdaptersPage() {
           ))}
         </div>
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-16">
             <PuzzlePiece className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground text-sm">No adapters found for this filter.</p>
+            <p className="text-muted-foreground text-sm">
+              {adapters.length === 0 ? "No adapters registered yet." : "No adapters found for this filter."}
+            </p>
           </div>
         )}
       </main>

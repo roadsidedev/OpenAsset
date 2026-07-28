@@ -1,53 +1,124 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
-import { useAccount } from "wagmi";
-import { parseUnits } from "viem";
+import { useAccount, usePublicClient } from "wagmi";
+import { parseUnits, type Address } from "viem";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
+import { ADAPTER_REGISTRY_ABI, ERC20_APPROVE_ABI } from "@/lib/contractAbis";
+import { getContracts, type ChainContracts } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
-import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning } from "@phosphor-icons/react";
+import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet } from "@phosphor-icons/react";
 
-const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_MARKET_FACTORY_V2_ADDRESS || "";
+interface AdapterOption {
+  address: string;
+  name: string;
+  type: number;
+  verified: boolean;
+  deprecated: boolean;
+}
 
-const ADAPTERS = {
-  asset: [
-    { address: process.env.NEXT_PUBLIC_ERC20_ADAPTER_WETH || "0xBc09566675D50d7622545CBA2eD5D135Ae52e578", name: "ERC20Adapter (WETH)", type: 0, verified: true, deprecated: false },
-    { address: process.env.NEXT_PUBLIC_ERC20_ADAPTER_USDC || "0xd0448DE8c5bCA1B8f17359F28F301EADC4F4CBc3", name: "ERC20Adapter (USDC)", type: 0, verified: true, deprecated: false },
-  ],
-  oracle: [
-    { address: process.env.NEXT_PUBLIC_CHAINLINK_ADAPTER || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
-  ],
-  liquidation: [
-    { address: process.env.NEXT_PUBLIC_DEX_SWAP_LIQUIDATION_ADAPTER || "0x0615642340e70f0a48BC1BCB8bfb5551Ec055Fec", name: "DEXSwapLiquidationAdapter", type: 3, verified: true, deprecated: false },
-    { address: process.env.NEXT_PUBLIC_NFT_AUCTION_LIQUIDATION_ADAPTER || "0x2910b2f6851A210453CB43ED4E3A9fF7E138d881", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
-  ],
-  position: [
-    { address: process.env.NEXT_PUBLIC_STANDARD_POSITION_ADAPTER || "0x3D1F31C4AA2419184d6A56367816cE892167AFfE", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false, auditReference: "Internal audit #1" },
-    { address: process.env.NEXT_PUBLIC_SOULBOUND_POSITION_ADAPTER || "0xE24E121F044aDeaE9a5224c0b1Ea4aD79BF0F1Ce", name: "SoulboundPositionAdapter", type: 4, verified: true, deprecated: false, auditReference: "Internal audit #1" },
-    { address: process.env.NEXT_PUBLIC_TRANSFERABLE_POSITION_ADAPTER || "0xF1a56c7D0485476AF12B93AEbc6d769D449ebb66", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false, auditReference: "Internal audit #1" },
-  ],
-};
+const DEFAULT_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+
+const ADAPTER_TYPE_NAMES = ["ASSET", "ORACLE", "COMPLIANCE", "LIQUIDATION", "POSITION"];
 
 const STEP_ICONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export default function CreateMarketPage() {
   const router = useRouter();
-  const { address: userAddress } = useAccount();
+  const { address: userAddress, chain } = useAccount();
+  const chainId = chain?.id;
+  const publicClient = usePublicClient();
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
-  const { createMarket, isLoading, error: hookError, clearError } = useContractInteraction();
+  const { createMarket, depositLiquidity, isLoading, error: hookError, clearError } = useContractInteraction();
   const [txHash, setTxHash] = useState<string | null>(null);
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [adapters, setAdapters] = useState<Record<string, AdapterOption[]>>({});
+  const [loadingAdapters, setLoadingAdapters] = useState(true);
+
+  const contracts = getContracts(chainId);
+
+  // Load adapters from AdapterRegistry on-chain
+  useEffect(() => {
+    async function loadAdapters() {
+      if (!contracts?.adapterRegistry || !publicClient) {
+        setLoadingAdapters(false);
+        return;
+      }
+      try {
+        const grouped: Record<string, AdapterOption[]> = {};
+        for (const typeName of ADAPTER_TYPE_NAMES) {
+          grouped[typeName] = [];
+        }
+
+        const adapterAddresses = await publicClient.readContract({
+          address: contracts.adapterRegistry as Address,
+          abi: ADAPTER_REGISTRY_ABI,
+          functionName: "getAllAdapters",
+        }) as string[];
+
+        for (const addr of adapterAddresses) {
+          const info = await publicClient.readContract({
+            address: contracts.adapterRegistry as Address,
+            abi: ADAPTER_REGISTRY_ABI,
+            functionName: "getAdapterInfo",
+            args: [addr as Address],
+          }) as [string, number, string, boolean, boolean, string, bigint, bigint];
+
+          const typeIndex = Number(info[1]);
+          const typeName = ADAPTER_TYPE_NAMES[typeIndex] || "UNKNOWN";
+          const isVerified = info[3];
+          const isDeprecated = info[4];
+          const auditRef = info[5];
+
+          grouped[typeName] = grouped[typeName] || [];
+          grouped[typeName].push({
+            address: addr,
+            name: `${typeName} Adapter ${addr.slice(0, 8)}`,
+            type: typeIndex,
+            verified: isVerified,
+            deprecated: isDeprecated,
+          });
+        }
+
+        setAdapters(grouped);
+      } catch (err) {
+        console.warn("Failed to load adapters from registry, using defaults:", err);
+        setAdapters({
+          ASSET: [
+            { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
+            { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
+          ],
+          ORACLE: [
+            { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
+          ],
+          LIQUIDATION: [
+            { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter", type: 3, verified: true, deprecated: false },
+            { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
+          ],
+          POSITION: [
+            { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
+            { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter", type: 4, verified: true, deprecated: false },
+            { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
+          ],
+          COMPLIANCE: [],
+        });
+      } finally {
+        setLoadingAdapters(false);
+      }
+    }
+    loadAdapters();
+  }, [contracts, publicClient]);
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
 
   const handleDeploy = async () => {
     if (!userAddress) { setError("Please connect your wallet"); return; }
-    if (!FACTORY_ADDRESS) { setError("Factory address not configured"); return; }
+    if (!contracts?.marketFactory) { setError("Factory address not configured for this chain"); return; }
 
     setIsDeploying(true);
     setError(null);
@@ -59,7 +130,7 @@ export default function CreateMarketPage() {
         collateralAsset: formData.collateralAsset,
         assetAdapter: formData.assetAdapter,
         oracleAdapter: formData.oracleAdapter,
-        complianceAdapter: formData.enableCompliance ? formData.complianceAdapter : "0x0000000000000000000000000000000000000000",
+        complianceAdapter: formData.enableCompliance ? formData.complianceAdapter : "0x0000000000000000000000000000000000000000" as Address,
         liquidationAdapter: formData.liquidationAdapter,
         positionAdapter: formData.positionAdapter,
         lendingAsset: formData.lendingAsset,
@@ -81,7 +152,7 @@ export default function CreateMarketPage() {
         : BigInt(0);
 
       setTxHash("pending...");
-      const result = await createMarket(config, FACTORY_ADDRESS, initialLiquidity);
+      const result = await createMarket(config, contracts.marketFactory, initialLiquidity);
       setTxHash(result.txHash);
       setTimeout(() => {
         reset();
@@ -96,6 +167,14 @@ export default function CreateMarketPage() {
 
   const progress = (step / 8) * 100;
 
+  const getAssetAdapters = (): AdapterOption[] => {
+    const assetList = adapters["ASSET"] || [];
+    return assetList.length > 0 ? assetList : [
+      { address: contracts?.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
+      { address: contracts?.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
+    ];
+  };
+
   return (
     <div className="min-h-dvh">
       <main className="mx-auto max-w-2xl px-4 py-8 md:px-8 space-y-8">
@@ -108,6 +187,13 @@ export default function CreateMarketPage() {
           <p className="text-sm text-muted-foreground">
             Configure flat parameters and deploy an isolated lending market
           </p>
+        </div>
+
+        {/* Chain indicator */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2">
+          <Wallet className="h-3.5 w-3.5" />
+          <span>Chain: {chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : `Chain ${chainId}`}</span>
+          {!contracts && <span className="text-amber-500 font-medium">(unsupported)</span>}
         </div>
 
         {/* Step Indicator */}
@@ -161,11 +247,15 @@ export default function CreateMarketPage() {
               <AdapterSelector
                 label="Asset Adapter"
                 description="Handles collateral custody (escrow/release)"
-                adapters={ADAPTERS.asset}
+                adapters={getAssetAdapters()}
                 selected={formData.assetAdapter}
                 onSelect={(addr) => setFormData({ assetAdapter: addr })}
                 required
+                loading={loadingAdapters}
               />
+              {loadingAdapters && (
+                <p className="text-xs text-muted-foreground animate-pulse">Loading adapters from registry...</p>
+              )}
             </div>
           )}
 
@@ -178,10 +268,11 @@ export default function CreateMarketPage() {
               <AdapterSelector
                 label="Oracle Adapter"
                 description="Provides collateral price feeds with trust signal"
-                adapters={ADAPTERS.oracle}
+                adapters={adapters["ORACLE"] || []}
                 selected={formData.oracleAdapter}
                 onSelect={(addr) => setFormData({ oracleAdapter: addr })}
                 required
+                loading={loadingAdapters}
               />
             </div>
           )}
@@ -227,10 +318,11 @@ export default function CreateMarketPage() {
               <AdapterSelector
                 label="Liquidation Adapter"
                 description="How defaults are resolved"
-                adapters={ADAPTERS.liquidation}
+                adapters={adapters["LIQUIDATION"] || []}
                 selected={formData.liquidationAdapter}
                 onSelect={(addr) => setFormData({ liquidationAdapter: addr })}
                 required
+                loading={loadingAdapters}
               />
             </div>
           )}
@@ -244,10 +336,11 @@ export default function CreateMarketPage() {
               <AdapterSelector
                 label="Position Adapter"
                 description="Standard: cheapest gas. Soulbound: non-transferable NFT. Transferable: sellable position."
-                adapters={ADAPTERS.position}
+                adapters={adapters["POSITION"] || []}
                 selected={formData.positionAdapter}
                 onSelect={(addr) => setFormData({ positionAdapter: addr })}
                 required
+                loading={loadingAdapters}
               />
             </div>
           )}
@@ -327,7 +420,8 @@ export default function CreateMarketPage() {
                   type="text"
                   value={formData.lendingAsset}
                   onChange={(e) => setFormData({ lendingAsset: e.target.value })}
-                  className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
+                  placeholder={contracts?.usdc || DEFAULT_USDC}
+                  className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 font-mono text-xs"
                 />
               </div>
               <div className="space-y-2">
@@ -411,10 +505,10 @@ export default function CreateMarketPage() {
           ) : (
             <button
               onClick={handleDeploy}
-              disabled={isDeploying || !FACTORY_ADDRESS}
+              disabled={isDeploying || !contracts?.marketFactory}
               className={cn(
                 "flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold transition-all",
-                isDeploying || !FACTORY_ADDRESS
+                isDeploying || !contracts?.marketFactory
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-glow active-press"
               )}

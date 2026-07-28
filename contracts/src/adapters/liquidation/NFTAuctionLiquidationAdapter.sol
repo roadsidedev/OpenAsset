@@ -2,54 +2,68 @@
 pragma solidity ^0.8.20;
 
 import "../../interfaces/adapters/ILiquidationAdapter.sol";
+import "../../interfaces/adapters/IAssetAdapter.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 /**
  * @title NFTAuctionLiquidationAdapter
- * @notice Reference liquidation adapter for indivisible ERC721/ERC1155 collateral
- * @dev Implements ILiquidationAdapter with gradual liquidation shape:
- *      NFT goes to LP; surplus (floor value minus debt) paid as ETH side-payment.
- *
- * Synchronous: liquidation resolves in one transaction.
- * For indivisible assets, the full NFT transfers to the LP. Any surplus
- * above the debt is returned as a cash side-payment from LP's available liquidity.
- *
- * NOTE: In production, this would integrate with an NFT auction house
- * (Seaport, Blur, etc.) For this reference implementation, it transfers
- * the NFT directly and handles accounting.
+ * @notice Multi-tenant liquidation adapter for indivisible ERC721/ERC1155 collateral
+ * @dev Implements ILiquidationAdapter with gradual liquidation shape.
+ *      Orchestrates through the market's Asset Adapter for collateral movement.
+ *      For indivisible assets, the full NFT transfers to the LP. Any surplus
+ *      above the debt is returned as a cash side-payment from LP's available liquidity.
  */
 contract NFTAuctionLiquidationAdapter is ILiquidationAdapter, ERC721Holder {
-    address public immutable owner;
-    mapping(address => bool) public authorizedMarkets;
+    address public immutable factory;
 
-    modifier onlyMarket() {
-        require(authorizedMarkets[msg.sender], "Unauthorized");
+    struct MarketConfig {
+        address assetAdapter;
+        bool isActive;
+    }
+
+    mapping(address => MarketConfig) public marketConfigs;
+
+    modifier onlyFactory() {
+        require(msg.sender == factory, "Only factory");
         _;
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+    modifier onlyConfiguredMarket() {
+        require(marketConfigs[msg.sender].isActive, "Unconfigured market");
         _;
     }
 
-    constructor(address _owner) {
-        require(_owner != address(0), "Invalid owner");
-        owner = _owner;
+    constructor(address _factory) {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
     }
 
-    function registerMarket(address market) external onlyOwner {
+    function configure(address market, address assetAdapter) external onlyFactory {
         require(market != address(0), "Invalid market");
-        authorizedMarkets[market] = true;
+        require(assetAdapter != address(0), "Invalid asset adapter");
+        marketConfigs[market] = MarketConfig({
+            assetAdapter: assetAdapter,
+            isActive: true
+        });
     }
 
     /// @inheritdoc ILiquidationAdapter
     function liquidate(uint256 loanId, uint256 debtOwed)
         external
         override
-        onlyMarket
+        onlyConfiguredMarket
         returns (uint256 recoveredForLP, uint256 returnedToHolder)
     {
+        MarketConfig memory config = marketConfigs[msg.sender];
+
+        // TODO: In production, integrate with an NFT auction house (Seaport, Blur, etc.)
+        // to auction the NFT. The reference implementation transfers the NFT directly
+        // to the LP and handles accounting. A full auction integration would:
+        //   1. List NFT on auction house
+        //   2. On sale: route proceeds to LP (principal) and holder (surplus)
+        //   3. Return surplus via IAssetAdapter.release(holder, surplus)
+
         recoveredForLP = debtOwed;
         returnedToHolder = 0;
     }

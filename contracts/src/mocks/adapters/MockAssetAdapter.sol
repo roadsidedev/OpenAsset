@@ -13,7 +13,13 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 contract MockAssetAdapter is IAssetAdapter {
     using SafeERC20 for IERC20;
 
-    address public immutable collateralToken;
+    address public collateralToken;
+    mapping(address => address) public marketTokens;
+
+    function configure(address market, address _collateralToken) external {
+        marketTokens[market] = _collateralToken;
+        collateralToken = _collateralToken;
+    }
 
     // Configurable: if true, escrow will under-deliver (for testing defensive invariants)
     bool public shouldUnderDeliver;
