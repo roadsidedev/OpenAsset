@@ -1,6 +1,6 @@
 "use client";
 
-import { AdapterBadge } from "./AdapterBadge";
+import { AdapterCard } from "./AdapterCard";
 import { cn } from "@/lib/utils";
 
 export interface Adapter {
@@ -21,6 +21,7 @@ interface AdapterSelectorProps {
   required?: boolean;
   deprecationWarning?: string;
   loading?: boolean;
+  chainId?: number;
 }
 
 export function AdapterSelector({
@@ -31,6 +32,7 @@ export function AdapterSelector({
   onSelect,
   required,
   deprecationWarning,
+  chainId,
 }: AdapterSelectorProps) {
   const selectableAdapters = adapters.filter((a) => !a.deprecated);
 
@@ -53,29 +55,13 @@ export function AdapterSelector({
 
       <div className="space-y-2">
         {selectableAdapters.map((adapter) => (
-          <button
+          <AdapterCard
             key={adapter.address}
-            onClick={() => onSelect(adapter.address)}
-            className={cn(
-              "w-full rounded-xl border p-3 text-left transition-all",
-              selected === adapter.address
-                ? "border-ice-400 bg-ice-50 dark:bg-ice-900/20"
-                : "border-border bg-muted/30 hover:border-ice-300/50"
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-sm font-medium text-foreground">{adapter.name}</span>
-                <span className="ml-2 text-xs text-muted-foreground font-mono">
-                  {adapter.address.slice(0, 6)}...{adapter.address.slice(-4)}
-                </span>
-              </div>
-              <AdapterBadge verified={adapter.verified} deprecated={adapter.deprecated} />
-            </div>
-            {adapter.auditReference && (
-              <p className="mt-1 text-xs text-muted-foreground">Audit: {adapter.auditReference}</p>
-            )}
-          </button>
+            adapter={adapter}
+            chainId={chainId}
+            selected={selected === adapter.address}
+            onSelect={() => onSelect(adapter.address)}
+          />
         ))}
       </div>
 

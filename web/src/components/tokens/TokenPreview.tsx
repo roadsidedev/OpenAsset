@@ -1,0 +1,100 @@
+'use client';
+
+import { cn } from '@/lib/utils';
+import { Coins, Image, Stamp, Lock, ArrowsClockwise, Swap, Gavel, ChartLine, TrendUp, PuzzlePiece } from '@phosphor-icons/react';
+
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Coins,
+  Image,
+  Stamp,
+  Lock,
+  ArrowsClockwise,
+  Swap,
+  Gavel,
+  ChartLine,
+  TrendUp,
+  PuzzlePiece,
+};
+
+interface TokenPreviewProps {
+  name: string;
+  symbol: string;
+  decimals: number;
+  logoUri?: string | null;
+  address?: string;
+  error?: string | null;
+  compact?: boolean;
+}
+
+function GenericTokenIcon({ symbol, className }: { symbol: string; className?: string }) {
+  return (
+    <div className={cn(
+      'flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground',
+      className,
+    )}>
+      {symbol ? symbol.charAt(0).toUpperCase() : '?'}
+    </div>
+  );
+}
+
+export function TokenPreview({ name, symbol, decimals, logoUri, address, error, compact }: TokenPreviewProps) {
+  if (error) {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+        <svg className="h-4 w-4 mt-0.5 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 10.5a.75.75 0 110-1.5.75.75 0 010 1.5zM8.75 4.75a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z"/>
+        </svg>
+        <span>{error}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(
+      'flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3',
+      compact && 'p-2',
+    )}>
+      {logoUri ? (
+        <img
+          src={logoUri}
+          alt={`${symbol} logo`}
+          className={cn('h-8 w-8 rounded-full object-contain', compact && 'h-6 w-6')}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      ) : (
+        <GenericTokenIcon symbol={symbol} className={compact ? 'h-6 w-6 text-[10px]' : ''} />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={cn('font-semibold text-foreground', compact ? 'text-xs' : 'text-sm')}>
+            {name}
+          </span>
+          <span className="text-xs text-muted-foreground">({symbol})</span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-xs text-muted-foreground">{decimals} decimals</span>
+          <span className="text-[10px] text-emerald-500 font-medium">ERC20 verified</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TokenIcon({ symbol, logoUri, className }: { symbol: string; logoUri?: string | null; className?: string }) {
+  if (logoUri) {
+    return (
+      <img
+        src={logoUri}
+        alt={`${symbol} logo`}
+        className={cn('h-6 w-6 rounded-full object-contain', className)}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+    );
+  }
+  return <GenericTokenIcon symbol={symbol} className={className} />;
+}
+
+export function AdapterIcon({ iconName, className }: { iconName: string; className?: string }) {
+  const IconComponent = ICON_MAP[iconName] || PuzzlePiece;
+  return <IconComponent className={cn('h-5 w-5', className)} />;
+}

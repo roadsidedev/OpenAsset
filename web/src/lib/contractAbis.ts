@@ -38,11 +38,11 @@ export const MARKET_FACTORY_ABI = [
     ],
     outputs: [{ name: '', type: 'address' }],
   },
-  'function getMarketCount() external view returns (uint256)',
-  'function getAllMarkets() external view returns (address[])',
-  'function isMarket(address) external view returns (bool)',
-  'function isAllowedLendingAsset(address) external view returns (bool)',
-  'event MarketCreated(address indexed marketAddress, address indexed lpAddress, address indexed collateralAsset, uint256 initialLiquidity, uint256 creationFee)',
+  { name: 'getMarketCount', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'getAllMarkets', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address[]' }] },
+  { name: 'isMarket', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'isAllowedLendingAsset', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'MarketCreated', type: 'event', inputs: [{ name: 'marketAddress', type: 'address', indexed: true }, { name: 'lpAddress', type: 'address', indexed: true }, { name: 'collateralAsset', type: 'address', indexed: true }, { name: 'initialLiquidity', type: 'uint256', indexed: false }, { name: 'creationFee', type: 'uint256', indexed: false }] },
 ] as const;
 
 export const LENDING_MARKET_ABI = [
@@ -92,13 +92,13 @@ export const ADAPTER_REGISTRY_ABI = [
       },
     ],
   },
-  'function isSelectable(address) external view returns (bool)',
-  'function getAllAdapters() external view returns (address[])',
-  'function getAdaptersByType(uint8 adapterType) external view returns (address[])',
-  'function getTotalAdapterCount() external view returns (uint256)',
-  'event AdapterRegistered(address indexed adapter, uint8 indexed adapterType, address indexed registeredBy)',
-  'event AdapterVerified(address indexed adapter, string auditReference)',
-  'event AdapterDeprecated(address indexed adapter, string reason)',
+  { name: 'isSelectable', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'getAllAdapters', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address[]' }] },
+  { name: 'getAdaptersByType', type: 'function', stateMutability: 'view', inputs: [{ name: 'adapterType', type: 'uint8' }], outputs: [{ name: '', type: 'address[]' }] },
+  { name: 'getTotalAdapterCount', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'AdapterRegistered', type: 'event', inputs: [{ name: 'adapter', type: 'address', indexed: true }, { name: 'adapterType', type: 'uint8', indexed: true }, { name: 'registeredBy', type: 'address', indexed: true }] },
+  { name: 'AdapterVerified', type: 'event', inputs: [{ name: 'adapter', type: 'address', indexed: true }, { name: 'auditReference', type: 'string', indexed: false }] },
+  { name: 'AdapterDeprecated', type: 'event', inputs: [{ name: 'adapter', type: 'address', indexed: true }, { name: 'reason', type: 'string', indexed: false }] },
 ] as const;
 
 export const IORACLE_ADAPTER_ABI = [

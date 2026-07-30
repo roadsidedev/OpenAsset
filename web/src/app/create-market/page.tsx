@@ -6,9 +6,12 @@ import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
 import { useAccount, usePublicClient } from "wagmi";
 import { parseUnits, type Address } from "viem";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
+import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { ADAPTER_REGISTRY_ABI, ERC20_APPROVE_ABI } from "@/lib/contractAbis";
 import { getContracts, type ChainContracts } from "@/lib/contracts";
+import { getAdapterMeta } from "@/lib/adapterRegistry";
+import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { cn } from "@/lib/utils";
 import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet } from "@phosphor-icons/react";
 
@@ -40,6 +43,17 @@ export default function CreateMarketPage() {
   const [loadingAdapters, setLoadingAdapters] = useState(true);
 
   const contracts = getContracts(chainId);
+
+  const { data: collateralToken } = useTokenMetadata(
+    formData.collateralAsset && formData.collateralAsset.startsWith('0x') && formData.collateralAsset.length === 42
+      ? formData.collateralAsset : undefined,
+    chainId,
+  );
+  const { data: lendingToken } = useTokenMetadata(
+    formData.lendingAsset && formData.lendingAsset.startsWith('0x') && formData.lendingAsset.length === 42
+      ? formData.lendingAsset : undefined,
+    chainId,
+  );
 
   // Load adapters from AdapterRegistry on-chain
   useEffect(() => {
@@ -234,16 +248,14 @@ export default function CreateMarketPage() {
               <p className="text-sm text-muted-foreground">
                 Select the collateral token and asset adapter for this market.
               </p>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground">Collateral Token Address</label>
-                <input
-                  type="text"
-                  placeholder="0x... (ERC20 / ERC721 / ERC3643)"
-                  value={formData.collateralAsset}
-                  onChange={(e) => setFormData({ collateralAsset: e.target.value })}
-                  className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 placeholder:text-muted-foreground"
-                />
-              </div>
+              <TokenAddressInput
+                label="Collateral Token Address"
+                placeholder="0x... (ERC20 / ERC721 / ERC3643)"
+                value={formData.collateralAsset}
+                onChange={(addr) => setFormData({ collateralAsset: addr })}
+                chainId={chainId}
+                required
+              />
               <AdapterSelector
                 label="Asset Adapter"
                 description="Handles collateral custody (escrow/release)"
@@ -252,6 +264,7 @@ export default function CreateMarketPage() {
                 onSelect={(addr) => setFormData({ assetAdapter: addr })}
                 required
                 loading={loadingAdapters}
+                chainId={chainId}
               />
               {loadingAdapters && (
                 <p className="text-xs text-muted-foreground animate-pulse">Loading adapters from registry...</p>
@@ -273,6 +286,7 @@ export default function CreateMarketPage() {
                 onSelect={(addr) => setFormData({ oracleAdapter: addr })}
                 required
                 loading={loadingAdapters}
+                chainId={chainId}
               />
             </div>
           )}
@@ -323,6 +337,7 @@ export default function CreateMarketPage() {
                 onSelect={(addr) => setFormData({ liquidationAdapter: addr })}
                 required
                 loading={loadingAdapters}
+                chainId={chainId}
               />
             </div>
           )}
@@ -341,6 +356,7 @@ export default function CreateMarketPage() {
                 onSelect={(addr) => setFormData({ positionAdapter: addr })}
                 required
                 loading={loadingAdapters}
+                chainId={chainId}
               />
             </div>
           )}
@@ -414,16 +430,14 @@ export default function CreateMarketPage() {
               <p className="text-sm text-muted-foreground">
                 Select the stablecoin for lending and provide initial liquidity.
               </p>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground">Lending Asset (Stablecoin)</label>
-                <input
-                  type="text"
-                  value={formData.lendingAsset}
-                  onChange={(e) => setFormData({ lendingAsset: e.target.value })}
-                  placeholder={contracts?.usdc || DEFAULT_USDC}
-                  className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 font-mono text-xs"
-                />
-              </div>
+              <TokenAddressInput
+                label="Lending Asset (Stablecoin)"
+                placeholder={contracts?.usdc || DEFAULT_USDC}
+                value={formData.lendingAsset}
+                onChange={(addr) => setFormData({ lendingAsset: addr })}
+                chainId={chainId}
+                required
+              />
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground">Initial Liquidity (tokens)</label>
                 <input
@@ -445,20 +459,27 @@ export default function CreateMarketPage() {
               </p>
               <div className="rounded-2xl border border-border bg-muted/50 p-4 text-xs space-y-2.5">
                 {[
-                  ["Collateral", formData.collateralAsset.slice(0, 10) + "..."],
-                  ["Oracle", formData.oracleAdapter.slice(0, 10) + "..."],
+                  ["Collateral", collateralToken?.isValid
+                    ? `${collateralToken.name} (${collateralToken.symbol})`
+                    : formData.collateralAsset.slice(0, 10) + "..."],
+                  ["Oracle", getAdapterMeta(chainId, formData.oracleAdapter)?.name
+                    || formData.oracleAdapter.slice(0, 10) + "..."],
                   ["Compliance", formData.enableCompliance ? "Enabled" : "Disabled"],
-                  ["Liquidation", formData.liquidationAdapter.slice(0, 10) + "..."],
-                  ["Position", formData.positionAdapter.slice(0, 10) + "..."],
+                  ["Liquidation", getAdapterMeta(chainId, formData.liquidationAdapter)?.name
+                    || formData.liquidationAdapter.slice(0, 10) + "..."],
+                  ["Position", getAdapterMeta(chainId, formData.positionAdapter)?.name
+                    || formData.positionAdapter.slice(0, 10) + "..."],
                   ["LTV", `${formData.ltv}%`],
                   ["APR", `${formData.apr}%`],
                   ["Duration", `${formData.duration} days`],
-                  ["Lending Asset", formData.lendingAsset.slice(0, 10) + "..."],
+                  ["Lending Asset", lendingToken?.isValid
+                    ? `${lendingToken.name} (${lendingToken.symbol})`
+                    : formData.lendingAsset.slice(0, 10) + "..."],
                   ["Liquidity", `${formData.liquidity} tokens`],
                 ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between">
+                  <div key={label} className="flex justify-between items-center">
                     <span className="text-muted-foreground">{label}:</span>
-                    <span className="font-medium text-foreground">{value}</span>
+                    <span className="font-medium text-foreground text-right">{value}</span>
                   </div>
                 ))}
               </div>
