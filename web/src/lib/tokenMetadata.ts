@@ -27,7 +27,7 @@ interface TokenInfo extends TokenMetadata {
 const UNISWAP_TOKEN_LISTS: Record<number, string> = {
   1: 'https://raw.githubusercontent.com/Uniswap/token-lists/main/token-lists/src/tokens/mainnet.json',
   11155111: 'https://raw.githubusercontent.com/Uniswap/token-lists/main/token-lists/src/tokens/sepolia.json',
-  84532: 'https://raw.githubusercontent.com/Uniswap/token-lists/main/token-lists/src/tokens/base.json',
+  84532: 'https://tokens.coingecko.com/base/all.json',
 };
 
 const logoCache = new Map<string, string | null>();

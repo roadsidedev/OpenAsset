@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
 import { useAccount, usePublicClient } from "wagmi";
@@ -40,9 +40,8 @@ export default function CreateMarketPage() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [adapters, setAdapters] = useState<Record<string, AdapterOption[]>>({});
+  const [onChainAdapters, setOnChainAdapters] = useState<Record<string, AdapterOption[]> | null>(null);
   const [loadingAdapters, setLoadingAdapters] = useState(true);
-  const hasLoadedRef = useRef(false);
 
   const contracts = getContracts(chainId);
 
@@ -57,12 +56,39 @@ export default function CreateMarketPage() {
     chainId,
   );
 
-  // Deduplicate adapters by address
-  const dedupedAdapters = useMemo(() => {
+  // Always-available fallback adapters from contract addresses
+  const fallbackAdapters = useMemo((): Record<string, AdapterOption[]> => {
+    if (!contracts) return {};
+    return {
+      ASSET: [
+        { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
+        { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
+      ].filter(a => a.address),
+      ORACLE: [
+        { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
+        ...(contracts.uniswapV3TWAPAdapter ? [{ address: contracts.uniswapV3TWAPAdapter, name: "UniswapV3TWAPAdapter", type: 1, verified: true, deprecated: false }] : []),
+      ].filter(a => a.address),
+      LIQUIDATION: [
+        { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter", type: 3, verified: true, deprecated: false },
+        { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
+      ].filter(a => a.address),
+      POSITION: [
+        { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
+        { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter", type: 4, verified: true, deprecated: false },
+        { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
+      ].filter(a => a.address),
+      COMPLIANCE: [],
+    };
+  }, [contracts]);
+
+  // Merge on-chain data with fallbacks, deduplicate by address
+  const adapters = useMemo(() => {
+    const source = onChainAdapters || fallbackAdapters;
     const result: Record<string, AdapterOption[]> = {};
-    for (const [type, list] of Object.entries(adapters)) {
+    for (const type of ADAPTER_TYPE_NAMES) {
+      const items = source[type] || [];
       const seen = new Map<string, AdapterOption>();
-      for (const adapter of list) {
+      for (const adapter of items) {
         const key = adapter.address.toLowerCase();
         if (!seen.has(key)) {
           seen.set(key, adapter);
@@ -71,24 +97,12 @@ export default function CreateMarketPage() {
       result[type] = Array.from(seen.values());
     }
     return result;
-  }, [adapters]);
+  }, [onChainAdapters, fallbackAdapters]);
 
-  // Fallback adapters - only used AFTER the first on-chain fetch attempt
-  const assetAdapters = useMemo(() => {
-    const list = dedupedAdapters["ASSET"] || [];
-    if (list.length > 0 || hasLoadedRef.current) return list;
-    if (!contracts) return [];
-    return [
-      { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
-      { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
-    ].filter(a => a.address);
-  }, [dedupedAdapters, contracts]);
-
-  // Load adapters from AdapterRegistry on-chain
+  // Load adapters from AdapterRegistry on-chain (enhances fallbacks with live data)
   useEffect(() => {
     async function loadAdapters() {
       if (!contracts?.adapterRegistry || !publicClient) {
-        hasLoadedRef.current = true;
         setLoadingAdapters(false);
         return;
       }
@@ -104,56 +118,36 @@ export default function CreateMarketPage() {
           functionName: "getAllAdapters",
         }) as string[];
 
+        // Process each adapter individually — one failure should not kill the batch
         for (const addr of adapterAddresses) {
-          const info = await publicClient.readContract({
-            address: contracts.adapterRegistry as Address,
-            abi: ADAPTER_REGISTRY_ABI,
-            functionName: "getAdapterInfo",
-            args: [addr as Address],
-          }) as [string, number, string, boolean, boolean, string, bigint, bigint];
+          try {
+            const info = await publicClient.readContract({
+              address: contracts.adapterRegistry as Address,
+              abi: ADAPTER_REGISTRY_ABI,
+              functionName: "getAdapterInfo",
+              args: [addr as Address],
+            }) as any[];
 
-          const typeIndex = Number(info[1]);
-          const typeName = ADAPTER_TYPE_NAMES[typeIndex] || "UNKNOWN";
-          const isVerified = info[3];
-          const isDeprecated = info[4];
+            const typeIndex = Number(info[1]);
+            const typeName = ADAPTER_TYPE_NAMES[typeIndex] || "UNKNOWN";
 
-          grouped[typeName] = grouped[typeName] || [];
-          grouped[typeName].push({
-            address: addr,
-            name: `${typeName} Adapter ${addr.slice(0, 8)}`,
-            type: typeIndex,
-            verified: isVerified,
-            deprecated: isDeprecated,
-          });
+            grouped[typeName] = grouped[typeName] || [];
+            grouped[typeName].push({
+              address: addr,
+              name: `${typeName} Adapter ${addr.slice(0, 8)}`,
+              type: typeIndex,
+              verified: Boolean(info[3]),
+              deprecated: Boolean(info[4]),
+            });
+          } catch (innerErr) {
+            console.warn(`Failed to read adapter info for ${addr}:`, innerErr);
+          }
         }
 
-        setAdapters(grouped);
+        setOnChainAdapters(grouped);
       } catch (err) {
-        console.warn("Failed to load adapters from registry, using defaults:", err);
-        // Only set fallback if we have contracts configured
-        if (contracts) {
-          setAdapters({
-            ASSET: [
-              { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
-              { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
-            ].filter(a => a.address),
-            ORACLE: [
-              { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
-            ].filter(a => a.address),
-            LIQUIDATION: [
-              { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter", type: 3, verified: true, deprecated: false },
-              { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
-            ].filter(a => a.address),
-            POSITION: [
-              { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
-              { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter", type: 4, verified: true, deprecated: false },
-              { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
-            ].filter(a => a.address),
-            COMPLIANCE: [],
-          });
-        }
+        console.warn("Failed to load adapters from registry, using fallbacks:", err);
       } finally {
-        hasLoadedRef.current = true;
         setLoadingAdapters(false);
       }
     }
@@ -284,7 +278,7 @@ export default function CreateMarketPage() {
               <AdapterSelector
                 label="Asset Adapter"
                 description="Handles collateral custody (escrow/release)"
-                adapters={assetAdapters}
+                adapters={adapters["ASSET"] || []}
                 selected={formData.assetAdapter}
                 onSelect={(addr) => setFormData({ assetAdapter: addr })}
                 required
@@ -306,7 +300,7 @@ export default function CreateMarketPage() {
               <AdapterSelect
                 label="Oracle Adapter"
                 description="Provides collateral price feeds with trust signal"
-                adapters={dedupedAdapters["ORACLE"] || []}
+                adapters={adapters["ORACLE"] || []}
                 selected={formData.oracleAdapter}
                 onSelect={(addr) => setFormData({ oracleAdapter: addr })}
                 required
@@ -357,7 +351,7 @@ export default function CreateMarketPage() {
               <AdapterSelect
                 label="Liquidation Adapter"
                 description="How defaults are resolved"
-                adapters={dedupedAdapters["LIQUIDATION"] || []}
+                adapters={adapters["LIQUIDATION"] || []}
                 selected={formData.liquidationAdapter}
                 onSelect={(addr) => setFormData({ liquidationAdapter: addr })}
                 required
@@ -376,7 +370,7 @@ export default function CreateMarketPage() {
               <AdapterSelect
                 label="Position Adapter"
                 description="Standard: cheapest gas. Soulbound: non-transferable NFT. Transferable: sellable position."
-                adapters={dedupedAdapters["POSITION"] || []}
+                adapters={adapters["POSITION"] || []}
                 selected={formData.positionAdapter}
                 onSelect={(addr) => setFormData({ positionAdapter: addr })}
                 required
