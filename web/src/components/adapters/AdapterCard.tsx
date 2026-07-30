@@ -5,7 +5,7 @@ import { AdapterBadge } from './AdapterBadge';
 import { AdapterIcon } from '@/components/tokens/TokenPreview';
 import { getAdapterMeta, type AdapterMetadata } from '@/lib/adapterRegistry';
 import { cn } from '@/lib/utils';
-import { CaretDown, Copy, Check } from '@phosphor-icons/react';
+import { CaretDown, Copy, Check, CheckCircle } from '@phosphor-icons/react';
 
 export interface Adapter {
   address: string;
@@ -52,19 +52,26 @@ export function AdapterCard({ adapter, chainId, selected, onSelect }: AdapterCar
       type="button"
       onClick={onSelect}
       className={cn(
-        'w-full rounded-xl border p-4 text-left transition-all',
+        'w-full rounded-xl border p-4 text-left transition-all relative',
         selected
-          ? 'border-ice-400 bg-ice-50 dark:bg-ice-900/20 ring-1 ring-ice-400/30'
+          ? 'border-ice-400 bg-ice-50 dark:bg-ice-900/20 ring-2 ring-ice-400/40'
           : 'border-border bg-muted/30 hover:border-ice-300/50 hover:bg-muted/50',
         adapter.deprecated && 'opacity-50 cursor-not-allowed',
       )}
       disabled={adapter.deprecated}
     >
+      {/* Selected indicator */}
+      {selected && (
+        <div className="absolute top-3 right-3">
+          <CheckCircle className="h-5 w-5 text-ice-500" />
+        </div>
+      )}
+
       <div className="flex items-start gap-3">
         {/* Icon */}
         <div className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-          selected ? 'bg-ice-400/20 text-ice-600 dark:text-ice-400' : 'bg-muted text-muted-foreground',
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors',
+          selected ? 'bg-ice-400/30 text-ice-600 dark:text-ice-400' : 'bg-muted text-muted-foreground',
         )}>
           <AdapterIcon iconName={iconName} />
         </div>
