@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
-import { useAccount, usePublicClient } from "wagmi";
-import { parseUnits, type Address } from "viem";
+import { useAccount } from "wagmi";
+import { parseUnits, isAddress, type Address } from "viem";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
 import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
-import { ADAPTER_REGISTRY_ABI, ERC20_APPROVE_ABI } from "@/lib/contractAbis";
-import { getContracts, type ChainContracts } from "@/lib/contracts";
+import { getContracts } from "@/lib/contracts";
 import { getAdapterMeta } from "@/lib/adapterRegistry";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { cn } from "@/lib/utils";
@@ -34,30 +33,25 @@ export default function CreateMarketPage() {
   const router = useRouter();
   const { address: userAddress, chain } = useAccount();
   const chainId = chain?.id;
-  const publicClient = usePublicClient();
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
   const { createMarket, depositLiquidity, isLoading, error: hookError, clearError } = useContractInteraction();
   const [txHash, setTxHash] = useState<string | null>(null);
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [onChainAdapters, setOnChainAdapters] = useState<Record<string, AdapterOption[]> | null>(null);
-  const [loadingAdapters, setLoadingAdapters] = useState(true);
 
-  const contracts = getContracts(chainId);
+  const contracts = useMemo(() => getContracts(chainId), [chainId]);
 
   const { data: collateralToken } = useTokenMetadata(
-    formData.collateralAsset && formData.collateralAsset.startsWith('0x') && formData.collateralAsset.length === 42
-      ? formData.collateralAsset : undefined,
+    isAddress(formData.collateralAsset) ? formData.collateralAsset : undefined,
     chainId,
   );
   const { data: lendingToken } = useTokenMetadata(
-    formData.lendingAsset && formData.lendingAsset.startsWith('0x') && formData.lendingAsset.length === 42
-      ? formData.lendingAsset : undefined,
+    isAddress(formData.lendingAsset) ? formData.lendingAsset : undefined,
     chainId,
   );
 
-  // Always-available fallback adapters from contract addresses
-  const fallbackAdapters = useMemo((): Record<string, AdapterOption[]> => {
+  // All adapters from hardcoded contract addresses — always available, no on-chain reads
+  const adapters = useMemo((): Record<string, AdapterOption[]> => {
     if (!contracts) return {};
     return {
       ASSET: [
@@ -80,79 +74,6 @@ export default function CreateMarketPage() {
       COMPLIANCE: [],
     };
   }, [contracts]);
-
-  // Merge on-chain data with fallbacks, deduplicate by address
-  const adapters = useMemo(() => {
-    const source = onChainAdapters || fallbackAdapters;
-    const result: Record<string, AdapterOption[]> = {};
-    for (const type of ADAPTER_TYPE_NAMES) {
-      const items = source[type] || [];
-      const seen = new Map<string, AdapterOption>();
-      for (const adapter of items) {
-        const key = adapter.address.toLowerCase();
-        if (!seen.has(key)) {
-          seen.set(key, adapter);
-        }
-      }
-      result[type] = Array.from(seen.values());
-    }
-    return result;
-  }, [onChainAdapters, fallbackAdapters]);
-
-  // Load adapters from AdapterRegistry on-chain (enhances fallbacks with live data)
-  useEffect(() => {
-    async function loadAdapters() {
-      if (!contracts?.adapterRegistry || !publicClient) {
-        setLoadingAdapters(false);
-        return;
-      }
-      try {
-        const grouped: Record<string, AdapterOption[]> = {};
-        for (const typeName of ADAPTER_TYPE_NAMES) {
-          grouped[typeName] = [];
-        }
-
-        const adapterAddresses = await publicClient.readContract({
-          address: contracts.adapterRegistry as Address,
-          abi: ADAPTER_REGISTRY_ABI,
-          functionName: "getAllAdapters",
-        }) as string[];
-
-        // Process each adapter individually — one failure should not kill the batch
-        for (const addr of adapterAddresses) {
-          try {
-            const info = await publicClient.readContract({
-              address: contracts.adapterRegistry as Address,
-              abi: ADAPTER_REGISTRY_ABI,
-              functionName: "getAdapterInfo",
-              args: [addr as Address],
-            }) as any[];
-
-            const typeIndex = Number(info[1]);
-            const typeName = ADAPTER_TYPE_NAMES[typeIndex] || "UNKNOWN";
-
-            grouped[typeName] = grouped[typeName] || [];
-            grouped[typeName].push({
-              address: addr,
-              name: `${typeName} Adapter ${addr.slice(0, 8)}`,
-              type: typeIndex,
-              verified: Boolean(info[3]),
-              deprecated: Boolean(info[4]),
-            });
-          } catch (innerErr) {
-            console.warn(`Failed to read adapter info for ${addr}:`, innerErr);
-          }
-        }
-
-        setOnChainAdapters(grouped);
-      } catch (err) {
-        console.warn("Failed to load adapters from registry, using fallbacks:", err);
-      } finally {
-        setLoadingAdapters(false);
-      }
-    }
-    loadAdapters();
-  }, [contracts, publicClient]);
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
@@ -282,12 +203,8 @@ export default function CreateMarketPage() {
                 selected={formData.assetAdapter}
                 onSelect={(addr) => setFormData({ assetAdapter: addr })}
                 required
-                loading={loadingAdapters}
                 chainId={chainId}
               />
-              {loadingAdapters && (
-                <p className="text-xs text-muted-foreground animate-pulse">Loading adapters from registry...</p>
-              )}
             </div>
           )}
 
@@ -304,7 +221,6 @@ export default function CreateMarketPage() {
                 selected={formData.oracleAdapter}
                 onSelect={(addr) => setFormData({ oracleAdapter: addr })}
                 required
-                loading={loadingAdapters}
                 chainId={chainId}
               />
             </div>
@@ -355,7 +271,6 @@ export default function CreateMarketPage() {
                 selected={formData.liquidationAdapter}
                 onSelect={(addr) => setFormData({ liquidationAdapter: addr })}
                 required
-                loading={loadingAdapters}
                 chainId={chainId}
               />
             </div>
@@ -374,7 +289,6 @@ export default function CreateMarketPage() {
                 selected={formData.positionAdapter}
                 onSelect={(addr) => setFormData({ positionAdapter: addr })}
                 required
-                loading={loadingAdapters}
                 chainId={chainId}
               />
             </div>
@@ -480,20 +394,23 @@ export default function CreateMarketPage() {
                 {[
                   ["Collateral", collateralToken?.isValid
                     ? `${collateralToken.name} (${collateralToken.symbol})`
-                    : formData.collateralAsset.slice(0, 10) + "..."],
-                  ["Oracle", getAdapterMeta(chainId, formData.oracleAdapter)?.name
-                    || formData.oracleAdapter.slice(0, 10) + "..."],
+                    : formData.collateralAsset ? formData.collateralAsset.slice(0, 10) + "..." : "Not set"],
+                  ["Oracle", formData.oracleAdapter
+                    ? (getAdapterMeta(chainId, formData.oracleAdapter)?.name || formData.oracleAdapter.slice(0, 10) + "...")
+                    : "Not selected"],
                   ["Compliance", formData.enableCompliance ? "Enabled" : "Disabled"],
-                  ["Liquidation", getAdapterMeta(chainId, formData.liquidationAdapter)?.name
-                    || formData.liquidationAdapter.slice(0, 10) + "..."],
-                  ["Position", getAdapterMeta(chainId, formData.positionAdapter)?.name
-                    || formData.positionAdapter.slice(0, 10) + "..."],
+                  ["Liquidation", formData.liquidationAdapter
+                    ? (getAdapterMeta(chainId, formData.liquidationAdapter)?.name || formData.liquidationAdapter.slice(0, 10) + "...")
+                    : "Not selected"],
+                  ["Position", formData.positionAdapter
+                    ? (getAdapterMeta(chainId, formData.positionAdapter)?.name || formData.positionAdapter.slice(0, 10) + "...")
+                    : "Not selected"],
                   ["LTV", `${formData.ltv}%`],
                   ["APR", `${formData.apr}%`],
                   ["Duration", `${formData.duration} days`],
                   ["Lending Asset", lendingToken?.isValid
                     ? `${lendingToken.name} (${lendingToken.symbol})`
-                    : formData.lendingAsset.slice(0, 10) + "..."],
+                    : formData.lendingAsset ? formData.lendingAsset.slice(0, 10) + "..." : "Not set"],
                   ["Liquidity", `${formData.liquidity} tokens`],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between items-center">
