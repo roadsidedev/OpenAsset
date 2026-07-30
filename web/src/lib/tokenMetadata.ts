@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
-import { isAddress, type Address } from 'viem';
+import { isAddress, getAddress } from 'viem';
 import { parseAbi } from 'viem';
 
 const ERC20_READ_ABI = parseAbi([
@@ -77,13 +77,14 @@ function getLocalLogo(symbol: string): string | null {
     WETH: 'https://assets.coingecko.com/coins/images/2518/small/weth.png',
     WBTC: 'https://assets.coingecko.com/coins/images/7598/small/wrapped_bitcoin_wbtc.png',
     LINK: 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
+    PEPE: 'https://assets.coingecko.com/coins/images/14261/small/pepe-token.jpeg',
   };
   return known[symbol.toUpperCase()] || null;
 }
 
 export function useTokenMetadata(address: string | undefined, chainId?: number) {
-  const publicClient = usePublicClient();
   const effectiveChainId = chainId || 84532;
+  const publicClient = usePublicClient({ chainId: effectiveChainId });
 
   const enabled = !!address && isAddress(address) && !!publicClient;
 
@@ -94,13 +95,18 @@ export function useTokenMetadata(address: string | undefined, chainId?: number) 
         return { address: address || '', isValid: false, name: '', symbol: '', decimals: 18, logoUri: null, error: 'No wallet connected' };
       }
 
-      const checksumAddr = address as Address;
+      let checksumAddr: string;
+      try {
+        checksumAddr = getAddress(address);
+      } catch {
+        return { address, isValid: false, name: '', symbol: '', decimals: 18, logoUri: null, error: 'Invalid address format.' };
+      }
 
       try {
         const [nameResult, symbolResult, decimalsResult] = await Promise.allSettled([
-          publicClient.readContract({ address: checksumAddr, abi: ERC20_READ_ABI, functionName: 'name' }),
-          publicClient.readContract({ address: checksumAddr, abi: ERC20_READ_ABI, functionName: 'symbol' }),
-          publicClient.readContract({ address: checksumAddr, abi: ERC20_READ_ABI, functionName: 'decimals' }),
+          publicClient.readContract({ address: checksumAddr as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'name' }),
+          publicClient.readContract({ address: checksumAddr as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'symbol' }),
+          publicClient.readContract({ address: checksumAddr as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'decimals' }),
         ]);
 
         const hasFailure = [nameResult, symbolResult, decimalsResult].some(r => r.status === 'rejected');
@@ -139,7 +145,7 @@ export function useTokenMetadata(address: string | undefined, chainId?: number) 
         };
       } catch (err: any) {
         return {
-          address: address,
+          address: checksumAddr || address,
           isValid: false,
           name: '',
           symbol: '',

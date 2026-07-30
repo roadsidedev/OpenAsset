@@ -35,7 +35,7 @@ declare module 'viem/chains' {
 declare module 'wagmi' {
   export function useAccount(): { address?: string; isConnected: boolean; chain?: any };
   export function useWalletClient(): { data?: any };
-  export function usePublicClient(): any;
+  export function usePublicClient(config?: { chainId?: number }): any;
   export function useSwitchChain(): any;
   export function http(url?: string): any;
   export function createConfig(config: any): any;

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
 import { useAccount, usePublicClient } from "wagmi";
 import { parseUnits, type Address } from "viem";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
+import { AdapterSelect } from "@/components/adapters/AdapterSelect";
 import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { ADAPTER_REGISTRY_ABI, ERC20_APPROVE_ABI } from "@/lib/contractAbis";
@@ -41,6 +42,7 @@ export default function CreateMarketPage() {
   const [error, setError] = useState<string | null>(null);
   const [adapters, setAdapters] = useState<Record<string, AdapterOption[]>>({});
   const [loadingAdapters, setLoadingAdapters] = useState(true);
+  const hasLoadedRef = useRef(false);
 
   const contracts = getContracts(chainId);
 
@@ -55,10 +57,38 @@ export default function CreateMarketPage() {
     chainId,
   );
 
+  // Deduplicate adapters by address
+  const dedupedAdapters = useMemo(() => {
+    const result: Record<string, AdapterOption[]> = {};
+    for (const [type, list] of Object.entries(adapters)) {
+      const seen = new Map<string, AdapterOption>();
+      for (const adapter of list) {
+        const key = adapter.address.toLowerCase();
+        if (!seen.has(key)) {
+          seen.set(key, adapter);
+        }
+      }
+      result[type] = Array.from(seen.values());
+    }
+    return result;
+  }, [adapters]);
+
+  // Fallback adapters - only used AFTER the first on-chain fetch attempt
+  const assetAdapters = useMemo(() => {
+    const list = dedupedAdapters["ASSET"] || [];
+    if (list.length > 0 || hasLoadedRef.current) return list;
+    if (!contracts) return [];
+    return [
+      { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
+      { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
+    ].filter(a => a.address);
+  }, [dedupedAdapters, contracts]);
+
   // Load adapters from AdapterRegistry on-chain
   useEffect(() => {
     async function loadAdapters() {
       if (!contracts?.adapterRegistry || !publicClient) {
+        hasLoadedRef.current = true;
         setLoadingAdapters(false);
         return;
       }
@@ -86,7 +116,6 @@ export default function CreateMarketPage() {
           const typeName = ADAPTER_TYPE_NAMES[typeIndex] || "UNKNOWN";
           const isVerified = info[3];
           const isDeprecated = info[4];
-          const auditRef = info[5];
 
           grouped[typeName] = grouped[typeName] || [];
           grouped[typeName].push({
@@ -101,26 +130,30 @@ export default function CreateMarketPage() {
         setAdapters(grouped);
       } catch (err) {
         console.warn("Failed to load adapters from registry, using defaults:", err);
-        setAdapters({
-          ASSET: [
-            { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
-            { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
-          ],
-          ORACLE: [
-            { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
-          ],
-          LIQUIDATION: [
-            { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter", type: 3, verified: true, deprecated: false },
-            { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
-          ],
-          POSITION: [
-            { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
-            { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter", type: 4, verified: true, deprecated: false },
-            { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
-          ],
-          COMPLIANCE: [],
-        });
+        // Only set fallback if we have contracts configured
+        if (contracts) {
+          setAdapters({
+            ASSET: [
+              { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
+              { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
+            ].filter(a => a.address),
+            ORACLE: [
+              { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
+            ].filter(a => a.address),
+            LIQUIDATION: [
+              { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter", type: 3, verified: true, deprecated: false },
+              { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
+            ].filter(a => a.address),
+            POSITION: [
+              { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
+              { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter", type: 4, verified: true, deprecated: false },
+              { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
+            ].filter(a => a.address),
+            COMPLIANCE: [],
+          });
+        }
       } finally {
+        hasLoadedRef.current = true;
         setLoadingAdapters(false);
       }
     }
@@ -180,14 +213,6 @@ export default function CreateMarketPage() {
   };
 
   const progress = (step / 8) * 100;
-
-  const getAssetAdapters = (): AdapterOption[] => {
-    const assetList = adapters["ASSET"] || [];
-    return assetList.length > 0 ? assetList : [
-      { address: contracts?.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
-      { address: contracts?.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
-    ];
-  };
 
   return (
     <div className="min-h-dvh">
@@ -259,7 +284,7 @@ export default function CreateMarketPage() {
               <AdapterSelector
                 label="Asset Adapter"
                 description="Handles collateral custody (escrow/release)"
-                adapters={getAssetAdapters()}
+                adapters={assetAdapters}
                 selected={formData.assetAdapter}
                 onSelect={(addr) => setFormData({ assetAdapter: addr })}
                 required
@@ -278,10 +303,10 @@ export default function CreateMarketPage() {
               <p className="text-sm text-muted-foreground">
                 Select the price oracle for this market. TWAP recommended for crypto; Chainlink for RWA.
               </p>
-              <AdapterSelector
+              <AdapterSelect
                 label="Oracle Adapter"
                 description="Provides collateral price feeds with trust signal"
-                adapters={adapters["ORACLE"] || []}
+                adapters={dedupedAdapters["ORACLE"] || []}
                 selected={formData.oracleAdapter}
                 onSelect={(addr) => setFormData({ oracleAdapter: addr })}
                 required
@@ -329,10 +354,10 @@ export default function CreateMarketPage() {
               <p className="text-sm text-muted-foreground">
                 How defaults are resolved. Async adapters (issuer redemption) require compliance.
               </p>
-              <AdapterSelector
+              <AdapterSelect
                 label="Liquidation Adapter"
                 description="How defaults are resolved"
-                adapters={adapters["LIQUIDATION"] || []}
+                adapters={dedupedAdapters["LIQUIDATION"] || []}
                 selected={formData.liquidationAdapter}
                 onSelect={(addr) => setFormData({ liquidationAdapter: addr })}
                 required
@@ -348,10 +373,10 @@ export default function CreateMarketPage() {
               <p className="text-sm text-muted-foreground">
                 How loan positions are represented and tracked.
               </p>
-              <AdapterSelector
+              <AdapterSelect
                 label="Position Adapter"
                 description="Standard: cheapest gas. Soulbound: non-transferable NFT. Transferable: sellable position."
-                adapters={adapters["POSITION"] || []}
+                adapters={dedupedAdapters["POSITION"] || []}
                 selected={formData.positionAdapter}
                 onSelect={(addr) => setFormData({ positionAdapter: addr })}
                 required
