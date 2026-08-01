@@ -32,9 +32,14 @@ contract SoulboundPositionAdapter is ERC721, IPositionAdapterInit, Initializable
         _;
     }
 
-    /// @notice Template constructor — only runs on implementation contract
-    constructor() ERC721("", "") {
-        factory = address(0xdead);
+    /// @notice Multi-tenant instance constructor — sets the factory so the MarketFactory can
+    ///         call registerMarket() directly. The clone-template initialize() path is preserved
+    ///         for backwards compatibility but is not required for the standard flow.
+    constructor(address _factory) ERC721("OpenAsset Market Soulbound Position", "rcSBP") {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+        _adapterName = "OpenAsset Market Soulbound Position";
+        _adapterSymbol = "rcSBP";
     }
 
     /**

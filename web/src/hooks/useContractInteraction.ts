@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { usePublicClient, useWalletClient } from 'wagmi';
 import { parseAbi, type Address } from 'viem';
 import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
+import { decodeContractError } from '@/lib/contractErrors';
 
 export const useContractInteraction = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -67,7 +68,7 @@ export const useContractInteraction = () => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = new Error(decodeContractError(err));
         setError(error);
         throw error;
       } finally {
@@ -113,7 +114,7 @@ export const useContractInteraction = () => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = new Error(decodeContractError(err));
         setError(error);
         throw error;
       } finally {
@@ -163,7 +164,7 @@ export const useContractInteraction = () => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = new Error(decodeContractError(err));
         setError(error);
         throw error;
       } finally {
@@ -210,7 +211,7 @@ export const useContractInteraction = () => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = new Error(decodeContractError(err));
         setError(error);
         throw error;
       } finally {
@@ -238,7 +239,7 @@ export const useContractInteraction = () => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
+        const error = new Error(decodeContractError(err));
         setError(error);
         throw error;
       } finally {

@@ -14,6 +14,9 @@ contract MockPositionAdapter is IPositionAdapter {
     // loanId => owner address
     mapping(uint256 => address) public positionOwners;
 
+    // market => authorized
+    mapping(address => bool) public authorizedMarkets;
+
     // Tracking
     uint256 public mintCount;
     uint256 public burnCount;
@@ -21,6 +24,12 @@ contract MockPositionAdapter is IPositionAdapter {
     event PositionMinted(uint256 indexed loanId, address indexed to);
     event PositionBurned(uint256 indexed loanId);
     event PositionTransferred(uint256 indexed loanId, address indexed from, address indexed to);
+
+    /// @notice Authorize a market to mint/burn positions on this adapter (called by the factory)
+    function registerMarket(address market) external {
+        require(market != address(0), "Invalid market");
+        authorizedMarkets[market] = true;
+    }
 
     function mint(address to, uint256 loanId) external override {
         positionOwners[loanId] = to;

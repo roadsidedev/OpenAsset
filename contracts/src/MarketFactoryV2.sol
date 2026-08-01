@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 import {LendingMarketV2} from "./LendingMarketV2.sol";
 import {MarketDeployer} from "./MarketDeployer.sol";
 import "./AdapterRegistry.sol";
@@ -27,6 +28,7 @@ import "./interfaces/adapters/IPositionAdapter.sol";
  */
 contract MarketFactoryV2 is ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using Address for address;
 
     // ============ Constants ============
 
@@ -201,9 +203,6 @@ contract MarketFactoryV2 is ReentrancyGuard {
         // Initialize market liquidity
         LendingMarketV2(marketAddress).initializeLiquidity(netLiquidity, config.lpAddress);
 
-        // Call configure() on each adapter to wire market-specific config
-        _configureAdapters(marketAddress, config);
-
         // Register market
         allMarkets.push(marketAddress);
         isMarket[marketAddress] = true;
@@ -262,8 +261,8 @@ contract MarketFactoryV2 is ReentrancyGuard {
             require(success, "Position adapter registration failed");
         }
 
-        // Grant delegated approval for Asset Adapter to move collateral from market
-        IERC20(config.collateralAsset).approve(config.assetAdapter, type(uint256).max);
+        // Note: collateral transfer approval is handled by the LendingMarketV2 constructor
+        // (guarded by Address.isContract). No approve needed here.
     }
 
     // ============ Validation Matrix ============
@@ -271,9 +270,9 @@ contract MarketFactoryV2 is ReentrancyGuard {
     /**
      * @notice Validate basic market configuration parameters
      */
-    function _validateMarketConfig(MarketConfig memory config) internal pure {
+    function _validateMarketConfig(MarketConfig memory config) internal view {
         require(config.lpAddress != address(0), "Invalid LP address");
-        require(config.collateralAsset != address(0), "Invalid collateral asset");
+        require(config.collateralAsset.isContract(), "Collateral must be a contract");
         require(config.assetAdapter != address(0), "Asset adapter required");
         require(config.oracleAdapter != address(0), "Oracle adapter required");
         require(config.liquidationAdapter != address(0), "Liquidation adapter required");

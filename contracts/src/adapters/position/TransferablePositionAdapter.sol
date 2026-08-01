@@ -36,9 +36,14 @@ contract TransferablePositionAdapter is ERC721, IPositionAdapterInit, Initializa
         _;
     }
 
-    /// @notice Template constructor — only runs on implementation contract
-    constructor() ERC721("", "") {
-        factory = address(0xdead);
+    /// @notice Multi-tenant instance constructor — sets the factory so the MarketFactory can
+    ///         call registerMarket() directly. The clone-template initialize() path is preserved
+    ///         for backwards compatibility but is not required for the standard flow.
+    constructor(address _factory) ERC721("OpenAsset Market Transferable Position", "rcTP") {
+        require(_factory != address(0), "Invalid factory");
+        factory = _factory;
+        _adapterName = "OpenAsset Market Transferable Position";
+        _adapterSymbol = "rcTP";
     }
 
     /**

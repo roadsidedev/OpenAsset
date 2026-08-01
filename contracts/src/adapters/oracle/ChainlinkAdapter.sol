@@ -6,59 +6,140 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title ChainlinkAdapter
- * @notice Multi-tenant oracle adapter wrapping a Chainlink price feed
- * @dev Implements IOracleAdapter with staleness detection and decimal normalization.
- *      Multi-tenancy: factory calls configure() once per market, storing the feed
- *      address for that market. A single instance can serve assets with different feeds.
+ * @notice Multi-tenant oracle adapter wrapping Chainlink price feeds with L2 sequencer support
+ * @dev Implements IOracleAdapter with staleness detection, decimal normalization and an
+ *      optional L2 Sequencer Uptime Feed check (Base, OP, Arbitrum, etc.).
+ *
+ *      Feeds are registered PER ASSET by the owner via registerFeed(). The MarketFactory
+ *      calls configure(market, asset) at market creation, which records the asset for the
+ *      market. getPrice() resolves the asset's current feed dynamically, so feed updates
+ *      propagate to all existing markets automatically.
+ *
+ *      If the L2 sequencer feed is configured, getPrice() returns isTrusted=false while the
+ *      sequencer is down or during the grace period after it comes back up.
  */
 contract ChainlinkAdapter is IOracleAdapter {
 
     address public immutable factory;
+    address public owner;
 
-    struct MarketConfig {
+    struct FeedConfig {
         AggregatorV3Interface feed;
         uint256 maxStaleness;
     }
 
-    mapping(address => MarketConfig) public marketConfigs;
+    /// @notice collateral asset => price feed configuration (set by owner)
+    mapping(address => FeedConfig) public assetFeeds;
+
+    /// @notice market => collateral asset (set by factory via configure())
+    mapping(address => address) public marketAssets;
+
+    /// @notice Optional L2 Sequencer Uptime Feed (address(0) disables the check)
+    AggregatorV3Interface public l2SequencerFeed;
+
+    /// @notice Seconds to wait after the sequencer comes back up before trusting prices
+    uint256 public constant SEQUENCER_GRACE_PERIOD = 3600;
 
     modifier onlyFactory() {
         require(msg.sender == factory, "Only factory");
         _;
     }
 
-    constructor(address _factory) {
-        require(_factory != address(0), "Invalid factory");
-        factory = _factory;
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
     }
 
-    function configure(address market, address asset) external onlyFactory {
-        require(market != address(0), "Invalid market");
-        // Asset is not stored directly — the factory passes it for interface uniformity.
-        // The MarketFactory calls configure() which routes via feed address set externally.
-        // Concrete Chainlink oracle feed addresses are registered per-asset via registerFeed().
+    event FeedRegistered(address indexed asset, address indexed feed, uint256 maxStalenessSeconds);
+    event FeedUnregistered(address indexed asset);
+    event SequencerFeedSet(address indexed sequencerFeed);
+    event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor(address _factory, address _owner) {
+        require(_factory != address(0), "Invalid factory");
+        require(_owner != address(0), "Invalid owner");
+        factory = _factory;
+        owner = _owner;
     }
 
     /**
-     * @notice Register a Chainlink feed for a specific market
-     * @param market Address of the LendingMarket contract
-     * @param feedAddress Chainlink AggregatorV3Interface feed address
-     * @param maxStalenessSeconds Maximum age before price is considered stale
+     * @notice Register (or update) the Chainlink price feed for a collateral asset
+     * @param asset Collateral token address
+     * @param feedAddress Chainlink AggregatorV3Interface proxy address
+     * @param maxStalenessSeconds Maximum age before the price is considered stale
      */
-    function registerFeed(address market, address feedAddress, uint256 maxStalenessSeconds) external onlyFactory {
-        require(market != address(0), "Invalid market");
+    function registerFeed(address asset, address feedAddress, uint256 maxStalenessSeconds) external onlyOwner {
+        require(asset != address(0), "Invalid asset");
         require(feedAddress != address(0), "Invalid feed");
-        marketConfigs[market] = MarketConfig({
+        assetFeeds[asset] = FeedConfig({
             feed: AggregatorV3Interface(feedAddress),
             maxStaleness: maxStalenessSeconds > 0 ? maxStalenessSeconds : 3600
         });
+        emit FeedRegistered(asset, feedAddress, maxStalenessSeconds);
+    }
+
+    /**
+     * @notice Remove the price feed for a collateral asset
+     */
+    function unregisterFeed(address asset) external onlyOwner {
+        delete assetFeeds[asset];
+        emit FeedUnregistered(asset);
+    }
+
+    /**
+     * @notice Set (or clear with address(0)) the L2 Sequencer Uptime Feed
+     * @dev On L2s with a published sequencer feed (Base mainnet, OP, Arbitrum) this
+     *      guards against stale prices during sequencer outages. Testnets that do not
+     *      publish a sequencer feed can leave this unset — the check is skipped.
+     */
+    function setL2SequencerFeed(address sequencerFeedAddress) external onlyOwner {
+        l2SequencerFeed = AggregatorV3Interface(sequencerFeedAddress);
+        emit SequencerFeedSet(sequencerFeedAddress);
+    }
+
+    /**
+     * @notice Transfer owner role to a new address
+     */
+    function transferOwner(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid owner");
+        emit OwnerTransferred(owner, newOwner);
+        owner = newOwner;
+    }
+
+    /**
+     * @dev Factory calls this once per market. Records the collateral asset so getPrice()
+     *      can resolve the current feed for that asset dynamically.
+     */
+    function configure(address market, address asset) external onlyFactory {
+        require(market != address(0), "Invalid market");
+        require(asset != address(0), "Invalid asset");
+        marketAssets[market] = asset;
     }
 
     /// @inheritdoc IOracleAdapter
     function getPrice() external view override returns (uint256 price, bool isTrusted, uint256 updatedAt) {
-        MarketConfig memory config = marketConfigs[msg.sender];
+        address asset = marketAssets[msg.sender];
+        FeedConfig memory config = assetFeeds[asset];
         if (address(config.feed) == address(0)) return (0, false, 0);
 
+        // 1. L2 sequencer liveness check (optional)
+        if (address(l2SequencerFeed) != address(0)) {
+            try l2SequencerFeed.latestRoundData() returns (
+                uint80 roundId,
+                int256 answer,
+                uint256 startedAt,
+                uint256,
+                uint80 answeredInRound
+            ) {
+                if (answer == 1) return (0, false, 0); // sequencer down
+                if (answeredInRound < roundId) return (0, false, 0);
+                if (block.timestamp - startedAt <= SEQUENCER_GRACE_PERIOD) return (0, false, 0);
+            } catch {
+                return (0, false, 0);
+            }
+        }
+
+        // 2. Price feed read with staleness detection
         try config.feed.latestRoundData() returns (
             uint80 roundId,
             int256 answer,
@@ -80,7 +161,8 @@ contract ChainlinkAdapter is IOracleAdapter {
 
     /// @inheritdoc IOracleAdapter
     function getHistoricalPrice(uint256) external view override returns (uint256) {
-        MarketConfig memory config = marketConfigs[msg.sender];
+        address asset = marketAssets[msg.sender];
+        FeedConfig memory config = assetFeeds[asset];
         if (address(config.feed) == address(0)) return 0;
         (, int256 answer,,,) = config.feed.latestRoundData();
         if (answer <= 0) return 0;

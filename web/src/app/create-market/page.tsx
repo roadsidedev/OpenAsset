@@ -3,8 +3,9 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { parseUnits, isAddress, type Address } from "viem";
+import { toast } from "sonner";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
 import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
@@ -12,6 +13,7 @@ import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { getContracts } from "@/lib/contracts";
 import { getAdapterMeta } from "@/lib/adapterRegistry";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
+import { decodeContractError } from "@/lib/contractErrors";
 import { cn } from "@/lib/utils";
 import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet } from "@phosphor-icons/react";
 
@@ -32,12 +34,11 @@ const STEP_ICONS = [1, 2, 3, 4, 5, 6, 7, 8];
 export default function CreateMarketPage() {
   const router = useRouter();
   const { address: userAddress, chain } = useAccount();
+  const publicClient = usePublicClient();
   const chainId = chain?.id;
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
-  const { createMarket, depositLiquidity, isLoading, error: hookError, clearError } = useContractInteraction();
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const { createMarket, clearError } = useContractInteraction();
   const [isDeploying, setIsDeploying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const contracts = useMemo(() => getContracts(chainId), [chainId]);
 
@@ -78,12 +79,61 @@ export default function CreateMarketPage() {
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
 
+  const validateConfig = async (): Promise<string | null> => {
+    if (!formData.collateralAsset) return "Collateral asset is required.";
+    if (!isAddress(formData.collateralAsset)) return "Collateral asset is not a valid address.";
+    if (!formData.lendingAsset) return "Lending asset is required.";
+    if (!isAddress(formData.lendingAsset)) return "Lending asset is not a valid address.";
+    if (!formData.assetAdapter) return "Asset adapter is required.";
+    if (!formData.oracleAdapter) return "Oracle adapter is required.";
+    if (!formData.liquidationAdapter) return "Liquidation adapter is required.";
+    if (!formData.positionAdapter) return "Position adapter is required.";
+
+    if (formData.ltv <= 0 || formData.ltv > 95) return "LTV must be between 1% and 95%.";
+    if (formData.apr < 0 || formData.apr > 100) return "APR must be between 0% and 100%.";
+    if (formData.duration <= 0 || formData.duration > 365) return "Duration must be between 1 and 365 days.";
+    if (formData.gracePeriod <= 0) return "Grace period must be greater than zero.";
+
+    if (!publicClient) return "Network client not available. Connect your wallet.";
+    if (!contracts?.marketFactory) return "Factory not configured for this chain.";
+
+    // Validate collateral is a deployed contract on this chain
+    const collateralCode = await publicClient.getBytecode({
+      address: formData.collateralAsset as Address,
+    });
+    if (!collateralCode || collateralCode === "0x") {
+      return "Collateral asset is not a smart contract on this network. Check you are using the correct token address for this chain.";
+    }
+
+    // Validate lending asset is allowlisted by the factory
+    const allowed = await publicClient.readContract({
+      address: contracts.marketFactory as Address,
+      abi: [{ name: 'isAllowedLendingAsset', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] }],
+      functionName: 'isAllowedLendingAsset',
+      args: [formData.lendingAsset as Address],
+    }).catch(() => false);
+    if (!allowed) {
+      return "The lending asset is not allowlisted by the factory. Use USDC on this network.";
+    }
+
+    return null;
+  };
+
   const handleDeploy = async () => {
-    if (!userAddress) { setError("Please connect your wallet"); return; }
-    if (!contracts?.marketFactory) { setError("Factory address not configured for this chain"); return; }
+    if (!userAddress) { toast.error("Please connect your wallet."); return; }
+    if (!contracts?.marketFactory) { toast.error("Factory address not configured for this chain."); return; }
+
+    const validationError = await validateConfig();
+    if (validationError) {
+      toast.error(validationError);
+      setStep(1);
+      return;
+    }
 
     setIsDeploying(true);
-    setError(null);
+    clearError();
+
+    const toastId = toast.loading("Waiting for wallet confirmation...");
 
     try {
       const durationSeconds = formData.duration * 86400;
@@ -113,15 +163,17 @@ export default function CreateMarketPage() {
         ? parseUnits(formData.liquidity, 6)
         : BigInt(0);
 
-      setTxHash("pending...");
       const result = await createMarket(config, contracts.marketFactory, initialLiquidity);
-      setTxHash(result.txHash);
+      toast.success("Market deployed successfully!", {
+        id: toastId,
+        description: `Tx: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`,
+      });
       setTimeout(() => {
         reset();
         router.push("/markets");
       }, 5000);
-    } catch (err: any) {
-      setError(err.message || "Deployment failed");
+    } catch (err) {
+      toast.error(decodeContractError(err), { id: toastId });
     } finally {
       setIsDeploying(false);
     }
@@ -422,21 +474,6 @@ export default function CreateMarketPage() {
             </div>
           )}
         </div>
-
-        {/* Error */}
-        {(error || hookError) && (
-          <div className="flex items-start gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-            <Warning className="h-4 w-4 mt-0.5 shrink-0" />
-            {error || hookError?.message}
-          </div>
-        )}
-
-        {/* TX Hash */}
-        {txHash && (
-          <div className="rounded-2xl border border-ice-300/30 bg-ice-50 dark:bg-ice-900/20 p-4 text-sm text-ice-600 dark:text-ice-300">
-            {txHash === "pending..." ? "Transaction pending..." : `Deployed! Tx: ${txHash.slice(0, 16)}...`}
-          </div>
-        )}
 
         {/* Navigation */}
         <div className="flex justify-between">

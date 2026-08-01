@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 import "./interfaces/adapters/IAssetAdapter.sol";
 import "./interfaces/adapters/IOracleAdapter.sol";
 import "./interfaces/adapters/IComplianceAdapter.sol";
@@ -55,6 +56,7 @@ contract LPTokenV2 is ERC20 {
  */
 contract LendingMarketV2 is ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    using Address for address;
 
     // ============ Constants ============
 
@@ -257,8 +259,13 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
             string(abi.encodePacked("oALP-", _collateralAsset))
         );
 
-        // Approve the asset adapter to transfer collateral from this market
-        IERC20(_collateralAsset).approve(_assetAdapter, type(uint256).max);
+        // Approve the asset adapter to move ERC20 collateral from this market.
+        // Guarded by Address.isContract so non-ERC20 collateral (EOA, ERC721, etc.)
+        // does not cause the constructor to revert. For ERC721 collateral the
+        // adapter-specific approval (setApprovalForAll) is handled by the ERC721Adapter.
+        if (_collateralAsset.isContract()) {
+            IERC20(_collateralAsset).safeApprove(_assetAdapter, type(uint256).max);
+        }
 
         status = MarketStatus.ACTIVE;
     }

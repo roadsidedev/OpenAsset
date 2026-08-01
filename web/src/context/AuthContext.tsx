@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { toast } from 'sonner';
 import { fetchFromApi } from '../lib/api';
 
 const AUTH_STORAGE_KEY = 'openasset_auth_token';
@@ -85,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthToken(token);
     } catch (err) {
       console.error('Failed to sign message:', err);
-      // Optional: Show toast error
+      toast.error('Failed to sign in. Please try again.');
     } finally {
       setIsSigning(false);
     }

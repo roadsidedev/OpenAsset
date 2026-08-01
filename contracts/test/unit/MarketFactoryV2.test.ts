@@ -27,9 +27,13 @@ describe("MarketFactoryV2", function () {
     const Registry = await ethers.getContractFactory("AdapterRegistry");
     registry = await Registry.deploy(governance.address);
 
-    // Deploy factory
+    // Deploy MarketDeployer (standalone deployer contract)
+    const Deployer = await ethers.getContractFactory("MarketDeployer");
+    const deployer = await Deployer.deploy();
+
+    // Deploy factory with the deployer
     const Factory = await ethers.getContractFactory("MarketFactoryV2");
-    factory = await Factory.deploy(owner.address, treasury.address, await registry.getAddress());
+    factory = await Factory.deploy(owner.address, treasury.address, await registry.getAddress(), await deployer.getAddress());
 
     // Deploy mock tokens
     const MockERC20 = await ethers.getContractFactory("MockERC20");
@@ -115,7 +119,7 @@ describe("MarketFactoryV2", function () {
       // Approve lending tokens to factory
       await lendingToken.connect(lp).approve(await factory.getAddress(), DEPOSIT_AMOUNT);
 
-      const tx = await factory.connect(lp).createMarket(config, { value: DEPOSIT_AMOUNT });
+      const tx = await factory.connect(lp).createMarket(config, DEPOSIT_AMOUNT);
       const receipt = await tx.wait();
 
       expect(await factory.getMarketCount()).to.equal(1);
@@ -150,7 +154,7 @@ describe("MarketFactoryV2", function () {
       };
 
       await expect(
-        factory.connect(lp).createMarket(config, { value: DEPOSIT_AMOUNT })
+        factory.connect(lp).createMarket(config, DEPOSIT_AMOUNT)
       ).to.be.revertedWith("LTV must be 1-95%");
     });
 
@@ -186,7 +190,7 @@ describe("MarketFactoryV2", function () {
       };
 
       await expect(
-        factory.connect(lp).createMarket(config, { value: DEPOSIT_AMOUNT })
+        factory.connect(lp).createMarket(config, DEPOSIT_AMOUNT)
       ).to.be.revertedWithCustomError(factory, "LendingAssetNotAllowed");
     });
 
@@ -223,7 +227,7 @@ describe("MarketFactoryV2", function () {
       };
 
       await expect(
-        factory.connect(lp).createMarket(config, { value: DEPOSIT_AMOUNT })
+        factory.connect(lp).createMarket(config, DEPOSIT_AMOUNT)
       ).to.be.revertedWith("Asset adapter not selectable");
     });
   });

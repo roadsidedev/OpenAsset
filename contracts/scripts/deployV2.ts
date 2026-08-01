@@ -24,7 +24,8 @@ interface DeploymentConfig {
   lendingAssets: string[];
   sepoliaChainlinkFeeds?: Record<string, string>;
   baseChainlinkFeeds?: Record<string, string>;
-  l2Sequencer?: string;
+  chainlinkFeeds?: Record<string, { feed: string; staleness?: number }>; // collateral asset => feed
+  l2Sequencer?: string; // L2 Sequencer Uptime Feed (empty string disables the check)
   uniswapV3QuoteToken?: string; // Address of quote token for TWAP
 }
 
@@ -34,12 +35,23 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     owner: "",
     protocolTreasury: "",
     lendingAssets: [
-      "0x8267cF9254734C6Eb452a7bb9AAF97B392258b21", // USDC on Sepolia (example)
+      "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // USDC on Sepolia (6 decimals)
     ],
-    sepoliaChainlinkFeeds: {
-      "ETH/USD": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
-      "BTC/USD": "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
+    chainlinkFeeds: {
+      // WETH => ETH/USD feed
+      "0xfff9976782d46cc05630d1f6ebab18b2324d6b14": {
+        feed: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+        staleness: 3600,
+      },
+      // USDC => USDC/USD feed
+      "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238": {
+        feed: "0xA2F78ab2355fe2f984D808B5CeE7FD0a93D5270E",
+        staleness: 86400,
+      },
     },
+    // Sepolia is L1 — no L2 sequencer uptime feed.
+    l2Sequencer: "",
+    uniswapV3QuoteToken: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // USDC
   },
   baseSepolia: {
     auditGovernance: "",
@@ -48,10 +60,20 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     lendingAssets: [
       "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
     ],
-    baseChainlinkFeeds: {
-      "ETH/USD": "0x4aDC670858AB637A1Cc5265Da8Ccb001f40b83E2",
+    chainlinkFeeds: {
+      // WETH => ETH/USD feed
+      "0x4200000000000000000000000000000000000006": {
+        feed: "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1",
+        staleness: 3600,
+      },
+      // USDC => USDC/USD feed
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e": {
+        feed: "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165",
+        staleness: 86400,
+      },
     },
-    l2Sequencer: "0xC1D817391E9c771E82fd1Fe6dC8aBD066a8c1C6Ba",
+    // Base Sepolia does not publish an L2 Sequencer Uptime Feed, so the check is disabled.
+    l2Sequencer: "",
     uniswapV3QuoteToken: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC
   },
   mainnet: {
@@ -104,7 +126,7 @@ async function deployMarketFactory(config: DeploymentConfig, registryAddress: st
   return { contract: factory, address };
 }
 
-async function deployReferenceAdapters(factoryAddress: string, config: DeploymentConfig) {
+async function deployReferenceAdapters(factoryAddress: string, config: DeploymentConfig, deployerAddress: string) {
   console.log("\n=== Deploying Multi-Tenant Reference Adapters ===");
   const deployed: Record<string, string> = {};
 
@@ -123,10 +145,30 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
 
   // --- Oracle Adapters (multi-tenant) ---
   const ChainlinkFactory = await ethers.getContractFactory("ChainlinkAdapter");
-  const chainlink = await ChainlinkFactory.deploy(factoryAddress);
+  const chainlink = await ChainlinkFactory.deploy(factoryAddress, deployerAddress);
   await chainlink.waitForDeployment();
   deployed.chainlinkAdapter = await chainlink.getAddress();
   console.log(`  ChainlinkAdapter: ${deployed.chainlinkAdapter}`);
+
+  // Register Chainlink price feeds per collateral asset + optional L2 sequencer feed
+  if (config.chainlinkFeeds && Object.keys(config.chainlinkFeeds).length > 0) {
+    for (const [asset, cfg] of Object.entries(config.chainlinkFeeds)) {
+      const staleness = cfg.staleness ?? 3600;
+      console.log(`  Registering feed for ${asset} -> ${cfg.feed} (staleness ${staleness}s)`);
+      const tx = await chainlink.registerFeed(asset, cfg.feed, staleness);
+      await tx.wait();
+    }
+  } else {
+    console.log(`  WARNING: no chainlinkFeeds configured for ${network.name}; ChainlinkAdapter will return untrusted prices`);
+  }
+
+  if (config.l2Sequencer) {
+    console.log(`  Setting L2 sequencer feed: ${config.l2Sequencer}`);
+    const tx = await chainlink.setL2SequencerFeed(config.l2Sequencer);
+    await tx.wait();
+  } else {
+    console.log(`  No L2 sequencer feed configured for ${network.name}; sequencer check disabled`);
+  }
 
   if (config.uniswapV3QuoteToken) {
     const UniswapTWAPFactory = await ethers.getContractFactory("UniswapV3TWAPAdapter");
@@ -136,24 +178,24 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
     console.log(`  UniswapV3TWAPAdapter: ${deployed.uniswapV3TWAPAdapter}`);
   }
 
-  // --- Position Adapters (clone templates — constructor sets sentinel, factory clones per market) ---
+  // --- Position Adapters (multi-tenant instances — factory calls registerMarket() directly) ---
   const StandardPos = await ethers.getContractFactory("StandardPositionAdapter");
-  const standard = await StandardPos.deploy();
+  const standard = await StandardPos.deploy(factoryAddress);
   await standard.waitForDeployment();
   deployed.standardPosition = await standard.getAddress();
-  console.log(`  StandardPositionAdapter (template): ${deployed.standardPosition}`);
+  console.log(`  StandardPositionAdapter: ${deployed.standardPosition}`);
 
   const SoulboundPos = await ethers.getContractFactory("SoulboundPositionAdapter");
-  const soulbound = await SoulboundPos.deploy();
+  const soulbound = await SoulboundPos.deploy(factoryAddress);
   await soulbound.waitForDeployment();
   deployed.soulboundPosition = await soulbound.getAddress();
-  console.log(`  SoulboundPositionAdapter (template): ${deployed.soulboundPosition}`);
+  console.log(`  SoulboundPositionAdapter: ${deployed.soulboundPosition}`);
 
   const TransferablePos = await ethers.getContractFactory("TransferablePositionAdapter");
-  const transferable = await TransferablePos.deploy();
+  const transferable = await TransferablePos.deploy(factoryAddress);
   await transferable.waitForDeployment();
   deployed.transferablePosition = await transferable.getAddress();
-  console.log(`  TransferablePositionAdapter (template): ${deployed.transferablePosition}`);
+  console.log(`  TransferablePositionAdapter: ${deployed.transferablePosition}`);
 
   // --- Liquidation Adapters (multi-tenant, orchestrate through Asset Adapter) ---
   const DEXSwap = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
@@ -248,7 +290,7 @@ async function main() {
   const { address: factoryAddress } = await deployMarketFactory(config, registryAddress, deployerAddress);
 
   // 3. Deploy multi-tenant reference adapters
-  const deployedAdapters = await deployReferenceAdapters(factoryAddress, config);
+  const deployedAdapters = await deployReferenceAdapters(factoryAddress, config, deployer.address);
 
   // 4. Register and verify adapters
   await registerAdapters(registryAddress, deployedAdapters);
@@ -267,7 +309,7 @@ async function main() {
       marketFactory: factoryAddress,
       ...deployedAdapters,
     },
-    note: "Multi-tenant adapter architecture: one instance per adapter type serves all markets. Position adapters are clone templates cloned per market by the factory.",
+    note: "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market.",
   };
 
   const outputDir = path.join(__dirname, "..", "deployments");
@@ -296,9 +338,8 @@ async function main() {
   }
   console.log(`LendingAssets:            ${config.lendingAssets.length} configured`);
   console.log(`========================================`);
-  console.log(`\nPosition adapters are clone templates. The Factory deploys`);
-  console.log(`EIP-1167 minimal proxies and calls initialize() per market.`);
-  console.log(`All other adapters are multi-tenant — configure() per market.\n`);
+  console.log(`\nAll adapters are multi-tenant — one instance per adapter type`);
+  console.log(`serves all markets. The Factory calls configure()/registerMarket() per market.\n`);
 }
 
 main()
