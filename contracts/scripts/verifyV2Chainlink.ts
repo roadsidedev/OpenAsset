@@ -22,10 +22,16 @@ async function main() {
   const d = deployment.contracts;
   const [deployer] = await ethers.getSigners();
 
-  const WETH = "0x4200000000000000000000000000000000000006";
-  const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-  const ETH_USD_FEED = "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1";
-  const USDC_USD_FEED = "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165";
+  const isBase = network.name === "baseSepolia";
+
+  const WETH = isBase ? "0x4200000000000000000000000000000000000006" : "0xfff9976782d46cc05630d1f6ebab18b2324d6b14";
+  const USDC = isBase ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e" : "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+  const ETH_USD_FEED = isBase
+    ? "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1"
+    : "0x694AA1769357215DE4FAC081bf1f309aDC325306";
+  const USDC_USD_FEED = isBase
+    ? "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165"
+    : "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E";
 
   const factory = await ethers.getContractAt("MarketFactoryV2", d.marketFactory);
   const chainlink = await ethers.getContractAt("ChainlinkAdapter", d.chainlinkAdapter);

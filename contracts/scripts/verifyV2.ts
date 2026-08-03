@@ -19,6 +19,39 @@ import { ethers, network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 
+/** Send a tx and wait, retrying on transient RPC errors (timeouts, replacement underpriced). */
+async function sendAndWait(label: string, send: () => Promise<any>): Promise<any> {
+  for (let i = 1; ; i++) {
+    try {
+      const tx = await send();
+      return await tx.wait();
+    } catch (e: any) {
+      const msg = (e?.code || e?.message || String(e)).slice(0, 80);
+      if (i >= 6 || !/UND_ERR|ETIMEDOUT|ECONNRESET|Timeout|timeout|underpriced|nonce too low|already known/i.test(msg)) {
+        throw e;
+      }
+      console.log(`    [retry ${i}] ${label} (${msg})`);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+}
+
+/** Read-only RPC call with retry on transient connection errors. */
+async function retryRead<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      const msg = (e?.code || e?.message || String(e)).slice(0, 80);
+      if (i >= 8 || !/UND_ERR|ETIMEDOUT|ECONNRESET|Timeout|timeout|BAD_DATA|could not decode|empty data/i.test(msg)) {
+        throw e;
+      }
+      console.log(`    [retry ${i}] ${label} (${msg})`);
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+  }
+}
+
 async function main() {
   const networkName = network.name;
   const deploymentPath = path.join(__dirname, "..", "deployments", `${networkName}-v2.json`);
@@ -38,7 +71,13 @@ async function main() {
     "https://sepolia.base.org";
   const rpcProvider = new ethers.JsonRpcProvider(rpcUrl);
 
-  const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+  // Lending asset used for the allowlist check — differs per network
+  const USDC =
+    network.name === "baseSepolia"
+      ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+      : network.name === "sepolia"
+        ? "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+        : "0x0000000000000000000000000000000000000000";
 
   console.log(`\n=== Verifying deployment on ${networkName} ===`);
   console.log(`Factory:     ${d.marketFactory}`);
@@ -64,14 +103,14 @@ async function main() {
   };
   console.log("\n--- 1. Adapter selectability ---");
   for (const [name, addr] of Object.entries(adapters)) {
-    const sel = await registry.isSelectable(addr);
+    const sel = await retryRead(`isSelectable(${name})`, () => registry.isSelectable(addr));
     results.push([`isSelectable(${name})`, sel]);
     console.log(`  ${sel ? "✓" : "✗"} ${name}: ${sel ? "selectable" : "NOT SELECTABLE"}`);
   }
 
   // 2. Lending asset allowlist
   console.log("\n--- 2. Lending asset allowlist ---");
-  const usdcAllowed = await factory.isAllowedLendingAsset(USDC);
+  const usdcAllowed = await retryRead("isAllowedLendingAsset(USDC)", () => factory.isAllowedLendingAsset(USDC));
   results.push(["isAllowedLendingAsset(USDC)", usdcAllowed]);
   console.log(`  ${usdcAllowed ? "✓" : "✗"} USDC allowlisted: ${usdcAllowed}`);
 
@@ -79,7 +118,7 @@ async function main() {
   console.log("\n--- 3. Position adapter factory wiring ---");
   for (const name of ["standardPosition", "soulboundPosition", "transferablePosition"]) {
     const pos = await ethers.getContractAt("StandardPositionAdapter", d[name]);
-    const posFactory = await pos.factory();
+    const posFactory = await retryRead(`${name}.factory()`, () => pos.factory());
     const ok = posFactory.toLowerCase() === d.marketFactory.toLowerCase();
     results.push([`${name}.factory() == MarketFactory`, ok]);
     console.log(`  ${ok ? "✓" : "✗"} ${name}.factory() = ${posFactory} (${ok ? "matches factory" : "MISMATCH"})`);
@@ -131,15 +170,17 @@ async function main() {
   console.log(`  Collateral: ${await collateral.getAddress()}`);
   console.log(`  Lending:    ${await lending.getAddress()}`);
 
+  const lendingAddress = await lending.getAddress();
+  const factoryAddress = await factory.getAddress();
+
   // Allowlist the mock lending asset
-  const addTx = await factory.connect(deployer).addLendingAsset(await lending.getAddress());
-  await addTx.wait();
+  await sendAndWait("addLendingAsset(mock)", () => factory.connect(deployer).addLendingAsset(lendingAddress));
   console.log("  ✓ Allowlisted mock lending asset");
 
   // Fund the deployer
   const LIQ = ethers.parseUnits("1000000", 6); // 1,000,000 lending units
-  await lending.mint(deployer.address, LIQ);
-  await lending.connect(deployer).approve(await factory.getAddress(), LIQ);
+  await sendAndWait("mint(lending)", () => lending.mint(deployer.address, LIQ));
+  await sendAndWait("approve(lending)", () => lending.connect(deployer).approve(factoryAddress, LIQ));
   console.log("  ✓ Minted + approved lending asset");
 
   const config = {
@@ -166,9 +207,11 @@ async function main() {
 
   const initialLiquidity = ethers.parseUnits("1000", 6); // 1000 lending units
 
-  const beforeCount = await factory.getMarketCount();
-  const createTx = await factory.connect(deployer).createMarket(config, initialLiquidity);
-  const receipt = await createTx.wait();
+  const beforeCount = await retryRead("getMarketCount", () => factory.getMarketCount());
+  const createReceipt = await sendAndWait("createMarket", () =>
+    factory.connect(deployer).createMarket(config, initialLiquidity)
+  );
+  const receipt = createReceipt;
 
   // The auto-mined state can lag the returned receipt; confirm via the receipt status
   // and the emitted MarketCreated event, then re-read state once mined.

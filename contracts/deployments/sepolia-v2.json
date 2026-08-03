@@ -1,19 +1,20 @@
 {
   "network": "sepolia",
   "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
-  "timestamp": "2026-07-28T08:45:58.210Z",
+  "timestamp": "2026-08-03T15:05:34.404Z",
   "contracts": {
-    "adapterRegistry": "0x43c4Dd1975B7AEcE2c0b632D2Ff2d8576d31C49F",
-    "marketDeployer": "0xAEf469a4ab0c51D6fa5b5Fd1368d2e3b85ecC602",
-    "marketFactory": "0x95599a74Ae215d8208f7Bb6A8e680B0C58F03c67",
-    "erc20Adapter": "0x2296a019079BA10E4430DC8012504d92B5B8A795",
-    "erc721Adapter": "0x590667a3f38300b9D54e5A8c5D2A12767B244949",
-    "chainlinkAdapter": "0x47518aBb5eDE5e05BcF428c397a0998b68Ed939b",
-    "standardPosition": "0x63b60CF11F1833fE8EaC8bC8A7C795159a154d4E",
-    "soulboundPosition": "0xc0c571b98891163b704A06AE0648A969f47Bf797",
-    "transferablePosition": "0xA34C6BC828789ee963B492b9AC68675DA0E1252B",
-    "dexSwapLiquidation": "0xc9eF65E04Eb1358E24f21a2F31639BB455E846E5",
-    "nftAuctionLiquidation": "0x1bb47bB68C33262DB13F0D72181658a97526056e"
+    "adapterRegistry": "0x7b626dFfed1855005357b23C22C8A2BB518ad3e3",
+    "marketDeployer": "0xcDACcc7e46C235D3E737FB90019fD9f22B6DcE26",
+    "marketFactory": "0x0b752947fc377Dcb53b6EfAdd6B6627d30c183C4",
+    "erc20Adapter": "0x280eB9597d786D44bC3cd9A4522De023Ace7a304",
+    "erc721Adapter": "0x2Fee4997B6A99d7ef25ae136fA5a66408BdC8B33",
+    "chainlinkAdapter": "0xE5C2c46B5BbB628eC1f53D0A0E5DFf8077dCFD86",
+    "uniswapV3TWAPAdapter": "0xc0ddD242bE63ac0951EdE09C80c218b603036d5D",
+    "standardPosition": "0x74a638Ae4b645b7643C662f99094D0B107179532",
+    "soulboundPosition": "0x36ea319F35750deBf03BbedCcC9E5A96E43932eb",
+    "transferablePosition": "0x6BA08AE1203c4960d508F3656365fEc786fC434e",
+    "dexSwapLiquidation": "0x798130284DbA79c7B34b617eFD50b1B2b90d74FA",
+    "nftAuctionLiquidation": "0xB528A74EE9Bda90ab3aC407c9c4F69f9Bf716CB5"
   },
-  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. Position adapters are clone templates cloned per market by the factory."
+  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market."
 }

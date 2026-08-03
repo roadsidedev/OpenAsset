@@ -2,10 +2,10 @@
  * @file deployV2.ts
  * @description Production deployment script for OpenAsset Market V2 multi-tenant adapter architecture.
  *
- * Changes from v1 constructor-per-instance pattern:
- * - All adapters use multi-tenancy: one instance, many markets via configure()
- * - Position adapters are clone templates (deploy template, factory clones per market)
- * - ERC20Adapter, ERC721Adapter, ChainlinkAdapter etc. take factory address, not collateral/feed
+ * Idempotent / resume-safe: re-running the script on the same network reuses already-deployed
+ * contract addresses (from the saved deployment JSON) and skips already-registered adapters,
+ * already-registered feeds, and already-allowlisted lending assets. This makes retries cheap and
+ * safe if an RPC hiccup interrupts a run partway.
  *
  * Usage:
  *   npx hardhat run scripts/deployV2.ts --network sepolia
@@ -45,7 +45,7 @@ const CONFIGS: Record<string, DeploymentConfig> = {
       },
       // USDC => USDC/USD feed
       "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238": {
-        feed: "0xA2F78ab2355fe2f984D808B5CeE7FD0a93D5270E",
+        feed: "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
         staleness: 86400,
       },
     },
@@ -91,27 +91,73 @@ const CONFIGS: Record<string, DeploymentConfig> = {
   },
 };
 
-async function deployAdapterRegistry(config: DeploymentConfig) {
+const deploymentPathFor = (networkName: string) =>
+  path.join(__dirname, "..", "deployments", `${networkName}-v2.json`);
+
+function loadExistingDeployment(networkName: string): Record<string, string> | null {
+  const p = deploymentPathFor(networkName);
+  if (!fs.existsSync(p)) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    return (j.contracts as Record<string, string>) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Retry on transient RPC errors (headers timeouts, connection resets, connect timeouts). */
+async function retry<T>(fn: () => Promise<T>, label: string, attempts = 6): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      if (i >= attempts) throw e;
+      const msg = (e?.code || e?.message || String(e)).slice(0, 80);
+      if (!/UND_ERR|ETIMEDOUT|ECONNRESET|timeout|Timeout|ConnectTimeout/i.test(msg)) throw e;
+      console.log(`    [retry ${i}/${attempts}] ${label} (${msg})`);
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+}
+
+/** Wait for a tx with retries. */
+async function waitTx(tx: any, label: string, attempts = 6): Promise<any> {
+  return retry(() => tx.wait(), label, attempts);
+}
+
+async function deployAdapterRegistry(config: DeploymentConfig, existing?: Record<string, string>) {
+  if (existing?.adapterRegistry) {
+    console.log(`\n  AdapterRegistry (reuse): ${existing.adapterRegistry}`);
+    return { address: existing.adapterRegistry };
+  }
   console.log("\n=== Deploying AdapterRegistry ===");
   const Registry = await ethers.getContractFactory("AdapterRegistry");
   const registry = await Registry.deploy(config.auditGovernance);
-  await registry.waitForDeployment();
+  await waitTx(registry.deploymentTransaction(), "AdapterRegistry.deploy");
   const address = await registry.getAddress();
   console.log(`  AdapterRegistry: ${address}`);
-  return { contract: registry, address };
+  return { address };
 }
 
-async function deployMarketDeployer() {
+async function deployMarketDeployer(existing?: Record<string, string>) {
+  if (existing?.marketDeployer) {
+    console.log(`  MarketDeployer (reuse): ${existing.marketDeployer}`);
+    return { address: existing.marketDeployer };
+  }
   console.log("\n=== Deploying MarketDeployer ===");
   const Deployer = await ethers.getContractFactory("MarketDeployer");
   const dep = await Deployer.deploy();
-  await dep.waitForDeployment();
+  await waitTx(dep.deploymentTransaction(), "MarketDeployer.deploy");
   const address = await dep.getAddress();
   console.log(`  MarketDeployer: ${address}`);
-  return { contract: dep, address };
+  return { address };
 }
 
-async function deployMarketFactory(config: DeploymentConfig, registryAddress: string, deployerAddress: string) {
+async function deployMarketFactory(config: DeploymentConfig, registryAddress: string, deployerAddress: string, existing?: Record<string, string>) {
+  if (existing?.marketFactory) {
+    console.log(`  MarketFactoryV2 (reuse): ${existing.marketFactory}`);
+    return { address: existing.marketFactory };
+  }
   console.log("\n=== Deploying MarketFactoryV2 ===");
   const Factory = await ethers.getContractFactory("MarketFactoryV2");
   const factory = await Factory.deploy(
@@ -120,103 +166,92 @@ async function deployMarketFactory(config: DeploymentConfig, registryAddress: st
     registryAddress,
     deployerAddress
   );
-  await factory.waitForDeployment();
+  await waitTx(factory.deploymentTransaction(), "MarketFactoryV2.deploy");
   const address = await factory.getAddress();
   console.log(`  MarketFactoryV2: ${address}`);
-  return { contract: factory, address };
+  return { address };
 }
 
-async function deployReferenceAdapters(factoryAddress: string, config: DeploymentConfig, deployerAddress: string) {
+async function deployReferenceAdapters(factoryAddress: string, config: DeploymentConfig, deployerAddress: string, existing?: Record<string, string>) {
   console.log("\n=== Deploying Multi-Tenant Reference Adapters ===");
-  const deployed: Record<string, string> = {};
+  const deployed: Record<string, string> = { ...existing };
 
-  // --- Asset Adapters (multi-tenant: one instance per factory, all tokens) ---
+  const deployIfMissing = async (label: string, factoryX: any, args: any[], key: string) => {
+    if (deployed[key]) {
+      console.log(`  ${label} (reuse): ${deployed[key]}`);
+      return;
+    }
+    const c = await factoryX.deploy(...args);
+    await waitTx(c.deploymentTransaction(), `${label}.deploy`);
+    deployed[key] = await c.getAddress();
+    console.log(`  ${label}: ${deployed[key]}`);
+  };
+
+  // --- Asset Adapters ---
   const ERC20Factory = await ethers.getContractFactory("ERC20Adapter");
-  const erc20 = await ERC20Factory.deploy(factoryAddress);
-  await erc20.waitForDeployment();
-  deployed.erc20Adapter = await erc20.getAddress();
-  console.log(`  ERC20Adapter: ${deployed.erc20Adapter}`);
+  await deployIfMissing("ERC20Adapter", ERC20Factory, [factoryAddress], "erc20Adapter");
 
   const ERC721Factory = await ethers.getContractFactory("ERC721Adapter");
-  const erc721 = await ERC721Factory.deploy(factoryAddress);
-  await erc721.waitForDeployment();
-  deployed.erc721Adapter = await erc721.getAddress();
-  console.log(`  ERC721Adapter: ${deployed.erc721Adapter}`);
+  await deployIfMissing("ERC721Adapter", ERC721Factory, [factoryAddress], "erc721Adapter");
 
-  // --- Oracle Adapters (multi-tenant) ---
+  // --- Oracle Adapters ---
   const ChainlinkFactory = await ethers.getContractFactory("ChainlinkAdapter");
-  const chainlink = await ChainlinkFactory.deploy(factoryAddress, deployerAddress);
-  await chainlink.waitForDeployment();
-  deployed.chainlinkAdapter = await chainlink.getAddress();
-  console.log(`  ChainlinkAdapter: ${deployed.chainlinkAdapter}`);
+  await deployIfMissing("ChainlinkAdapter", ChainlinkFactory, [factoryAddress, deployerAddress], "chainlinkAdapter");
 
-  // Register Chainlink price feeds per collateral asset + optional L2 sequencer feed
-  if (config.chainlinkFeeds && Object.keys(config.chainlinkFeeds).length > 0) {
-    for (const [asset, cfg] of Object.entries(config.chainlinkFeeds)) {
-      const staleness = cfg.staleness ?? 3600;
-      console.log(`  Registering feed for ${asset} -> ${cfg.feed} (staleness ${staleness}s)`);
-      const tx = await chainlink.registerFeed(asset, cfg.feed, staleness);
-      await tx.wait();
+  if (deployed.chainlinkAdapter) {
+    const chainlink = await ethers.getContractAt("ChainlinkAdapter", deployed.chainlinkAdapter);
+
+    if (config.chainlinkFeeds && Object.keys(config.chainlinkFeeds).length > 0) {
+      for (const [asset, cfg] of Object.entries(config.chainlinkFeeds)) {
+        const staleness = cfg.staleness ?? 3600;
+        const current = await retry(() => chainlink.assetFeeds(asset), `assetFeeds(${asset})`);
+        if (current.feed.toLowerCase() === cfg.feed.toLowerCase()) {
+          console.log(`  Feed for ${asset} (already registered): ${cfg.feed}`);
+          continue;
+        }
+        console.log(`  Registering feed for ${asset} -> ${cfg.feed} (staleness ${staleness}s)`);
+        await waitTx(await chainlink.registerFeed(asset, cfg.feed, staleness), `registerFeed(${asset})`);
+      }
+    } else {
+      console.log(`  WARNING: no chainlinkFeeds configured for ${network.name}; ChainlinkAdapter will return untrusted prices`);
     }
-  } else {
-    console.log(`  WARNING: no chainlinkFeeds configured for ${network.name}; ChainlinkAdapter will return untrusted prices`);
-  }
 
-  if (config.l2Sequencer) {
-    console.log(`  Setting L2 sequencer feed: ${config.l2Sequencer}`);
-    const tx = await chainlink.setL2SequencerFeed(config.l2Sequencer);
-    await tx.wait();
-  } else {
-    console.log(`  No L2 sequencer feed configured for ${network.name}; sequencer check disabled`);
+    if (config.l2Sequencer) {
+      const seq = await retry(() => chainlink.l2SequencerFeed(), "l2SequencerFeed");
+      if (seq.toLowerCase() !== config.l2Sequencer.toLowerCase()) {
+        console.log(`  Setting L2 sequencer feed: ${config.l2Sequencer}`);
+        await waitTx(await chainlink.setL2SequencerFeed(config.l2Sequencer), "setL2SequencerFeed");
+      } else {
+        console.log(`  L2 sequencer feed (already set): ${config.l2Sequencer}`);
+      }
+    } else {
+      console.log(`  No L2 sequencer feed configured for ${network.name}; sequencer check disabled`);
+    }
   }
 
   if (config.uniswapV3QuoteToken) {
     const UniswapTWAPFactory = await ethers.getContractFactory("UniswapV3TWAPAdapter");
-    const uniswap = await UniswapTWAPFactory.deploy(600, config.uniswapV3QuoteToken, factoryAddress);
-    await uniswap.waitForDeployment();
-    deployed.uniswapV3TWAPAdapter = await uniswap.getAddress();
-    console.log(`  UniswapV3TWAPAdapter: ${deployed.uniswapV3TWAPAdapter}`);
+    await deployIfMissing("UniswapV3TWAPAdapter", UniswapTWAPFactory, [600, config.uniswapV3QuoteToken, factoryAddress], "uniswapV3TWAPAdapter");
   }
 
-  // --- Position Adapters (multi-tenant instances — factory calls registerMarket() directly) ---
+  // --- Position Adapters ---
   const StandardPos = await ethers.getContractFactory("StandardPositionAdapter");
-  const standard = await StandardPos.deploy(factoryAddress);
-  await standard.waitForDeployment();
-  deployed.standardPosition = await standard.getAddress();
-  console.log(`  StandardPositionAdapter: ${deployed.standardPosition}`);
-
+  await deployIfMissing("StandardPositionAdapter", StandardPos, [factoryAddress], "standardPosition");
   const SoulboundPos = await ethers.getContractFactory("SoulboundPositionAdapter");
-  const soulbound = await SoulboundPos.deploy(factoryAddress);
-  await soulbound.waitForDeployment();
-  deployed.soulboundPosition = await soulbound.getAddress();
-  console.log(`  SoulboundPositionAdapter: ${deployed.soulboundPosition}`);
-
+  await deployIfMissing("SoulboundPositionAdapter", SoulboundPos, [factoryAddress], "soulboundPosition");
   const TransferablePos = await ethers.getContractFactory("TransferablePositionAdapter");
-  const transferable = await TransferablePos.deploy(factoryAddress);
-  await transferable.waitForDeployment();
-  deployed.transferablePosition = await transferable.getAddress();
-  console.log(`  TransferablePositionAdapter: ${deployed.transferablePosition}`);
+  await deployIfMissing("TransferablePositionAdapter", TransferablePos, [factoryAddress], "transferablePosition");
 
-  // --- Liquidation Adapters (multi-tenant, orchestrate through Asset Adapter) ---
+  // --- Liquidation Adapters ---
   const DEXSwap = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
-  const dexSwap = await DEXSwap.deploy(factoryAddress);
-  await dexSwap.waitForDeployment();
-  deployed.dexSwapLiquidation = await dexSwap.getAddress();
-  console.log(`  DEXSwapLiquidationAdapter: ${deployed.dexSwapLiquidation}`);
-
+  await deployIfMissing("DEXSwapLiquidationAdapter", DEXSwap, [factoryAddress], "dexSwapLiquidation");
   const NFTAuction = await ethers.getContractFactory("NFTAuctionLiquidationAdapter");
-  const nftAuction = await NFTAuction.deploy(factoryAddress);
-  await nftAuction.waitForDeployment();
-  deployed.nftAuctionLiquidation = await nftAuction.getAddress();
-  console.log(`  NFTAuctionLiquidationAdapter: ${deployed.nftAuctionLiquidation}`);
+  await deployIfMissing("NFTAuctionLiquidationAdapter", NFTAuction, [factoryAddress], "nftAuctionLiquidation");
 
   return deployed;
 }
 
-async function registerAdapters(
-  registryAddress: string,
-  deployed: Record<string, string>
-) {
+async function registerAdapters(registryAddress: string, deployed: Record<string, string>) {
   console.log("\n=== Registering Adapters in Registry ===");
   const registry = await ethers.getContractAt("AdapterRegistry", registryAddress);
 
@@ -236,11 +271,28 @@ async function registerAdapters(
   }
 
   for (const adapter of adapterMap) {
-    console.log(`  Registering ${adapter.name}...`);
-    const tx = await registry.registerAdapter(adapter.address, adapter.type);
-    await tx.wait();
-    const vtx = await registry.markVerified(adapter.address, "OpenAsset internal audit — multi-tenant reference adapter");
-    await vtx.wait();
+    const info = await retry(() => registry.adapters(adapter.address), `registry.adapters(${adapter.name})`);
+    const isRegistered = info.registeredBy !== ethers.ZeroAddress;
+    if (isRegistered && info.verified) {
+      console.log(`  ${adapter.name} (already registered + verified)`);
+      continue;
+    }
+    if (!isRegistered) {
+      console.log(`  Registering ${adapter.name}...`);
+      await retry(async () => {
+        const tx = await registry.registerAdapter(adapter.address, adapter.type);
+        await tx.wait();
+      }, `registerAdapter(${adapter.name})`);
+    } else {
+      console.log(`  ${adapter.name} already registered; skipping`);
+    }
+    if (!info.verified) {
+      console.log(`  Verifying ${adapter.name}...`);
+      await retry(async () => {
+        const vtx = await registry.markVerified(adapter.address, "OpenAsset internal audit — multi-tenant reference adapter");
+        await vtx.wait();
+      }, `markVerified(${adapter.name})`);
+    }
   }
 
   console.log(`  Total adapters registered and verified: ${adapterMap.length}`);
@@ -250,9 +302,16 @@ async function configureLendingAssets(factoryAddress: string, lendingAssets: str
   console.log("\n=== Configuring Lending Assets ===");
   const factory = await ethers.getContractAt("MarketFactoryV2", factoryAddress);
   for (const asset of lendingAssets) {
+    const allowed = await retry(() => factory.isAllowedLendingAsset(asset), `isAllowedLendingAsset(${asset})`);
+    if (allowed) {
+      console.log(`  ${asset} (already allowed)`);
+      continue;
+    }
     console.log(`  Adding ${asset}...`);
-    const tx = await factory.addLendingAsset(asset);
-    await tx.wait();
+    await retry(async () => {
+      const tx = await factory.addLendingAsset(asset);
+      await tx.wait();
+    }, `addLendingAsset(${asset})`);
   }
 }
 
@@ -271,6 +330,8 @@ async function main() {
     };
   }
 
+  const existing = loadExistingDeployment(networkName);
+
   console.log(`\n========================================`);
   console.log(`OpenAsset Market V2 Deployment — ${networkName}`);
   console.log(`========================================`);
@@ -283,14 +344,14 @@ async function main() {
   if (!config.protocolTreasury) config.protocolTreasury = deployer.address;
 
   // 1. Deploy AdapterRegistry
-  const { address: registryAddress } = await deployAdapterRegistry(config);
+  const { address: registryAddress } = await deployAdapterRegistry(config, existing ?? undefined);
 
   // 2. Deploy MarketDeployer + MarketFactoryV2
-  const { address: deployerAddress } = await deployMarketDeployer();
-  const { address: factoryAddress } = await deployMarketFactory(config, registryAddress, deployerAddress);
+  const { address: deployerAddress } = await deployMarketDeployer(existing ?? undefined);
+  const { address: factoryAddress } = await deployMarketFactory(config, registryAddress, deployerAddress, existing ?? undefined);
 
   // 3. Deploy multi-tenant reference adapters
-  const deployedAdapters = await deployReferenceAdapters(factoryAddress, config, deployer.address);
+  const deployedAdapters = await deployReferenceAdapters(factoryAddress, config, deployer.address, existing ?? undefined);
 
   // 4. Register and verify adapters
   await registerAdapters(registryAddress, deployedAdapters);
@@ -316,7 +377,7 @@ async function main() {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
-  const outputPath = path.join(outputDir, `${networkName}-v2.json`);
+  const outputPath = deploymentPathFor(networkName);
   fs.writeFileSync(outputPath, JSON.stringify(output, null, 2));
   console.log(`\nDeployment saved to ${outputPath}`);
 
