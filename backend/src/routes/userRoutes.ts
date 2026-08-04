@@ -13,6 +13,7 @@ import {
   confirmEmailVerification,
   requestSmsVerification,
   confirmSmsVerification,
+  getUserActivity,
 } from '../controllers/UserController';
 import { getNonce } from '../controllers/AuthController';
 
@@ -20,6 +21,7 @@ export function createUserRoutes(prisma: PrismaClient): express.Router {
   const router = express.Router();
 
   router.get('/:address/nonce', getNonce);
+  router.get('/:address/activity', getUserActivity);
   router.get('/:address', getUser);
   router.put('/:address', requireAuth, updateUser);
 

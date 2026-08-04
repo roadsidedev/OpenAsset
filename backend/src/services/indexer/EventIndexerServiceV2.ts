@@ -269,6 +269,12 @@ export class EventIndexerServiceV2 {
         },
       });
 
+      await this.prisma.user.upsert({
+        where: { address: lpAddress },
+        update: {},
+        create: { address: lpAddress },
+      });
+
       logger.info({ chainId: this.chainId, marketAddress, lpAddress }, 'Market indexed');
     } catch (error) {
       logger.error({ err: error, chainId: this.chainId, marketAddress }, 'Failed to index market');

@@ -252,3 +252,101 @@ export const confirmSmsVerification = async (req: Request, res: Response) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   };
+
+export const getUserActivity = async (req: Request, res: Response) => {
+  try {
+    const address = (req.params.address as string).toLowerCase();
+
+    const [createdMarkets, lpPositions, borrowedLoans, alerts] = await Promise.all([
+      prisma.market.findMany({
+        where: { lpAddress: address },
+        select: { address: true, collateralAsset: true, totalLiquidity: true, createdAt: true, status: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.liquidityPosition.findMany({
+        where: { lpAddress: address },
+        select: { marketAddress: true, stablecoinDeposited: true, createdAt: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      prisma.loan.findMany({
+        where: { positionHolderAddress: address },
+        select: {
+          contractLoanId: true, marketAddress: true, principal: true,
+          collateralAmount: true, status: true, createdAt: true,
+          repaidAt: true, liquidatedAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.alert.findMany({
+        where: { userId: address },
+        select: { id: true, type: true, level: true, message: true, status: true, sentAt: true },
+        orderBy: { sentAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
+    const events: Array<{
+      type: string;
+      timestamp: string;
+      details: Record<string, string>;
+    }> = [];
+
+    for (const m of createdMarkets) {
+      events.push({
+        type: 'MARKET_CREATED',
+        timestamp: m.createdAt.toISOString(),
+        details: {
+          market: m.address,
+          collateral: m.collateralAsset,
+          liquidity: m.totalLiquidity,
+          status: m.status,
+        },
+      });
+    }
+
+    for (const lp of lpPositions) {
+      events.push({
+        type: 'LIQUIDITY_DEPOSITED',
+        timestamp: lp.updatedAt.toISOString(),
+        details: {
+          market: lp.marketAddress,
+          amount: lp.stablecoinDeposited.toString(),
+        },
+      });
+    }
+
+    for (const loan of borrowedLoans) {
+      events.push({
+        type: 'LOAN_' + loan.status,
+        timestamp: loan.createdAt.toISOString(),
+        details: {
+          loanId: loan.contractLoanId,
+          market: loan.marketAddress,
+          principal: loan.principal,
+          collateral: loan.collateralAmount,
+          ...(loan.repaidAt ? { repaidAt: loan.repaidAt.toISOString() } : {}),
+          ...(loan.liquidatedAt ? { liquidatedAt: loan.liquidatedAt.toISOString() } : {}),
+        },
+      });
+    }
+
+    for (const alert of alerts) {
+      events.push({
+        type: 'ALERT_' + alert.type,
+        timestamp: alert.sentAt.toISOString(),
+        details: {
+          level: alert.level,
+          message: alert.message,
+          status: alert.status,
+        },
+      });
+    }
+
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    res.json({ success: true, data: { events, total: events.length } });
+  } catch (error) {
+    logger.error({ err: error }, 'Error fetching user activity');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

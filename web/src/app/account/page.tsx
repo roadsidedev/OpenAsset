@@ -5,6 +5,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLoans } from "@/hooks/useLoans";
+import { useActivity } from "@/hooks/useActivity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { DepositModal } from "@/components/modals/DepositModal";
@@ -116,6 +117,7 @@ function AccountContent() {
     { enabled: !!address }
   );
   const { data: marketsData, isLoading: marketsLoading } = useMarkets(0, 100);
+  const { data: activityData, isLoading: activityLoading } = useActivity(address);
 
   const activeLoans: any[] = loansData?.loans || [];
   const allMarkets: any[] = marketsData?.markets || [];
@@ -315,10 +317,72 @@ function AccountContent() {
         {subTab === "activity" && (
           <div className="p-6 rounded-3xl border border-border bg-card space-y-4">
             <h3 className="text-sm font-bold">On-Chain Activity Log</h3>
-            <div className="text-center py-12 text-muted-foreground text-xs">
-              <ClockCounterClockwise className="h-12 w-12 mx-auto mb-4 opacity-40" />
-              <p>Transaction history will appear here once you have activity.</p>
-            </div>
+            {activityLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3.5 rounded-2xl bg-muted/50 animate-pulse">
+                    <div className="h-8 w-8 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 w-32 rounded bg-muted" />
+                      <div className="h-2.5 w-48 rounded bg-muted" />
+                    </div>
+                    <div className="h-2.5 w-16 rounded bg-muted" />
+                  </div>
+                ))}
+              </div>
+            ) : !activityData?.events?.length ? (
+              <div className="text-center py-12 text-muted-foreground text-xs">
+                <ClockCounterClockwise className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                <p>Transaction history will appear here once you have activity.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {activityData.events.map((event, idx) => {
+                  const icon = event.type === "MARKET_CREATED"
+                    ? <StackSimple className="h-4 w-4 text-emerald-500" />
+                    : event.type.startsWith("LOAN_")
+                    ? <ArrowDownLeft className="h-4 w-4 text-blue-500" />
+                    : event.type === "LIQUIDITY_DEPOSITED"
+                    ? <TrendUp className="h-4 w-4 text-ice-500" />
+                    : <Shield className="h-4 w-4 text-amber-500" />;
+
+                  const label = event.type === "MARKET_CREATED"
+                    ? "Market Created"
+                    : event.type === "LOAN_ACTIVE"
+                    ? "Loan Opened"
+                    : event.type === "LOAN_REPAID"
+                    ? "Loan Repaid"
+                    : event.type === "LOAN_LIQUIDATED"
+                    ? "Loan Liquidated"
+                    : event.type === "LIQUIDITY_DEPOSITED"
+                    ? "Liquidity Deposited"
+                    : event.type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+                  const detail = event.type === "MARKET_CREATED"
+                    ? `Market ${event.details.market?.slice(0, 8)}...`
+                    : event.type.startsWith("LOAN_")
+                    ? `Loan #${event.details.loanId} on ${event.details.market?.slice(0, 8)}...`
+                    : event.type === "LIQUIDITY_DEPOSITED"
+                    ? `Market ${event.details.market?.slice(0, 8)}...`
+                    : event.details.message || "";
+
+                  return (
+                    <div key={idx} className="flex items-center gap-3 p-3.5 rounded-2xl bg-muted/50 hover:bg-muted/80 transition-colors">
+                      <div className="h-8 w-8 rounded-full bg-background flex items-center justify-center shrink-0">
+                        {icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-foreground">{label}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">{detail}</div>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground shrink-0">
+                        {new Date(event.timestamp).toLocaleDateString()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
