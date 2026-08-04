@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { BaseController } from './BaseController';
 import { contractService } from '../services/web3/ContractService';
+import { contractServiceV2 } from '../services/web3/ContractServiceV2';
 import { logger } from '../utils/logger';
 import { PrismaClient } from '@prisma/client';
 import { config } from '../config/unifiedConfig';
@@ -33,18 +34,35 @@ export class MarketController extends BaseController {
 
       logger.info({ startNum, countNum, chainId }, 'getMarkets called');
 
-      const totalCount = await contractService.getMarketCount(chainId);
-      logger.info({ totalCount, chainId }, 'Got market count');
+      const allAddresses = await contractServiceV2.getAllMarkets(chainId);
+      logger.info({ totalCount: allAddresses.length, chainId }, 'Got market addresses');
 
-      const marketAddresses = await contractService.getMarkets(chainId, startNum, countNum);
-      logger.info({ addressCount: marketAddresses.length, chainId }, 'Got market addresses');
+      const sliced = allAddresses.slice(startNum, startNum + countNum);
 
       const markets = await Promise.all(
-        marketAddresses.map(async (addr) => {
+        sliced.map(async (addr) => {
           try {
-            const info = await contractService.getMarketInfo(chainId, addr);
-            const liquidity = await contractService.getMarketLiquidity(chainId, addr);
-            return { ...info, liquidity };
+            const stats = await contractServiceV2.getMarketStats(chainId, addr);
+            const dbMarket = await this.prisma.market.findUnique({ where: { address: addr } });
+            return {
+              marketAddress: addr,
+              owner: dbMarket?.lpAddress || '',
+              collateralAsset: dbMarket?.collateralAsset || '',
+              loanAsset: dbMarket?.lendingAsset || '',
+              assetAdapter: dbMarket?.assetAdapter || '',
+              assetType: 0,
+              oracleType: 0,
+              ltvBps: dbMarket?.ltvBasisPoints || 0,
+              aprBps: dbMarket?.aprBasisPoints || 0,
+              durationSeconds: dbMarket?.durationSeconds || 0,
+              createdAt: dbMarket?.createdAt?.getTime() || 0,
+              active: stats.status === 0,
+              liquidity: {
+                total: stats.totalLiquidity,
+                available: stats.availableLiquidity,
+                reserved: stats.totalBorrowed,
+              },
+            };
           } catch (err) {
             logger.warn({ error: err, market: addr, chainId }, 'Failed to fetch market');
             return null;
@@ -53,7 +71,7 @@ export class MarketController extends BaseController {
       );
 
       this.sendSuccess(res, {
-        total: totalCount,
+        total: allAddresses.length,
         start: startNum,
         count: markets.filter((m) => m !== null).length,
         markets: markets.filter((m) => m !== null),
@@ -73,12 +91,34 @@ export class MarketController extends BaseController {
         return this.sendError(res, 'Invalid market address', 400);
       }
 
-      const info = await contractService.getMarketInfo(chainId, address);
-      const liquidity = await contractService.getMarketLiquidity(chainId, address);
-      const loanCount = await this.getMarketLoanCount(chainId, address);
-      const dbMarket = await this.prisma.market.findUnique({ where: { address } });
+      const [stats, dbMarket] = await Promise.all([
+        contractServiceV2.getMarketStats(chainId, address),
+        this.prisma.market.findUnique({ where: { address } }),
+      ]);
 
-      this.sendSuccess(res, { ...info, liquidity, loanCount, dbInfo: dbMarket });
+      const loanCount = await this.getMarketLoanCount(chainId, address);
+
+      this.sendSuccess(res, {
+        marketAddress: address,
+        owner: dbMarket?.lpAddress || '',
+        collateralAsset: dbMarket?.collateralAsset || '',
+        loanAsset: dbMarket?.lendingAsset || '',
+        assetAdapter: dbMarket?.assetAdapter || '',
+        assetType: 0,
+        oracleType: 0,
+        ltvBps: dbMarket?.ltvBasisPoints || 0,
+        aprBps: dbMarket?.aprBasisPoints || 0,
+        durationSeconds: dbMarket?.durationSeconds || 0,
+        createdAt: dbMarket?.createdAt?.getTime() || 0,
+        active: stats.status === 0,
+        liquidity: {
+          total: stats.totalLiquidity,
+          available: stats.availableLiquidity,
+          reserved: stats.totalBorrowed,
+        },
+        loanCount,
+        dbInfo: dbMarket,
+      });
     } catch (error) {
       next(error);
     }
@@ -176,21 +216,29 @@ export class MarketController extends BaseController {
         return this.sendError(res, 'Invalid market address', 400);
       }
 
-      const liquidity = await contractService.getMarketLiquidity(chainId, address);
+      const stats = await contractServiceV2.getMarketStats(chainId, address);
       const positions = await this.prisma.liquidityPosition.findMany({
         where: { marketAddress: address },
       });
 
-      this.sendSuccess(res, { onChain: liquidity, positionCount: positions.length, positions });
+      this.sendSuccess(res, {
+        onChain: {
+          total: stats.totalLiquidity,
+          available: stats.availableLiquidity,
+          reserved: stats.totalBorrowed,
+        },
+        positionCount: positions.length,
+        positions,
+      });
     } catch (error) {
       next(error);
     }
   }
 
   private async getMarketLoanCount(chainId: number, marketAddress: string): Promise<number> {
-    const market = contractService.getLendingMarketContract(chainId, marketAddress);
     try {
-      const count = await market.getLoanCount();
+      const market = contractServiceV2.getLendingMarketContract(chainId, marketAddress);
+      const count = await market.nextLoanId();
       return Number(count);
     } catch {
       return 0;

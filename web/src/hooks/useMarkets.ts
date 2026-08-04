@@ -39,6 +39,8 @@ async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClie
     functionName: 'getAllMarkets',
   }) as string[];
 
+  const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
+
   const markets: Market[] = [];
   for (const addr of marketAddresses) {
     try {
@@ -48,15 +50,44 @@ async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClie
         functionName: 'getMarketStats',
       }) as [bigint, bigint, bigint, bigint, number];
 
-      const status = await publicClient.readContract({
-        address: addr as Address,
-        abi: parseAbi(LENDING_MARKET_ABI),
-        functionName: 'status',
-      }) as number;
+      const [status, lpTokenAddr] = await Promise.all([
+        publicClient.readContract({
+          address: addr as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'status',
+        }) as Promise<number>,
+        publicClient.readContract({
+          address: addr as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'lpToken',
+        }) as Promise<string>,
+      ]);
+
+      let lpOwner = '';
+      if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
+        try {
+          lpOwner = (await publicClient.readContract({
+            address: lpTokenAddr as Address,
+            abi: parseAbi(ERC721_OWNER_ABI),
+            functionName: 'ownerOf',
+            args: [BigInt(0)],
+          }) as string) || '';
+        } catch {
+          // token ID 0 may not exist, try ID 1
+          try {
+            lpOwner = (await publicClient.readContract({
+              address: lpTokenAddr as Address,
+              abi: parseAbi(ERC721_OWNER_ABI),
+              functionName: 'ownerOf',
+              args: [BigInt(1)],
+            }) as string) || '';
+          } catch {}
+        }
+      }
 
       markets.push({
         marketAddress: addr,
-        owner: '',
+        owner: lpOwner,
         collateralAsset: '',
         loanAsset: '',
         assetType: 0,
@@ -124,21 +155,50 @@ export const useMarket = (address: string) => {
 
       if (!publicClient || !address) throw new Error('Cannot fetch market');
 
-      const stats = await publicClient.readContract({
-        address: address as Address,
-        abi: parseAbi(LENDING_MARKET_ABI),
-        functionName: 'getMarketStats',
-      }) as [bigint, bigint, bigint, bigint, number];
+      const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
 
-      const status = await publicClient.readContract({
-        address: address as Address,
-        abi: parseAbi(LENDING_MARKET_ABI),
-        functionName: 'status',
-      }) as number;
+      const [stats, status, lpTokenAddr] = await Promise.all([
+        publicClient.readContract({
+          address: address as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'getMarketStats',
+        }) as Promise<[bigint, bigint, bigint, bigint, number]>,
+        publicClient.readContract({
+          address: address as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'status',
+        }) as Promise<number>,
+        publicClient.readContract({
+          address: address as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'lpToken',
+        }) as Promise<string>,
+      ]);
+
+      let lpOwner = '';
+      if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
+        try {
+          lpOwner = (await publicClient.readContract({
+            address: lpTokenAddr as Address,
+            abi: parseAbi(ERC721_OWNER_ABI),
+            functionName: 'ownerOf',
+            args: [BigInt(0)],
+          }) as string) || '';
+        } catch {
+          try {
+            lpOwner = (await publicClient.readContract({
+              address: lpTokenAddr as Address,
+              abi: parseAbi(ERC721_OWNER_ABI),
+              functionName: 'ownerOf',
+              args: [BigInt(1)],
+            }) as string) || '';
+          } catch {}
+        }
+      }
 
       return {
         marketAddress: address,
-        owner: '',
+        owner: lpOwner,
         collateralAsset: '',
         loanAsset: '',
         assetType: 0,

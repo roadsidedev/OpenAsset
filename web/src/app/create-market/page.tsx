@@ -11,7 +11,6 @@ import { AdapterSelect } from "@/components/adapters/AdapterSelect";
 import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { getContracts } from "@/lib/contracts";
-import { getAdapterMeta } from "@/lib/adapterRegistry";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { decodeContractError } from "@/lib/contractErrors";
 import { cn } from "@/lib/utils";
@@ -78,6 +77,12 @@ export default function CreateMarketPage() {
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
+
+  const findAdapterName = (category: string, addr: string): string => {
+    if (!addr) return "Not selected";
+    const match = adapters[category]?.find((a) => a.address.toLowerCase() === addr.toLowerCase());
+    return match?.name || addr.slice(0, 10) + "...";
+  };
 
   const validateConfig = async (): Promise<string | null> => {
     if (!formData.collateralAsset) return "Collateral asset is required.";
@@ -447,16 +452,11 @@ export default function CreateMarketPage() {
                   ["Collateral", collateralToken?.isValid
                     ? `${collateralToken.name} (${collateralToken.symbol})`
                     : formData.collateralAsset ? formData.collateralAsset.slice(0, 10) + "..." : "Not set"],
-                  ["Oracle", formData.oracleAdapter
-                    ? (getAdapterMeta(chainId, formData.oracleAdapter)?.name || formData.oracleAdapter.slice(0, 10) + "...")
-                    : "Not selected"],
+                  ["Asset Adapter", findAdapterName("ASSET", formData.assetAdapter)],
+                  ["Oracle", findAdapterName("ORACLE", formData.oracleAdapter)],
                   ["Compliance", formData.enableCompliance ? "Enabled" : "Disabled"],
-                  ["Liquidation", formData.liquidationAdapter
-                    ? (getAdapterMeta(chainId, formData.liquidationAdapter)?.name || formData.liquidationAdapter.slice(0, 10) + "...")
-                    : "Not selected"],
-                  ["Position", formData.positionAdapter
-                    ? (getAdapterMeta(chainId, formData.positionAdapter)?.name || formData.positionAdapter.slice(0, 10) + "...")
-                    : "Not selected"],
+                  ["Liquidation", findAdapterName("LIQUIDATION", formData.liquidationAdapter)],
+                  ["Position", findAdapterName("POSITION", formData.positionAdapter)],
                   ["LTV", `${formData.ltv}%`],
                   ["APR", `${formData.apr}%`],
                   ["Duration", `${formData.duration} days`],
