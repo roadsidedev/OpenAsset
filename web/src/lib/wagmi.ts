@@ -13,8 +13,10 @@ const baseSepolia = {
   },
 } as const;
 
+export const supportedChains = [mainnet, polygon, optimism, arbitrum, base, sepolia, baseSepolia] as const;
+
 export const config = createConfig({
-  chains: [mainnet, polygon, optimism, arbitrum, base, sepolia, baseSepolia],
+  chains: supportedChains,
   transports: {
     [mainnet.id]: http(),
     [polygon.id]: http(),
