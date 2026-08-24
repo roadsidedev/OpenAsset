@@ -2,7 +2,7 @@
 
 OpenAsset Market is a decentralized, permissionless lending protocol that enables anyone to launch an isolated lending market for any on-chain asset (ERC20, ERC721, ERC1155). It empowers communities, DAOs, and individual LPs to provide liquidity and set their own risk parameters, bringing DeFi utility to the 95% of assets currently excluded from traditional platforms like Aave or Compound.
 
-## 🚀 Key Features
+## Key Features
 
 - **Permissionless Market Creation**: Deploy an isolated lending market in minutes without governance approval.
 - **Any Asset Support**: Support for long-tail tokens, gaming assets, and NFT collections.
