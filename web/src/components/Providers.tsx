@@ -6,7 +6,7 @@ import { WagmiProvider } from '@privy-io/wagmi';
 import { WagmiProvider as WagmiProviderBase } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { config } from '../lib/wagmi';
+import { config, supportedChains } from '../lib/wagmi';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider } from './ThemeProvider';
 
@@ -33,6 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <PrivyProvider
         appId={appId}
         config={{
+          supportedChains: [...supportedChains],
           appearance: {
             theme: 'dark',
             accentColor: '#A8D8FF',

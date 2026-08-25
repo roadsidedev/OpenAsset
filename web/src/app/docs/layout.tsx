@@ -1,4 +1,5 @@
 import { Footer, Layout, Navbar } from 'nextra-theme-docs'
+import Image from 'next/image'
 import { Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import 'nextra-theme-docs/style.css'
@@ -17,7 +18,7 @@ const navbar = (
   <Navbar
     logo={
       <span className="flex items-center gap-2 font-bold tracking-tight">
-        <img src="/openasset-logo.png" alt="OpenAsset" className="h-5 w-5" />
+        <Image src="/openasset-logo.png" alt="OpenAsset" className="brand-logo h-5 w-5" width={20} height={20} />
         <span>OpenAsset</span>
         <span className="font-normal text-zinc-400">Docs</span>
       </span>

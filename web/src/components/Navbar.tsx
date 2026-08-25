@@ -18,7 +18,6 @@ export function Navbar() {
   const { login, logout: privyLogout, authenticated, ready: privyReady } = usePrivy();
   const {
     logout: backendLogout,
-    user,
     isLoading: authLoading,
   } = useAuthApi();
   const { theme, toggleTheme } = useTheme();
@@ -99,7 +98,7 @@ export function Navbar() {
                 alt="OpenAsset Market"
                 width={36}
                 height={36}
-                className="group-hover:scale-105 transition-transform"
+                className="brand-logo group-hover:scale-105 transition-transform"
               />
               <span className="text-xl font-bold tracking-tight text-foreground group-hover:scale-105 transition-transform">
                 OpenAsset
@@ -150,19 +149,33 @@ export function Navbar() {
 
       {/* Mobile Top Nav */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border glass px-4 md:hidden">
-        <Link href="/markets" className="flex items-center gap-2">
-          <Image
-            src="/openasset-logo.png"
-            alt="OpenAsset Market"
-            width={30}
-            height={30}
-          />
-          <span className="text-lg font-bold tracking-tight text-foreground">
-            OpenAsset
-          </span>
-        </Link>
+        <div className="flex min-w-0 items-center gap-1">
+          <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="Open menu"
+            >
+              <List className={cn("h-4 w-4 transition-premium", menuOpen && "rotate-90")} />
+            </Button>
+          </HamburgerMenu>
 
-        <div className="flex items-center gap-1.5">
+          <Link href="/markets" className="flex min-w-0 items-center gap-2">
+            <Image
+              src="/openasset-logo.png"
+              alt="OpenAsset Market"
+              width={30}
+              height={30}
+              className="brand-logo shrink-0"
+            />
+            <span className="truncate text-lg font-bold tracking-tight text-foreground">
+              OpenAsset
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
           <NetworkSwitcher compact />
 
           {/* Theme Toggle — visible on mobile */}
@@ -176,12 +189,6 @@ export function Navbar() {
           </Button>
 
           {renderAuthButton(true)}
-
-          <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-              <List className={cn("h-4 w-4 transition-premium", menuOpen && "rotate-90")} />
-            </Button>
-          </HamburgerMenu>
         </div>
       </header>
 

@@ -141,6 +141,13 @@
 }
 
 @layer utilities {
+  .brand-logo {
+    mix-blend-mode: multiply;
+  }
+  .dark .brand-logo {
+    filter: invert(1);
+    mix-blend-mode: screen;
+  }
   .glass {
     background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(16px);
