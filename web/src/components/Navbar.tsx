@@ -92,7 +92,7 @@ export function Navbar() {
       <header className="app-navbar sticky top-3 z-40 mx-4 hidden rounded-2xl border border-border/70 md:block">
         <div className="relative mx-auto flex h-[62px] max-w-7xl items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-8">
-            <Link href="/markets" className="flex items-center gap-2 group focus:outline-none">
+            <Link href="/" className="flex items-center gap-2 group focus:outline-none" aria-label="OpenAsset home">
               <Image
                 src="/openasset-logo-mark.png"
                 alt="OpenAsset Market"
@@ -166,7 +166,7 @@ export function Navbar() {
             </Button>
           </HamburgerMenu>
 
-          <Link href="/markets" className="flex min-w-0 items-center gap-2">
+          <Link href="/" className="flex min-w-0 items-center gap-2" aria-label="OpenAsset home">
             <Image
               src="/openasset-logo-mark.png"
               alt="OpenAsset Market"
