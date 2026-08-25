@@ -444,6 +444,94 @@ export const IPOSITION_ADAPTER_ABI = [
   },
 ] as const;
 
+// ============ B20 (Base Tokenized Stocks) ============
+
+export const B20_FACTORY_ABI = [
+  {
+    type: 'event',
+    name: 'B20Created',
+    inputs: [
+      { name: 'token', type: 'address', indexed: true },
+      { name: 'name', type: 'string', indexed: false },
+      { name: 'symbol', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'isB20',
+    inputs: [{ name: 'token', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+export const B20_TOKEN_ABI = [
+  {
+    type: 'event',
+    name: 'UIMultiplierUpdated',
+    inputs: [
+      { name: 'newMultiplier', type: 'uint256', indexed: false },
+      { name: 'effectiveAt', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'MultiplierUpdated',
+    inputs: [
+      { name: 'oldMultiplier', type: 'uint256', indexed: false },
+      { name: 'newMultiplier', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'UIMultiplierUpdateCancelled',
+    inputs: [],
+  },
+  {
+    type: 'event',
+    name: 'Announcement',
+    inputs: [
+      { name: 'id', type: 'bytes32', indexed: true },
+      { name: 'description', type: 'string', indexed: false },
+      { name: 'uri', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'EndAnnouncement',
+    inputs: [{ name: 'id', type: 'bytes32', indexed: true }],
+  },
+  {
+    type: 'event',
+    name: 'ExtraMetadataUpdated',
+    inputs: [
+      { name: 'key', type: 'string', indexed: true },
+      { name: 'value', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'multiplier',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'scaledBalanceOf',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'WAD_PRECISION',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+] as const;
+
 export const IERC20_ABI = [
   {
     type: 'function',

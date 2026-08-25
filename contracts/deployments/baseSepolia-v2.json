@@ -1,7 +1,7 @@
 {
   "network": "baseSepolia",
   "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
-  "timestamp": "2026-08-01T10:27:16.773Z",
+  "timestamp": "2026-08-24T20:15:19.670Z",
   "contracts": {
     "adapterRegistry": "0x80f70Da0e0e7A2b9D3A1eE4956309b295329A7D7",
     "marketDeployer": "0xD5d4FEfA4f6Fb3988f26e9A3582c97E7c12a6470",
@@ -14,7 +14,10 @@
     "soulboundPosition": "0x9c4e5AB78DF11d8273Dfa5eB232768765a3394cC",
     "transferablePosition": "0xd66C8f9016f12c2A520A3078BC95BC74993CA433",
     "dexSwapLiquidation": "0x569F318CFfd60C3b305aa082050c59f192d4c5F0",
-    "nftAuctionLiquidation": "0x1746cB9aF9F39125cD8f17Eda680Eb8a1161c020"
+    "nftAuctionLiquidation": "0x1746cB9aF9F39125cD8f17Eda680Eb8a1161c020",
+    "b20AssetAdapter": "0x9163527519461FCc6b0c2fC0d4b1CF37Cfc54493",
+    "b20PolicyComplianceAdapter": "0xe894687bA1Dca31C73c5C0C6054d73513049fA61",
+    "chainlinkEquityFeedAdapter": "0x24a5dED622d3CB0815dFC56dE11Da6AcF71d7351"
   },
   "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market."
 }

@@ -27,7 +27,48 @@ interface DeploymentConfig {
   chainlinkFeeds?: Record<string, { feed: string; staleness?: number }>; // collateral asset => feed
   l2Sequencer?: string; // L2 Sequencer Uptime Feed (empty string disables the check)
   uniswapV3QuoteToken?: string; // Address of quote token for TWAP
+  b20PolicyRegistry?: string;
+  equityFeeds?: Record<string, string>; // B20 token => Chainlink TRV feed (for ChainlinkEquityFeedAdapter)
 }
+
+const B20_POLICY_REGISTRY_BASE = "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD";
+const BASE_SEQUENCER_FEED = "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433";
+const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+
+// Base mainnet B20 token addresses (precompiles)
+const B20_TOKENS_BASE: Record<string, string> = {
+  AAPLc: "0xb200000000000000000000C2e324d24d7eEcd1fb",
+  AMZNc: "0xb200000000000000000000d9192b6B456483C2E8",
+  COINc: "0xb200000000000000000000c85a31389D71F3ecfb",
+  CRCLc: "0xB20000000000000000000019f6E7C675b73C2e4D",
+  GOOGLc: "0xb2000000000000000000002D0BA3164cc74f58B7",
+  INTCc: "0xB2000000000000000000004AFF16039bA04bdFBc",
+  METAc: "0xb2000000000000000000008bC8786B856E61707C",
+  MSFTc: "0xB200000000000000000000Ab99cFa739E253872B",
+  MSTRc: "0xb2000000000000000000004884b426556b92883d",
+  NVDAc: "0xb20000000000000000000078ee7ce2fE4908108C",
+  SNDKc: "0xb200000000000000000000397293Cb8cda9a10c5",
+  SPCXc: "0xb2000000000000000000007b9fcbd005511aCBd5",
+  TSLAc: "0xb2000000000000000000001e800a7f5189430cD0",
+};
+
+// Chainlink total-return feeds for Base tokenized stocks (8 decimals, 24/5, 0.5% / 24h)
+const B20_FEEDS_BASE: Record<string, string> = {
+  AAPLc: "0x787f13dEa48Db0897CbCDD985de77809D837F988",
+  AMZNc: "0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295",
+  COINc: "0x408e44f504A7371a345F03a73dDC96A4b48e8aa7",
+  CRCLc: "0x0231cF2635D1E17bB5c2462cc7504Ba1fBd61f33",
+  GOOGLc: "0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2",
+  INTCc: "0xAB657C39bac0D5886250D70849e2E3E008F2EECB",
+  METAc: "0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D",
+  MSFTc: "0xeB10A6c9aa7E537aEd766C08c35Dae35B321b18c",
+  MSTRc: "0xB3cE282CD188b35DA0E38D8Bc7d58e33173D202a",
+  NVDAc: "0x04689a41629776563E6822F76f2e57D148d28513",
+  SNDKc: "0x388b0dC46C0Fb05A74BeE0994fa5b02c6Fcca2eA",
+  SPCXc: "0x6A634B235903C4ad6376892180d6fF8612e3Fa68",
+  TSLAc: "0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4",
+};
 
 const CONFIGS: Record<string, DeploymentConfig> = {
   sepolia: {
@@ -58,7 +99,7 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     owner: "",
     protocolTreasury: "",
     lendingAssets: [
-      "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
+      USDC_BASE_SEPOLIA,
     ],
     chainlinkFeeds: {
       // WETH => ETH/USD feed
@@ -74,7 +115,18 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     },
     // Base Sepolia does not publish an L2 Sequencer Uptime Feed, so the check is disabled.
     l2Sequencer: "",
-    uniswapV3QuoteToken: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC
+    uniswapV3QuoteToken: USDC_BASE_SEPOLIA,
+    b20PolicyRegistry: B20_POLICY_REGISTRY_BASE,
+  },
+  base: {
+    auditGovernance: "",
+    owner: "",
+    protocolTreasury: "",
+    lendingAssets: [USDC_BASE],
+    l2Sequencer: BASE_SEQUENCER_FEED,
+    uniswapV3QuoteToken: USDC_BASE,
+    b20PolicyRegistry: B20_POLICY_REGISTRY_BASE,
+    equityFeeds: B20_FEEDS_BASE,
   },
   mainnet: {
     auditGovernance: "",
@@ -194,6 +246,24 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
   const ERC721Factory = await ethers.getContractFactory("ERC721Adapter");
   await deployIfMissing("ERC721Adapter", ERC721Factory, [factoryAddress], "erc721Adapter");
 
+  // --- B20 Asset Adapter (Base tokenized stocks) — deploy if registry configured ---
+  if (config.b20PolicyRegistry) {
+    const B20AssetFactory = await ethers.getContractFactory("B20AssetAdapter");
+    await deployIfMissing("B20AssetAdapter", B20AssetFactory, [factoryAddress, config.b20PolicyRegistry], "b20AssetAdapter");
+
+    const B20ComplianceFactory = await ethers.getContractFactory("B20PolicyComplianceAdapter");
+    await deployIfMissing("B20PolicyComplianceAdapter", B20ComplianceFactory, [factoryAddress, config.b20PolicyRegistry], "b20PolicyComplianceAdapter");
+
+    const EquityFactory = await ethers.getContractFactory("ChainlinkEquityFeedAdapter");
+    await deployIfMissing("ChainlinkEquityFeedAdapter", EquityFactory, [factoryAddress], "chainlinkEquityFeedAdapter");
+
+    if (deployed.chainlinkEquityFeedAdapter) {
+      console.log(`  ChainlinkEquityFeedAdapter deployed for B20 TRV feeds (per-market registerFeed uses maxStaleness 90000, sequencer ${config.l2Sequencer || "none"})`);
+      // Note: equity feeds are per-market, not global. No global registration here.
+      // Feed table is B20_FEEDS_BASE; per-market registration happens at market creation time via registerFeed(market, feed, 90000, sequencer).
+    }
+  }
+
   // --- Oracle Adapters ---
   const ChainlinkFactory = await ethers.getContractFactory("ChainlinkAdapter");
   await deployIfMissing("ChainlinkAdapter", ChainlinkFactory, [factoryAddress, deployerAddress], "chainlinkAdapter");
@@ -268,6 +338,15 @@ async function registerAdapters(registryAddress: string, deployed: Record<string
 
   if (deployed.uniswapV3TWAPAdapter) {
     adapterMap.push({ address: deployed.uniswapV3TWAPAdapter, type: 1, name: "UniswapV3TWAPAdapter" });
+  }
+  if (deployed.b20AssetAdapter) {
+    adapterMap.push({ address: deployed.b20AssetAdapter, type: 0, name: "B20AssetAdapter" });
+  }
+  if (deployed.b20PolicyComplianceAdapter) {
+    adapterMap.push({ address: deployed.b20PolicyComplianceAdapter, type: 2, name: "B20PolicyComplianceAdapter" });
+  }
+  if (deployed.chainlinkEquityFeedAdapter) {
+    adapterMap.push({ address: deployed.chainlinkEquityFeedAdapter, type: 1, name: "ChainlinkEquityFeedAdapter" });
   }
 
   for (const adapter of adapterMap) {
@@ -389,6 +468,15 @@ async function main() {
   console.log(`ERC20Adapter:             ${deployedAdapters.erc20Adapter}`);
   console.log(`ERC721Adapter:            ${deployedAdapters.erc721Adapter}`);
   console.log(`ChainlinkAdapter:         ${deployedAdapters.chainlinkAdapter}`);
+  if (deployedAdapters.chainlinkEquityFeedAdapter) {
+    console.log(`ChainlinkEquityFeed:      ${deployedAdapters.chainlinkEquityFeedAdapter}`);
+  }
+  if (deployedAdapters.b20AssetAdapter) {
+    console.log(`B20AssetAdapter:          ${deployedAdapters.b20AssetAdapter}`);
+  }
+  if (deployedAdapters.b20PolicyComplianceAdapter) {
+    console.log(`B20PolicyCompliance:      ${deployedAdapters.b20PolicyComplianceAdapter}`);
+  }
   console.log(`StandardPosition:         ${deployedAdapters.standardPosition}`);
   console.log(`SoulboundPosition:        ${deployedAdapters.soulboundPosition}`);
   console.log(`TransferablePosition:     ${deployedAdapters.transferablePosition}`);

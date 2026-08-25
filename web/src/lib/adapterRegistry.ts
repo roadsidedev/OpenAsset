@@ -84,6 +84,28 @@ const metadataMap: Record<string, AdapterMetadata> = {
     version: 'v2.0.0',
     category: 'LIQUIDATION',
   },
+  // ── Base Sepolia B20 (verified 2026-08-24, owner-fix) ──────────────
+  [`${BASE_SEPOLIA}:0x9163527519461FCc6b0c2fC0d4b1CF37Cfc54493`.toLowerCase()]: {
+    name: 'B20 Asset Adapter',
+    description: 'Custodies Base tokenized stocks (B20 precompile) with policy-aware escrow: checks PolicyRegistry isAuthorized for sender/receiver slots, supports scaled balances.',
+    icon: 'Coins',
+    version: 'v2.1.0',
+    category: 'ASSET',
+  },
+  [`${BASE_SEPOLIA}:0xe894687bA1Dca31C73c5C0C6054d73513049fA61`.toLowerCase()]: {
+    name: 'B20 Policy Compliance',
+    description: 'Enforces B20 transfer policies via PolicyRegistry (sender/receiver slots, pid==0 always-allow). Fail-closed.',
+    icon: 'Stamp',
+    version: 'v2.1.0',
+    category: 'COMPLIANCE',
+  },
+  [`${BASE_SEPOLIA}:0x24a5dED622d3CB0815dFC56dE11Da6AcF71d7351`.toLowerCase()]: {
+    name: 'Chainlink Equity Feed (B20 TRV)',
+    description: '24/5 total-return Chainlink equity feed (8→18 dec, 0.5%/24h, 90000s staleness, sequencer-aware). Blocks TWAP weekends.',
+    icon: 'ChartLine',
+    version: 'v2.1.0',
+    category: 'ORACLE',
+  },
 
   // ── Sepolia (addresses from contracts.ts) ─────────────────────
   [`${SEPOLIA}:0x280eB9597d786D44bC3cd9A4522De023Ace7a304`.toLowerCase()]: {

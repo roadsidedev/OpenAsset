@@ -100,6 +100,48 @@ export class MonitoringService {
           const chainStatus = onChainStatus.status;
 
           if (dbStatus === 'ACTIVE' && chainStatus !== 0) {
+            const isStaleOracle = chainStatus === 2;
+            // B20 taxonomy: oracle freeze during indexed corporate-action Announcement ≠ incident
+            // Correlate PAUSED_STALE_ORACLE with recent B20 Announcement/EndAnnouncement before paging
+            if (isStaleOracle && this.chainId === 8453) {
+              const recentAction = await (this.prisma as any).b20CorporateAction?.findFirst?.({
+                where: {
+                  tokenAddress: market.collateralAsset,
+                  chainId: this.chainId,
+                  createdAt: { gte: new Date(Date.now() - 48 * 3600 * 1000) },
+                },
+                orderBy: { createdAt: 'desc' },
+              } as any).catch(() => null);
+              if (recentAction) {
+                logger.info({ chainId: this.chainId, market: market.address, action: recentAction.actionType }, 'PAUSED_STALE_ORACLE correlated with B20 corporate action — suppressing CRITICAL page');
+                await this.prisma.market.update({
+                  where: { address: market.address },
+                  data: {
+                    status: 'PAUSED_STALE_ORACLE',
+                    pausedAt: new Date(),
+                  },
+                });
+                // Downgrade to INFO-level alert; ops runbook handles Monday-reopen volatility pauses separately
+                await this.alertService.createAlert(
+                  market.lpAddress,
+                  AlertType.MARKET_PAUSED,
+                  AlertLevel.WARNING,
+                  `Market ${market.address} paused for corporate action (${recentAction.actionType}). Oracle will resume after multiplier + feed sync.`,
+                  undefined
+                );
+                continue;
+              }
+            }
+
+            // Monday-reopen note: first trusted Monday price vs Friday lastPrice can exceed pauseThresholdBps → PAUSED_VOLATILITY (expected-conservative, not incident)
+            const isVolatility = chainStatus === 1;
+            if (isVolatility && this.chainId === 8453) {
+              const day = new Date().getUTCDay(); // 1=Monday
+              if (day === 1) {
+                logger.info({ chainId: this.chainId, market: market.address }, 'Monday PAUSED_VOLATILITY — likely Friday→Monday gap, not anomalous vol');
+              }
+            }
+
             await this.prisma.market.update({
               where: { address: market.address },
               data: {

@@ -26,6 +26,12 @@ const envSchema = z.object({
   TREASURY_ADDRESS: z.string().default(''),
   ADAPTER_REGISTRY_ADDRESS: z.string().default(''),
   MARKET_DEPLOYER_ADDRESS: z.string().default(''),
+  // B20 (Base tokenized stocks)
+  B20_FACTORY_ADDRESS: z.string().default(''),
+  B20_POLICY_REGISTRY_ADDRESS: z.string().default(''),
+  B20_ASSET_ADAPTER_ADDRESS: z.string().default(''),
+  B20_COMPLIANCE_ADAPTER_ADDRESS: z.string().default(''),
+  CHAINLINK_EQUITY_FEED_ADAPTER_ADDRESS: z.string().default(''),
   
   // Alert Services
   SENDGRID_API_KEY: z.string().optional(),
@@ -141,6 +147,11 @@ export const config = {
     marketDeployer: parseContractAddresses(env.MARKET_DEPLOYER_ADDRESS),
     treasury: parseContractAddresses(env.TREASURY_ADDRESS),
     adapterRegistry: parseContractAddresses(env.ADAPTER_REGISTRY_ADDRESS),
+    b20Factory: parseContractAddresses(env.B20_FACTORY_ADDRESS),
+    b20PolicyRegistry: parseContractAddresses(env.B20_POLICY_REGISTRY_ADDRESS),
+    b20AssetAdapter: parseContractAddresses(env.B20_ASSET_ADAPTER_ADDRESS),
+    b20ComplianceAdapter: parseContractAddresses(env.B20_COMPLIANCE_ADAPTER_ADDRESS),
+    chainlinkEquityFeedAdapter: parseContractAddresses(env.CHAINLINK_EQUITY_FEED_ADAPTER_ADDRESS),
   },
   
   // Alert configuration with deduplication

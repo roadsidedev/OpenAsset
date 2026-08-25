@@ -215,6 +215,41 @@ model VerificationCode {
     @@map("verification_codes")
 }
 
+// B20 curated token registry — hybrid of KNOWN_B20_TOKENS_BASE + B20Created indexing
+model B20Token {
+    address        String
+    chainId        Int
+    name           String
+    symbol         String
+    feed           String?  // Chainlink TRV feed address (8→18)
+    decimals       Int      @default(18)
+    extraMetadata  Json? // {isin, cusip, ...} from ExtraMetadataUpdated
+    firstSeenBlock Int?
+    createdAt      DateTime @default(now())
+    updatedAt      DateTime @updatedAt
+
+    @@unique([address, chainId])
+    @@index([chainId])
+    @@index([symbol])
+    @@map("b20_tokens")
+}
+
+model B20CorporateAction {
+    id           String   @id @default(uuid())
+    tokenAddress String
+    chainId      Int
+    actionType   String // UIMultiplierUpdated | MultiplierUpdated | Announcement | EndAnnouncement | ExtraMetadataUpdated | UIMultiplierUpdateCancelled
+    txHash       String?
+    blockNumber  Int?
+    metadata     Json?
+    createdAt    DateTime @default(now())
+
+    @@index([tokenAddress, chainId])
+    @@index([actionType])
+    @@index([chainId])
+    @@map("b20_corporate_actions")
+}
+
 enum AdapterType {
     ASSET
     ORACLE

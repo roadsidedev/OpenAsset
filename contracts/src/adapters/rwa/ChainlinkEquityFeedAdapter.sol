@@ -26,6 +26,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract ChainlinkEquityFeedAdapter is IOracleAdapter {
 
     address public immutable factory;
+    address public owner;
 
     struct MarketConfig {
         AggregatorV3Interface feed;
@@ -43,9 +44,21 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
         _;
     }
 
+    modifier onlyFactoryOrOwner() {
+        require(msg.sender == factory || msg.sender == owner, "Only factory/owner");
+        _;
+    }
+
     constructor(address _factory) {
         require(_factory != address(0), "Invalid factory");
         factory = _factory;
+        owner = msg.sender;
+    }
+
+    function transferOwner(address newOwner) external {
+        require(msg.sender == owner, "Only owner");
+        require(newOwner != address(0), "Invalid owner");
+        owner = newOwner;
     }
 
     function configure(address market, address) external onlyFactory {
@@ -64,7 +77,7 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
         address _feed,
         uint256 _maxStaleness,
         address _l2Sequencer
-    ) external onlyFactory {
+    ) external onlyFactoryOrOwner {
         require(market != address(0), "Invalid market");
         require(_feed != address(0), "Invalid feed");
         marketConfigs[market] = MarketConfig({
@@ -128,8 +141,10 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
      * @dev Monday-Friday only, in UTC. Uses block.timestamp mod 7 days.
      */
     function _isWithinTradingWindow() internal view returns (bool) {
-        uint256 dayOfWeek = (block.timestamp / 86400 + 4) % 7; // 0=Monday, 6=Sunday (Unix epoch is Thursday)
+        uint256 dayOfWeek = (block.timestamp / 86400 + 3) % 7; // 0=Monday, 6=Sunday (Unix epoch Thursday -> 3)
+        // solhint-disable-next-line var-name-mixedcase
         uint256 timeOfDay = block.timestamp % 86400;
+        timeOfDay; // suppress unused warning, kept for future intraday window use
 
         // Saturday (5) and Sunday (6) are outside the window
         if (dayOfWeek >= 5) return false;

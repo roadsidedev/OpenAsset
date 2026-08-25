@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import type { Market } from "@/hooks/useMarkets";
+import { isB20Token, getB20Info, isWithinB20TradingWindow } from "@/lib/b20";
 
 function formatLtv(ltvBps: number) {
   return `${(ltvBps / 100).toFixed(1)}%`;
@@ -35,6 +36,9 @@ interface MarketCardProps {
 }
 
 export function MarketCard({ market, className }: MarketCardProps) {
+  const b20 = isB20Token(market.collateralAsset) ? getB20Info(market.collateralAsset) : undefined;
+  const isB20 = !!b20;
+  const hoursOpen = isB20 ? isWithinB20TradingWindow() : true;
   return (
     <Link
       href={`/markets/${market.marketAddress}`}
@@ -42,6 +46,7 @@ export function MarketCard({ market, className }: MarketCardProps) {
         "group block rounded-3xl border border-border bg-card p-6",
         "transition-all duration-200 hover-lift",
         "hover:border-ice-300/50 dark:hover:border-ice-400/30",
+        isB20 ? "ring-1 ring-ice-200/50 dark:ring-ice-800/50" : "",
         className
       )}
     >
@@ -51,13 +56,19 @@ export function MarketCard({ market, className }: MarketCardProps) {
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-foreground truncate group-hover:text-ice-600 dark:group-hover:text-ice-300">
-                Market {market.marketAddress.slice(0, 8)}...
+                {isB20 ? `${b20!.symbol} Market` : `Market ${market.marketAddress.slice(0, 8)}...`}
               </h3>
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-mono truncate">{market.collateralAsset.slice(0, 10)}...</span>
+                <span className="font-mono truncate">{isB20 ? b20!.address.slice(0,10)+"..." : market.collateralAsset.slice(0, 10)+"..."}</span>
                 <span className="shrink-0">·</span>
-                <span>ERC20</span>
+                <span>{isB20 ? `B20 · ${b20!.name}` : "ERC20"}</span>
+                {isB20 && <span className="rounded-full bg-ice-500/10 text-ice-600 px-1.5 py-0.5 text-[10px] font-bold">B20</span>}
               </div>
+              {isB20 && (
+                <div className={cn("mt-1 text-[11px] font-medium", hoursOpen ? "text-emerald-600" : "text-amber-600")}>
+                  {hoursOpen ? "● Market open (24/5)" : "○ Market closed — originations paused"}
+                </div>
+              )}
             </div>
             <Badge
               variant={market.active ? "default" : "secondary"}
