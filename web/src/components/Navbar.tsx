@@ -139,7 +139,12 @@ export function Navbar() {
             {renderAuthButton()}
 
             <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="workspace-menu-trigger h-9 w-9 text-muted-foreground hover:text-foreground"
+                aria-label="Open workspace menu"
+              >
                 <List className={cn("h-4.5 w-4.5 transition-premium", menuOpen && "rotate-90")} />
               </Button>
             </HamburgerMenu>
@@ -154,8 +159,8 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-              aria-label="Open menu"
+              className="workspace-menu-trigger h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="Open workspace menu"
             >
               <List className={cn("h-4 w-4 transition-premium", menuOpen && "rotate-90")} />
             </Button>
