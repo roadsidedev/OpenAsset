@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowRight, MagnifyingGlass } from "@phosphor-icons/react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
@@ -19,87 +21,130 @@ const CATEGORY_TABS = [
 type Category = (typeof CATEGORY_TABS)[number];
 
 export default function MarketsPage() {
-  const [start, setStart] = useState(0);
+  const [start] = useState(0);
   const [category, setCategory] = useState<Category>("All Markets");
   const [search, setSearch] = useState("");
   const { data, isLoading, error } = useMarkets(start, 50);
 
   const allMarkets = data?.markets || [];
 
-  const filteredMarkets = allMarkets.filter((m) => {
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        m.marketAddress.toLowerCase().includes(q) ||
-        m.collateralAsset.toLowerCase().includes(q) ||
-        m.loanAsset.toLowerCase().includes(q)
-      );
-    }
-    return true;
+  const filteredMarkets = allMarkets.filter((market) => {
+    if (!search) return true;
+    const query = search.toLowerCase();
+    return (
+      market.marketAddress.toLowerCase().includes(query) ||
+      market.collateralAsset.toLowerCase().includes(query) ||
+      market.loanAsset.toLowerCase().includes(query)
+    );
   });
 
   return (
-    <div className="min-h-dvh">
-      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-6">
-        {/* Platform Stats Dashboard */}
-        <PlatformStatsDashboard />
+    <div className="app-page min-h-dvh">
+      <main className="mx-auto max-w-7xl space-y-10 px-4 pb-20 pt-8 md:px-8 md:pt-12">
+        <section className="editorial-hero relative overflow-hidden rounded-[32px] border border-border/80 px-6 py-10 md:px-12 md:py-14">
+          <div className="editorial-hero-glow" aria-hidden="true" />
+          <div className="relative z-10 max-w-2xl">
+            <p className="eyebrow-label">Open Asset Market · Live liquidity</p>
+            <h1 className="mt-5 max-w-3xl font-serif text-4xl leading-[0.98] tracking-[-0.045em] text-foreground md:text-6xl lg:text-7xl">
+              Lend against <span className="text-ice-500 dark:text-ice-300">what matters.</span>
+            </h1>
+            <p className="mt-6 max-w-lg text-base leading-relaxed text-muted-foreground md:text-lg">
+              Permissionless markets for real-world assets, tokens, and onchain credit.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <a href="#markets" className="editorial-primary-button group">
+                Explore markets
+                <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+              </a>
+              <Link href="/create-market" className="editorial-text-link">
+                Create a market
+              </Link>
+            </div>
+          </div>
 
-        {/* Category Tabs + Search */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-medium scrollbar-hide">
-          {CATEGORY_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setCategory(tab)}
-              className={cn(
-                "whitespace-nowrap rounded-xl px-4 py-2 transition-colors",
-                category === tab
-                  ? "bg-primary text-primary-foreground font-bold"
-                  : "bg-card border border-border text-muted-foreground hover:border-ice-300/50 hover:text-foreground"
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-
-          {/* Search — circular on mobile, pill on desktop, aligned right */}
-          <div className="relative ml-auto shrink-0">
-            <MagnifyingGlass className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={cn(
-                "h-9 border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 focus:border-transparent placeholder:text-muted-foreground",
-                "w-9 rounded-full pl-9 pr-0 md:w-56 md:rounded-2xl md:pl-9 md:pr-3"
-              )}
+          <div className="editorial-hero-logo" aria-hidden="true">
+            <div className="editorial-hero-logo-halo" />
+            <Image
+              src="/openasset-logo-mark.png"
+              alt=""
+              width={360}
+              height={360}
+              priority
+              className="brand-logo editorial-hero-logo-image"
             />
           </div>
-        </div>
+        </section>
 
-        {/* Error */}
-        {error && (
-          <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-            Error loading markets: {error.message}
+        <section className="editorial-section" aria-labelledby="market-pulse-heading">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="eyebrow-label">Protocol signal</p>
+              <h2 id="market-pulse-heading" className="mt-2 font-serif text-2xl tracking-tight text-foreground md:text-3xl">
+                Market pulse
+              </h2>
+            </div>
+            <div className="editorial-status-label">
+              <span className="editorial-status-dot" />
+              Network · Active
+            </div>
           </div>
-        )}
+          <div className="editorial-stats-grid">
+            <PlatformStatsDashboard />
+          </div>
+        </section>
 
-        {/* Markets Grid */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {isLoading
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <MarketCardSkeleton key={i} />
-              ))
-            : filteredMarkets.length > 0
-            ? filteredMarkets.map((market) => (
-                <MarketCard key={market.marketAddress} market={market} />
-              ))
-            : (
-                <div className="col-span-full text-center py-16">
-                  <p className="text-muted-foreground text-sm">No markets found in this category</p>
-                </div>
-              )}
-        </div>
+        <section id="markets" className="scroll-mt-24" aria-labelledby="markets-heading">
+          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="eyebrow-label">Explore liquidity</p>
+              <h2 id="markets-heading" className="mt-2 font-serif text-3xl tracking-tight text-foreground md:text-4xl">
+                Open markets
+              </h2>
+            </div>
+            <div className="relative w-full md:w-64">
+              <MagnifyingGlass className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search markets"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="editorial-input h-11 w-full pl-10 pr-4"
+              />
+            </div>
+          </div>
+
+          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {CATEGORY_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setCategory(tab)}
+                className={cn("editorial-filter whitespace-nowrap", category === tab && "editorial-filter-active")}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {error && (
+            <div className="editorial-error mb-6 rounded-2xl p-4 text-sm text-destructive">
+              Error loading markets: {error.message}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, index) => <MarketCardSkeleton key={index} />)
+              : filteredMarkets.length > 0
+                ? filteredMarkets.map((market) => <MarketCard key={market.marketAddress} market={market} />)
+                : (
+                  <div className="editorial-empty col-span-full py-20 text-center">
+                    <p className="font-serif text-xl text-foreground">No markets found</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Try another search or browse a different category.</p>
+                  </div>
+                )}
+          </div>
+        </section>
       </main>
     </div>
   );

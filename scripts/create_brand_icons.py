@@ -8,6 +8,10 @@ app_dir = ROOT / "web" / "src" / "app"
 
 source = Image.open(source_path).convert("RGBA")
 
+transparent_mark = Image.new("RGBA", source.size)
+transparent_mark.putdata([(0, 0, 0, 255 - round((red + green + blue) / 3)) for red, green, blue, _ in source.getdata()])
+transparent_mark.save(public_dir / "openasset-logo-mark.png", optimize=True)
+
 for size, filename in ((180, "apple-touch-icon.png"), (192, "openasset-icon-192.png"), (512, "openasset-icon-512.png")):
     source.resize((size, size), Image.Resampling.LANCZOS).save(public_dir / filename, optimize=True)
 

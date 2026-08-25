@@ -89,12 +89,12 @@ export function Navbar() {
   return (
     <>
       {/* Desktop Top Nav */}
-      <header className="sticky top-0 z-40 hidden border-b border-border glass md:block">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+      <header className="app-navbar sticky top-3 z-40 mx-4 hidden rounded-2xl border border-border/70 md:block">
+        <div className="relative mx-auto flex h-[62px] max-w-7xl items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-8">
             <Link href="/markets" className="flex items-center gap-2 group focus:outline-none">
               <Image
-                src="/openasset-logo.png"
+                src="/openasset-logo-mark.png"
                 alt="OpenAsset Market"
                 width={36}
                 height={36}
@@ -105,13 +105,13 @@ export function Navbar() {
               </span>
             </Link>
 
-            <nav className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+            <nav className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 text-xs font-medium text-muted-foreground">
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "px-3.5 py-1.5 rounded-xl transition-colors",
+                    "app-nav-link rounded-full px-4 py-2 transition-all",
                     pathname === item.href || pathname?.startsWith(item.href + "/")
                       ? "bg-primary text-primary-foreground font-bold"
                       : "hover:text-foreground hover:bg-accent"
@@ -153,7 +153,7 @@ export function Navbar() {
       </header>
 
       {/* Mobile Top Nav */}
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border glass px-4 md:hidden">
+      <header className="app-navbar sticky top-3 z-40 mx-3 flex h-14 items-center justify-between rounded-2xl border border-border/70 px-3 md:hidden">
         <div className="flex min-w-0 items-center gap-1">
           <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <Button
@@ -168,7 +168,7 @@ export function Navbar() {
 
           <Link href="/markets" className="flex min-w-0 items-center gap-2">
             <Image
-              src="/openasset-logo.png"
+              src="/openasset-logo-mark.png"
               alt="OpenAsset Market"
               width={30}
               height={30}
@@ -198,8 +198,8 @@ export function Navbar() {
       </header>
 
       {/* Mobile Bottom Nav — Twitter-style */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border glass md:hidden">
-        <div className="grid grid-cols-3 h-14">
+      <nav className="app-mobile-dock fixed bottom-3 left-3 right-3 z-40 rounded-2xl border border-border/70 md:hidden">
+        <div className="grid h-14 grid-cols-3">
           {MOBILE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -208,7 +208,7 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
+                  "app-nav-link flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
                   isActive ? "text-ice-500 dark:text-ice-300" : "text-muted-foreground"
                 )}
               >
@@ -224,8 +224,8 @@ export function Navbar() {
       <Link
         href="/create-market"
         className={cn(
-          "fixed z-50 md:hidden",
-          "right-4 bottom-[4.5rem]",
+          "editorial-fab fixed z-50 md:hidden",
+          "right-4 bottom-[5.25rem]",
           "flex h-14 w-14 items-center justify-center rounded-full",
           "bg-ice-300 text-slate-900 shadow-lg shadow-ice-300/25",
           "transition-all duration-200 active-press",

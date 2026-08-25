@@ -101,7 +101,7 @@ function PortfolioContent() {
     : [];
 
   return (
-    <div className="min-h-dvh">
+    <div className="app-page min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
