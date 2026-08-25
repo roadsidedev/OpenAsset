@@ -54,8 +54,8 @@ export function AdapterCard({ adapter, chainId, selected, onSelect }: AdapterCar
       className={cn(
         'w-full rounded-xl border p-4 text-left transition-all relative',
         selected
-          ? 'border-ice-400 bg-ice-50 dark:bg-ice-900/20 ring-2 ring-ice-400/40'
-          : 'border-border bg-muted/30 hover:border-ice-300/50 hover:bg-muted/50',
+          ? 'border-ice-400 bg-ice-50 dark:bg-ice-500/10 ring-2 ring-ice-400/30 dark:ring-ice-400/20'
+          : 'border-border bg-card dark:bg-muted/20 hover:border-ice-300/50 dark:hover:border-ice-400/30 hover:bg-accent/50 dark:hover:bg-muted/40',
         adapter.deprecated && 'opacity-50 cursor-not-allowed',
       )}
       disabled={adapter.deprecated}
@@ -71,7 +71,7 @@ export function AdapterCard({ adapter, chainId, selected, onSelect }: AdapterCar
         {/* Icon */}
         <div className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors',
-          selected ? 'bg-ice-400/30 text-ice-600 dark:text-ice-400' : 'bg-muted text-muted-foreground',
+          selected ? 'bg-ice-400/20 dark:bg-ice-500/15 text-ice-600 dark:text-ice-300' : 'bg-muted dark:bg-muted/50 text-muted-foreground',
         )}>
           <AdapterIcon iconName={iconName} />
         </div>

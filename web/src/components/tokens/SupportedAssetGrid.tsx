@@ -122,8 +122,8 @@ export function SupportedAssetGrid({
                 className={cn(
                   'group relative flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all hover-lift focus:outline-none focus:ring-2 focus:ring-ice-400',
                   isSelected
-                    ? 'border-ice-400 bg-ice-50 dark:bg-ice-900/20 ring-2 ring-ice-400/30'
-                    : 'bg-card hover:border-ice-300/50'
+                    ? 'border-ice-400 bg-ice-50 dark:bg-ice-500/10 ring-2 ring-ice-400/30 dark:ring-ice-400/20'
+                    : 'bg-card dark:bg-card hover:border-ice-300/50 dark:hover:border-ice-400/30 hover:bg-accent/50'
                 )}
               >
                 {isSelected && <CheckCircle className="absolute right-2 top-2 h-4 w-4 text-ice-500" weight="fill" />}
@@ -132,7 +132,7 @@ export function SupportedAssetGrid({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-bold text-foreground truncate">{asset.symbol}</span>
-                      {asset.isB20 && <Badge className="h-4 px-1.5 text-[10px] bg-ice-500/10 text-ice-600 border-ice-500/20">B20</Badge>}
+                      {asset.isB20 && <Badge className="h-4 px-1.5 text-[10px] bg-ice-500/10 text-ice-600 dark:text-ice-300 border-ice-500/20 dark:border-ice-400/20">B20</Badge>}
                     </div>
                     <div className="text-xs text-muted-foreground truncate">{asset.name}</div>
                   </div>

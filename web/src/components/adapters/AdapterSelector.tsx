@@ -95,9 +95,9 @@ export function AdapterSelector({
       </div>
 
       {selected && (
-        <div className="flex items-center gap-2 rounded-lg bg-ice-50 dark:bg-ice-900/20 border border-ice-300/30 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-lg bg-ice-50 dark:bg-ice-500/10 border border-ice-300/30 dark:border-ice-400/20 px-3 py-2">
           <div className="h-2 w-2 rounded-full bg-ice-400" />
-          <span className="text-xs text-ice-600 dark:text-ice-400 font-medium">
+          <span className="text-xs text-ice-600 dark:text-ice-300 font-medium">
             Selected: {selected.slice(0, 6)}...{selected.slice(-4)}
           </span>
         </div>

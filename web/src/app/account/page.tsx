@@ -141,7 +141,7 @@ function AccountContent() {
         {/* Account Header */}
         <div className="p-6 md:p-8 rounded-3xl border border-border bg-card flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-soft">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-ice-100 dark:bg-ice-900/40 text-ice-600 dark:text-ice-300 flex items-center justify-center font-extrabold text-xl">
+            <div className="w-14 h-14 rounded-2xl bg-ice-100 dark:bg-ice-500/15 text-ice-600 dark:text-ice-300 flex items-center justify-center font-extrabold text-xl border border-ice-200/50 dark:border-ice-400/20">
               oA
             </div>
             <div>

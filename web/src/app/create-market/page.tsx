@@ -298,7 +298,7 @@ export default function CreateMarketPage() {
                 chainId={chainId}
               />
               {canShowPicker ? (
-                <div className="space-y-3 rounded-2xl border border-ice-300/30 bg-ice-50/50 dark:bg-ice-950/10 p-4">
+                <div className="space-y-3 rounded-2xl border border-ice-300/30 dark:border-ice-400/20 bg-ice-50/50 dark:bg-ice-500/10 p-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                       <MagnifyingGlass className="h-4 w-4 text-ice-500" />
@@ -338,7 +338,7 @@ export default function CreateMarketPage() {
                 required
               />
               {isB20Selected && b20Info && (
-                <div className="rounded-2xl border border-ice-300/30 bg-ice-50 dark:bg-ice-950/20 p-4 space-y-2">
+                <div className="rounded-2xl border border-ice-300/30 dark:border-ice-400/20 bg-ice-50 dark:bg-ice-500/10 p-4 space-y-2">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> B20 Tokenized Stock detected — {b20Info.symbol} ({b20Info.name})
                   </div>

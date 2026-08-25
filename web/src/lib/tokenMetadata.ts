@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { isAddress, getAddress } from 'viem';
 import { parseAbi } from 'viem';
+import { getBrandLogoUrl } from './brandLogos';
 
 const ERC20_READ_ABI = parseAbi([
   'function name() external view returns (string)',
@@ -81,7 +82,12 @@ function getLocalLogo(symbol: string): string | null {
     LINK: 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
     PEPE: 'https://assets.coingecko.com/coins/images/14261/small/pepe-token.jpeg',
   };
-  return known[symbol.toUpperCase()] || null;
+  const upper = symbol.toUpperCase();
+  if (known[upper]) return known[upper];
+  // Try brand logo (B20 stocks, SpaceX, etc)
+  const brand = getBrandLogoUrl(symbol);
+  if (brand) return brand;
+  return null;
 }
 
 export function useTokenMetadata(address: string | undefined, chainId?: number) {

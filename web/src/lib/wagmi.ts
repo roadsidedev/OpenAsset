@@ -4,6 +4,7 @@ import { mainnet, polygon, optimism, arbitrum, base, sepolia } from 'wagmi/chain
 const baseSepolia = {
   id: 84532,
   name: 'Base Sepolia',
+  network: 'base-sepolia',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
     default: { http: ['https://sepolia.base.org'] },
@@ -11,6 +12,7 @@ const baseSepolia = {
   blockExplorers: {
     default: { name: 'Basescan', url: 'https://sepolia.basescan.org' },
   },
+  testnet: true,
 } as const;
 
 export const supportedChains = [mainnet, polygon, optimism, arbitrum, base, sepolia, baseSepolia] as const;

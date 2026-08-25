@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { resolveTokenLogo } from '@/lib/brandLogos';
 import { Coins, Image, Stamp, Lock, ArrowsClockwise, Swap, Gavel, ChartLine, TrendUp, PuzzlePiece } from '@phosphor-icons/react';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -38,6 +40,8 @@ function GenericTokenIcon({ symbol, className }: { symbol: string; className?: s
 }
 
 export function TokenPreview({ name, symbol, decimals, logoUri, address, error, compact }: TokenPreviewProps) {
+  const resolvedLogo = resolveTokenLogo(symbol, logoUri);
+  const [imgFailed, setImgFailed] = useState(false);
   if (error) {
     return (
       <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
@@ -51,15 +55,16 @@ export function TokenPreview({ name, symbol, decimals, logoUri, address, error, 
 
   return (
     <div className={cn(
-      'flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3',
+      'flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 dark:bg-emerald-500/10 dark:border-emerald-500/20',
       compact && 'p-2',
     )}>
-      {logoUri ? (
+      {resolvedLogo && !imgFailed ? (
         <img
-          src={logoUri}
+          src={resolvedLogo}
           alt={`${symbol} logo`}
-          className={cn('h-8 w-8 rounded-full object-contain', compact && 'h-6 w-6')}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          className={cn('h-8 w-8 rounded-full object-contain bg-white dark:bg-white p-0.5 shadow-sm', compact && 'h-6 w-6')}
+          onError={() => setImgFailed(true)}
+          loading="lazy"
         />
       ) : (
         <GenericTokenIcon symbol={symbol} className={compact ? 'h-6 w-6 text-[10px]' : ''} />
@@ -81,17 +86,24 @@ export function TokenPreview({ name, symbol, decimals, logoUri, address, error, 
 }
 
 export function TokenIcon({ symbol, logoUri, className }: { symbol: string; logoUri?: string | null; className?: string }) {
-  if (logoUri) {
+  const resolved = resolveTokenLogo(symbol, logoUri);
+  const [failed, setFailed] = useState(false);
+  if (resolved && !failed) {
     return (
       <img
-        src={logoUri}
+        src={resolved}
         alt={`${symbol} logo`}
-        className={cn('h-6 w-6 rounded-full object-contain', className)}
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        className={cn('h-6 w-6 rounded-full object-contain bg-white p-0.5 shadow-sm', className)}
+        onError={() => setFailed(true)}
+        loading="lazy"
       />
     );
   }
   return <GenericTokenIcon symbol={symbol} className={className} />;
+}
+
+export function BrandTokenIcon({ symbol, logoUri, className }: { symbol: string; logoUri?: string | null; className?: string }) {
+  return <TokenIcon symbol={symbol} logoUri={logoUri} className={className} />;
 }
 
 export function AdapterIcon({ iconName, className }: { iconName: string; className?: string }) {

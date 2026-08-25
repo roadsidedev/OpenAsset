@@ -117,12 +117,12 @@ export function SupportedAssetPicker({
           chainId={effectiveChainId}
         />
         {selected && (
-          <div className="mt-4 space-y-3 rounded-2xl border border-ice-300/30 bg-ice-50 dark:bg-ice-900/20 p-4">
+          <div className="mt-4 space-y-3 rounded-2xl border border-ice-300/30 dark:border-ice-400/20 bg-ice-50 dark:bg-ice-500/10 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-foreground">{selected.symbol}</span>
-                  {selected.isB20 && <Badge className="bg-ice-500/10 text-ice-600 border-ice-500/20 text-[11px]">B20 • {selected.feed?.slice(0,6)}…</Badge>}
+                  {selected.isB20 && <Badge className="bg-ice-500/10 text-ice-600 dark:text-ice-300 border-ice-500/20 dark:border-ice-400/20 text-[11px]">B20 • {selected.feed?.slice(0,6)}…</Badge>}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">{selected.name} • {selected.address.slice(0,10)}…</div>
                 <div className={cn("text-xs mt-1", hoursOpen ? "text-emerald-600" : "text-amber-600")}>
@@ -156,7 +156,7 @@ export function SupportedAssetPicker({
       </div>
 
       {/* Advanced manual */}
-      <div className="shrink-0 px-6 py-3 border-t border-border bg-muted/20">
+      <div className="shrink-0 px-6 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
         <button
           onClick={() => setShowManual(!showManual)}
           className="text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -178,7 +178,7 @@ export function SupportedAssetPicker({
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 flex items-center justify-between gap-3 p-6 pt-3 border-t border-border bg-card">
+      <div className="shrink-0 flex items-center justify-between gap-3 p-6 pt-3 border-t border-border bg-card dark:bg-card">
         <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-2xl">
           Cancel
         </Button>

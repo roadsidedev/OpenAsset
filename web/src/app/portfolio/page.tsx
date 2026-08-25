@@ -9,6 +9,10 @@ import { useMarkets } from "@/hooks/useMarkets";
 import { LOAN_STATUS } from "@/lib/contractAbis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { TokenIcon } from "@/components/tokens/TokenPreview";
+import { isB20Token, getB20Info } from "@/lib/b20";
+import { useTokenMetadata } from "@/lib/tokenMetadata";
+import { isAddress } from "viem";
 import {
   Wallet,
   Briefcase,
@@ -210,18 +214,21 @@ function PortfolioContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {activeLoans.map((loan: any) => (
+                    {activeLoans.map((loan: any) => {
+                      const loanMarket = allMarkets.find((m: any) => m.marketAddress?.toLowerCase() === loan.marketAddress?.toLowerCase());
+                      const isLoanB20 = loanMarket ? isB20Token(loanMarket.collateralAsset) : false;
+                      const b20Info = isLoanB20 ? getB20Info(loanMarket.collateralAsset) : undefined;
+                      const loanSymbol = b20Info?.symbol || loan.marketAddress?.slice(0, 6) || 'LOAN';
+                      return (
                       <div
                         key={loan.address}
                         className="flex flex-col gap-4 rounded-2xl border border-border bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs text-muted-foreground">
-                            {loan.marketAddress.slice(2, 6)}
-                          </div>
+                          <TokenIcon symbol={loanSymbol} logoUri={b20Info ? null : undefined} className="h-10 w-10 shrink-0" />
                           <div>
                             <p className="font-medium text-foreground">
-                              Market {loan.marketAddress.slice(0, 8)}...
+                              {b20Info ? `${b20Info.symbol} Market` : `Market ${loan.marketAddress.slice(0, 8)}...`}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {timeUntil(loan.expiryTime)} · {LOAN_STATUS[loan.status as keyof typeof LOAN_STATUS] || "Unknown"}
@@ -239,7 +246,8 @@ function PortfolioContent() {
                           Manage <ArrowSquareOut className="h-3.5 w-3.5" />
                         </Link>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -301,18 +309,20 @@ function PortfolioContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {myMarkets.map((market: any) => (
+                    {myMarkets.map((market: any) => {
+                      const isMarketB20 = isB20Token(market.collateralAsset);
+                      const mB20 = isMarketB20 ? getB20Info(market.collateralAsset) : undefined;
+                      const marketSymbol = mB20?.symbol || market.collateralAsset?.slice(0, 6) || market.marketAddress.slice(0, 6);
+                      return (
                       <div
                         key={market.marketAddress}
                         className="flex flex-col gap-4 rounded-2xl border border-border bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs text-muted-foreground">
-                            {market.marketAddress.slice(2, 6)}
-                          </div>
+                          <TokenIcon symbol={marketSymbol} logoUri={mB20 ? null : undefined} className="h-10 w-10 shrink-0" />
                           <div>
                             <p className="font-medium text-foreground">
-                              Market {market.marketAddress.slice(0, 8)}...
+                              {mB20 ? `${mB20.symbol} Market` : `Market ${market.marketAddress.slice(0, 8)}...`}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               LTV: {(market.ltvBps / 100).toFixed(1)}% · APR: {(market.aprBps / 100).toFixed(1)}%
@@ -332,7 +342,8 @@ function PortfolioContent() {
                           View <ArrowSquareOut className="h-3.5 w-3.5" />
                         </Link>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

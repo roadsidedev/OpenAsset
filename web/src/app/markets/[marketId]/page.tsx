@@ -9,6 +9,10 @@ import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { MARKET_STATUS } from "@/lib/contractAbis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { TokenIcon } from "@/components/tokens/TokenPreview";
+import { isB20Token, getB20Info } from "@/lib/b20";
+import { useTokenMetadata } from "@/lib/tokenMetadata";
+import { isAddress } from "viem";
 import { ArrowLeft, Warning, CheckCircle } from "@phosphor-icons/react";
 
 function formatLtv(ltvBps: number) {
@@ -134,12 +138,23 @@ export default function MarketDetailPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-6 rounded-3xl border border-border bg-card">
           <div className="space-y-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-foreground text-balance">
-                Market {market.marketAddress.slice(0, 10)}...
-              </h1>
-              <span className="text-xs px-3 py-1 rounded-full bg-ice-50 dark:bg-ice-900/30 text-ice-700 dark:text-ice-300 font-semibold">
-                ERC20
-              </span>
+              {(() => {
+                const isB20 = isB20Token(market.collateralAsset);
+                const b20 = isB20 ? getB20Info(market.collateralAsset) : undefined;
+                return (
+                  <>
+                    {isB20 && b20 ? (
+                      <TokenIcon symbol={b20.symbol} logoUri={null} className="h-8 w-8" />
+                    ) : null}
+                    <h1 className="text-2xl font-bold text-foreground text-balance">
+                      {isB20 && b20 ? `${b20.symbol} Market` : `Market ${market.marketAddress.slice(0, 10)}...`}
+                    </h1>
+                    <span className="text-xs px-3 py-1 rounded-full bg-ice-50 dark:bg-ice-500/15 text-ice-700 dark:text-ice-300 font-semibold border border-ice-200/50 dark:border-ice-400/20">
+                      {isB20 ? 'B20' : 'ERC20'}
+                    </span>
+                  </>
+                );
+              })()}
               {isPaused ? (
                 <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
                   <Warning className="h-3 w-3" />

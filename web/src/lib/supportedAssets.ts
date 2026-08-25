@@ -135,10 +135,16 @@ function getCuratedFallback(adapterAddress: string, chainId: number): SupportedA
   return [];
 }
 
-// D: enrich via CoinGecko/Uniswap token lists — delegated to UI via useTokenMetadata per asset
-// Keeping passthrough; Grid will call useTokenMetadata or fetchTokenListLogos lazily
+// D: enrich via brand logos + token lists — resolves B20 brand logos and ERC20 known logos
 async function enrichWithLogos(assets: SupportedAsset[], _chainId: number): Promise<SupportedAsset[]> {
-  return assets;
+  // Lazy import to avoid circular deps
+  const { getBrandLogoUrl } = await import('./brandLogos');
+  return assets.map((a) => {
+    if (a.logoUri) return a;
+    const brandLogo = getBrandLogoUrl(a.symbol);
+    if (brandLogo) return { ...a, logoUri: brandLogo };
+    return a;
+  });
 }
 
 // Helper to determine if adapter supports picker (has curated list)
