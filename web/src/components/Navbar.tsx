@@ -9,7 +9,6 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAuthApi } from "@/hooks/useAuthApi";
 import { useTheme } from "@/components/ThemeProvider";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
-import { NetworkSwitcher } from "@/components/NetworkSwitcher";
 import { useState } from "react";
 import Image from "next/image";
 
@@ -124,8 +123,6 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
-            <NetworkSwitcher />
-
             <Button
               onClick={toggleTheme}
               variant="ghost"
@@ -181,8 +178,6 @@ export function Navbar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <NetworkSwitcher compact />
-
           {/* Theme Toggle — visible on mobile */}
           <Button
             onClick={toggleTheme}

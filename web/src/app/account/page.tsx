@@ -146,7 +146,10 @@ function AccountContent() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold text-foreground text-balance">
+                <h1
+                  className="max-w-[220px] truncate text-xs font-semibold text-muted-foreground md:max-w-[280px] md:text-sm"
+                  title={user?.email?.address || "Account"}
+                >
                   {user?.email?.address || "Account"}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold">
