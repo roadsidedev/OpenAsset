@@ -51,10 +51,10 @@ export function MarketCard({ market, className }: MarketCardProps) {
     chain?.id
   );
   const marketSymbol = isB20
-    ? b20.symbol
+    ? b20!.symbol
     : collateralMetadata?.symbol || market.collateralAsset?.slice(0, 6) || "UNKNOWN";
   const logoUri = isB20
-    ? resolveTokenLogo(b20.symbol, null)
+    ? resolveTokenLogo(b20!.symbol, null)
     : collateralMetadata?.logoUri ?? (collateralMetadata?.symbol ? resolveTokenLogo(collateralMetadata.symbol, null) : null);
 
   return (
@@ -73,12 +73,12 @@ export function MarketCard({ market, className }: MarketCardProps) {
                   {market.active ? "Active market" : "Inactive market"}
                 </div>
                 <h3 className="font-serif text-xl tracking-tight text-foreground transition-colors duration-300 group-hover:text-ice-600 dark:group-hover:text-ice-300">
-                  {isB20 ? `${b20.symbol} Market` : `Market ${market.marketAddress.slice(0, 8)}...`}
+                  {isB20 ? `${b20!.symbol} Market` : `Market ${market.marketAddress.slice(0, 8)}...`}
                 </h3>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="truncate font-mono">{isB20 ? `${b20.address.slice(0, 10)}...` : `${market.collateralAsset.slice(0, 10)}...`}</span>
+                  <span className="truncate font-mono">{isB20 ? `${b20!.address.slice(0, 10)}...` : `${market.collateralAsset.slice(0, 10)}...`}</span>
                   <span aria-hidden="true">·</span>
-                  <span>{isB20 ? `B20 · ${b20.name}` : "ERC20"}</span>
+                  <span>{isB20 ? `B20 · ${b20!.name}` : "ERC20"}</span>
                 </div>
                 {isB20 && (
                   <div className={cn("mt-1 text-[11px] font-medium", hoursOpen ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
