@@ -88,7 +88,7 @@ npm run dev
 ## 🏗 Architecture
 
 ### Isolated Markets
-Unlike shared-pool protocols, OpenAsset Market uses a factory pattern to deploy unique `LendingMarket` contracts for each asset pair. This ensures that a bad debt event in one market cannot affect others.
+Unlike shared-pool protocols, oA Market uses a factory pattern to deploy unique `LendingMarket` contracts for each asset pair. This ensures that a bad debt event in one market cannot affect others.
 
 ### TWAP Oracle System
 To prevent price manipulation, OpenAsset Market consults Uniswap V3 pools to calculate a Time-Weighted Average Price (TWAP) over a configurable window (e.g., 30 minutes). This makes the protocol highly resistant to flash loan attacks.
