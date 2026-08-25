@@ -18,7 +18,7 @@ const navbar = (
   <Navbar
     logo={
       <span className="flex items-center gap-2 font-bold tracking-tight">
-        <Image src="/openasset-logo.png" alt="OpenAsset" className="brand-logo h-5 w-5" width={20} height={20} />
+        <Image src="/openasset-logo-mark.png" alt="OpenAsset" className="brand-logo h-5 w-5" width={20} height={20} />
         <span>OpenAsset</span>
         <span className="font-normal text-zinc-400">Docs</span>
       </span>

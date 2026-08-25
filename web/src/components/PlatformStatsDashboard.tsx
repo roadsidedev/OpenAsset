@@ -10,11 +10,11 @@ export function PlatformStatsDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="min-w-[160px] shrink-0 rounded-2xl border border-border bg-card p-4 md:min-w-0">
-            <Skeleton className="h-3.5 w-24 bg-muted mb-2.5" />
-            <Skeleton className="h-7 w-16 bg-muted" />
+      <div className="grid gap-px overflow-hidden rounded-[24px] border border-border/70 bg-border/60 md:grid-cols-4">
+        {[1, 2, 3, 4].map((index) => (
+          <div key={index} className="min-h-[110px] bg-card/80 p-5">
+            <Skeleton className="mb-3 h-3 w-24 bg-muted" />
+            <Skeleton className="h-8 w-16 bg-muted" />
           </div>
         ))}
       </div>
@@ -23,50 +23,45 @@ export function PlatformStatsDashboard() {
 
   const stats = [
     {
-      label: "Active Markets",
+      label: "Active markets",
       value: data?.totalActiveMarkets ?? 0,
       icon: StackSimple,
-      color: "text-ice-600 dark:text-ice-400",
+      color: "text-ice-600 dark:text-ice-300",
     },
     {
-      label: "Active Loans",
+      label: "Active loans",
       value: data?.totalActiveLoans ?? 0,
       icon: Bank,
-      color: "text-emerald-600 dark:text-emerald-400",
+      color: "text-emerald-600 dark:text-emerald-300",
     },
     {
       label: "Collateral",
       value: data?.totalCollateral ?? "$0",
       icon: Shield,
-      color: "text-ice-600 dark:text-ice-400",
+      color: "text-ice-600 dark:text-ice-300",
     },
   ];
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
+    <div className="grid gap-px overflow-hidden rounded-[24px] border border-border/70 bg-border/60 md:grid-cols-4">
       {stats.map((stat) => {
         const Icon = stat.icon;
         return (
-          <div
-            key={stat.label}
-            className="min-w-[160px] shrink-0 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-ice-300/30 md:min-w-0"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">{stat.label}</span>
+          <div key={stat.label} className="group min-h-[110px] bg-card/80 p-5 transition-colors duration-300 hover:bg-card">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <Icon className="size-3.5 transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110" />
+              <span>{stat.label}</span>
             </div>
-            <div className={`text-xl font-bold tabular-nums ${stat.color}`}>
+            <div className={`mt-4 font-serif text-3xl tracking-tight ${stat.color}`}>
               {typeof stat.value === "number" ? stat.value.toLocaleString() : stat.value}
             </div>
           </div>
         );
       })}
 
-      {/* Asset Distribution — interactive donut chart card */}
-      <AssetDistributionCard
-        data={data?.assetCategories ?? []}
-        isLoading={isLoading}
-      />
+      <div className="bg-card/80 [&>button]:!min-w-0 [&>button]:!rounded-none [&>button]:!border-0 [&>button]:!bg-transparent [&>button]:!p-5 [&>button]:!shadow-none">
+        <AssetDistributionCard data={data?.assetCategories ?? []} isLoading={isLoading} />
+      </div>
     </div>
   );
 }

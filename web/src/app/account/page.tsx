@@ -136,7 +136,7 @@ function AccountContent() {
   ];
 
   return (
-    <div className="min-h-dvh">
+    <div className="app-page min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
         {/* Account Header */}
         <div className="p-6 md:p-8 rounded-3xl border border-border bg-card flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-soft">
