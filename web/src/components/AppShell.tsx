@@ -8,13 +8,14 @@ import Link from "next/link";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isLanding = pathname === "/";
   const isDocs =
     pathname === "/docs" ||
     pathname?.startsWith("/docs/") ||
     pathname === "/doc" ||
     pathname?.startsWith("/doc/");
 
-  if (isDocs) {
+  if (isLanding || isDocs) {
     return <>{children}</>;
   }
 

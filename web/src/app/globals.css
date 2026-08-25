@@ -670,9 +670,252 @@
   background: color-mix(in srgb, var(--card) 38%, transparent);
 }
 
+.landing-page {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--background);
+  background-image:
+    radial-gradient(circle at 20% 12%, color-mix(in srgb, var(--ice-300) 10%, transparent), transparent 28%),
+    radial-gradient(circle at 82% 30%, color-mix(in srgb, var(--ice-300) 8%, transparent), transparent 26%),
+    repeating-linear-gradient(118deg, color-mix(in srgb, var(--foreground) 1.6%, transparent) 0 1px, transparent 1px 5px);
+}
+
+.dark .landing-page {
+  background-image:
+    radial-gradient(circle at 20% 12%, rgba(168, 216, 255, 0.09), transparent 28%),
+    radial-gradient(circle at 82% 30%, rgba(56, 189, 180, 0.07), transparent 26%),
+    repeating-linear-gradient(118deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 5px);
+}
+
+.landing-nav {
+  position: relative;
+  z-index: 10;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  backdrop-filter: blur(22px) saturate(120%);
+  -webkit-backdrop-filter: blur(22px) saturate(120%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 7%, transparent), 0 18px 46px -36px rgba(0, 0, 0, 0.72);
+}
+
+.landing-nav-link,
+.landing-footer-link {
+  transition: color 220ms ease;
+}
+
+.landing-nav-link:hover,
+.landing-footer-link:hover {
+  color: var(--foreground);
+}
+
+.landing-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  border-radius: 999px;
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.55rem 0.8rem;
+  transition: background-color 220ms ease, border-color 220ms ease, transform 220ms ease;
+}
+
+.landing-nav-cta:hover {
+  border-color: color-mix(in srgb, var(--ice-300) 55%, transparent);
+  background: color-mix(in srgb, var(--ice-300) 11%, transparent);
+  transform: translateY(-1px);
+}
+
+.landing-hero {
+  min-height: min(780px, calc(100dvh - 80px));
+}
+
+.landing-hero-art {
+  min-height: 380px;
+}
+
+.landing-orbit {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--foreground) 13%, transparent);
+  border-radius: 999px;
+  transform: rotate(-24deg);
+}
+
+.landing-orbit-one {
+  inset: 11%;
+  animation: landing-orbit-drift 14s ease-in-out infinite;
+}
+
+.landing-orbit-two {
+  inset: 21%;
+  border-color: color-mix(in srgb, var(--ice-300) 19%, transparent);
+  transform: rotate(36deg) scaleX(1.14);
+  animation: landing-orbit-drift 18s ease-in-out infinite reverse;
+}
+
+.landing-hero-mark-shell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48%;
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+  border-radius: 42% 58% 50% 50%;
+  background: color-mix(in srgb, var(--card) 43%, transparent);
+  box-shadow: inset 0 0 50px color-mix(in srgb, var(--ice-300) 8%, transparent), 0 24px 80px -56px rgba(0, 0, 0, 0.95);
+  transform: rotate(8deg);
+  animation: landing-mark-float 7s ease-in-out infinite;
+}
+
+.landing-hero-mark {
+  width: 54%;
+  height: 54%;
+  object-fit: contain;
+  transform: rotate(-8deg);
+}
+
+.landing-hero-note {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 65%, transparent);
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  padding: 0.5rem 0.65rem;
+  text-transform: uppercase;
+}
+
+.landing-hero-note-top {
+  top: 17%;
+  right: 5%;
+}
+
+.landing-hero-note-bottom {
+  bottom: 17%;
+  left: 5%;
+}
+
+.landing-principle,
+.landing-path,
+.landing-final-cta {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--card) 78%, transparent), color-mix(in srgb, var(--background) 74%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.landing-principle {
+  min-height: 300px;
+  transition: background-color 260ms ease, transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-principle:hover {
+  background: color-mix(in srgb, var(--card) 93%, transparent);
+  transform: translateY(-4px);
+}
+
+.landing-ecosystem {
+  background: color-mix(in srgb, var(--card) 20%, transparent);
+}
+
+.landing-path {
+  display: flex;
+  min-height: 330px;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 24px;
+  padding: 1.35rem;
+  transition: border-color 260ms ease, transform 360ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
+}
+
+.landing-path:hover {
+  border-color: color-mix(in srgb, var(--ice-300) 46%, var(--border));
+  box-shadow: 0 24px 50px -42px rgba(0, 0, 0, 0.85);
+  transform: translateY(-4px);
+}
+
+.landing-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  transition: color 220ms ease, gap 220ms ease;
+}
+
+.landing-inline-link:hover {
+  color: var(--ice-500);
+  gap: 0.75rem;
+}
+
+.landing-final-cta {
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--ice-300) 13%, transparent), transparent 44%),
+    linear-gradient(145deg, color-mix(in srgb, var(--card) 87%, transparent), color-mix(in srgb, var(--background) 76%, transparent));
+}
+
+.market-search-control-open .editorial-input {
+  width: 12rem;
+  cursor: text;
+}
+
+.market-search-control-open .market-search-toggle {
+  color: var(--foreground);
+}
+
+@keyframes landing-mark-float {
+  0%, 100% { transform: rotate(8deg) translateY(0); }
+  50% { transform: rotate(4deg) translateY(-10px); }
+}
+
+@keyframes landing-orbit-drift {
+  0%, 100% { transform: rotate(-24deg) scale(1); }
+  50% { transform: rotate(-17deg) scale(1.03); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-orbit-one,
+  .landing-orbit-two,
+  .landing-hero-mark-shell {
+    animation: none;
+  }
+
+  .landing-principle:hover,
+  .landing-path:hover {
+    transform: none;
+  }
+}
+
 @media (max-width: 767px) {
   .app-navbar {
     margin-top: 0.75rem;
+  }
+
+  .market-filter-row {
+    scrollbar-width: none;
+  }
+
+  .market-filter-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .landing-hero {
+    min-height: auto;
+  }
+
+  .landing-hero-art {
+    min-height: 320px;
+  }
+
+  .landing-hero-note-top {
+    top: 10%;
+    right: 0;
+  }
+
+  .landing-hero-note-bottom {
+    bottom: 9%;
+    left: 0;
   }
 
   .editorial-hero {

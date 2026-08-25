@@ -24,6 +24,7 @@ export default function MarketsPage() {
   const [start] = useState(0);
   const [category, setCategory] = useState<Category>("All Markets");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const { data, isLoading, error } = useMarkets(start, 50);
 
   const allMarkets = data?.markets || [];
@@ -94,26 +95,14 @@ export default function MarketsPage() {
         </section>
 
         <section id="markets" className="scroll-mt-24" aria-labelledby="markets-heading">
-          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="eyebrow-label">Explore liquidity</p>
-              <h2 id="markets-heading" className="mt-2 font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-                Open markets
-              </h2>
-            </div>
-            <div className="relative w-full md:w-64">
-              <MagnifyingGlass className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search markets"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="editorial-input h-11 w-full pl-10 pr-4"
-              />
-            </div>
+          <div className="mb-5">
+            <p className="eyebrow-label">Explore liquidity</p>
+            <h2 id="markets-heading" className="mt-2 font-serif text-3xl tracking-tight text-foreground md:text-4xl">
+              Open markets
+            </h2>
           </div>
 
-          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="market-filter-row mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide" aria-label="Market categories">
             {CATEGORY_TABS.map((tab) => (
               <button
                 key={tab}
@@ -124,6 +113,26 @@ export default function MarketsPage() {
                 {tab}
               </button>
             ))}
+            <div className={cn("market-search-control relative ml-auto shrink-0", searchOpen && "market-search-control-open")}>
+              <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                aria-label="Search markets"
+                placeholder="Search markets"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className={cn("editorial-input h-10 w-10 cursor-pointer pl-10 pr-3 md:h-11 md:w-64 md:cursor-text", searchOpen && "market-search-input-open")}
+              />
+              <button
+                type="button"
+                aria-label={searchOpen ? "Close market search" : "Open market search"}
+                aria-expanded={searchOpen}
+                onClick={() => setSearchOpen((open) => !open)}
+                className="market-search-toggle absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-full text-muted-foreground md:hidden"
+              >
+                <span className="sr-only">{searchOpen ? "Close market search" : "Open market search"}</span>
+              </button>
+            </div>
           </div>
 
           {error && (

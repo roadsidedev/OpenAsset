@@ -34,13 +34,13 @@ export function Navbar() {
 
   const NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: SquaresFour },
-    { label: "Portfolio", href: "/portfolio", icon: Briefcase },
+    { label: "Positions", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
 
   const MOBILE_NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: SquaresFour },
-    { label: "Portfolio", href: "/portfolio", icon: Briefcase },
+    { label: "Positions", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
 
