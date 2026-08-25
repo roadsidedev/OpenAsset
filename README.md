@@ -103,12 +103,5 @@ The `monitoringWorker` tracks volatility in real-time. If an asset's price moves
 - **Input Validation**: All API inputs are validated using Zod schemas.
 - **Checks-Effects-Interactions**: Smart contracts strictly follow CEI patterns to prevent reentrancy.
 
-## 🗺 Roadmap
-
-- **Phase 1**: Core Smart Contracts & TWAP Integration (In Progress)
-- **Phase 2**: Backend Infrastructure & Indexing
-- **Phase 3**: Frontend Dashboards & Analytics
-- **Phase 4**: Security Audits & Testnet Deployment
-- **Phase 5**: Mainnet Launch (Limited)
 
 
