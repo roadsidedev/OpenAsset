@@ -346,13 +346,13 @@ export function AssetDistributionCard({ data, isLoading, error }: AssetDistribut
 
   if (isLoading) {
     return (
-      <div className="min-w-[280px] sm:min-w-[310px] shrink-0 rounded-2xl border border-border bg-card p-4">
+      <div className="rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
-          <div className="h-4 w-4 rounded bg-muted animate-pulse" />
-          <div className="h-3.5 w-24 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 w-3.5 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-24 rounded bg-muted animate-pulse" />
         </div>
         <div className="flex items-center gap-3">
-          <div className="h-[52px] w-[52px] rounded-full bg-muted animate-pulse" />
+          <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
           <div className="space-y-2">
             <div className="h-3 w-20 rounded bg-muted animate-pulse" />
             <div className="h-2.5 w-14 rounded bg-muted animate-pulse" />
@@ -364,16 +364,21 @@ export function AssetDistributionCard({ data, isLoading, error }: AssetDistribut
 
   if (error || !hasData) {
     return (
-      <div className="min-w-[280px] sm:min-w-[310px] shrink-0 rounded-2xl border border-border bg-card p-4">
+      <div className="rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
-          <ChartPieSlice className="h-4 w-4 text-indigo-500" />
-          <span className="text-xs text-muted-foreground">Asset Distribution</span>
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted">
+            <ChartPieSlice className="h-3.5 w-3.5 text-muted-foreground" />
+          </span>
+          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distribution</span>
         </div>
         <div className="flex items-center gap-3">
-          <svg viewBox="0 0 60 60" className="h-[52px] w-[52px] shrink-0 -rotate-90">
-            <circle cx={30} cy={30} r={20} fill="none" stroke="currentColor" strokeWidth={8} className="text-muted/15" />
-          </svg>
-          <span className="text-xs text-muted-foreground">{error ?? "No data"}</span>
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-border bg-muted/40">
+            <ChartPieSlice className="h-4 w-4 text-muted-foreground/50" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">No positions yet</p>
+            <p className="text-xs text-muted-foreground">Distribution will appear here</p>
+          </div>
         </div>
       </div>
     );
@@ -383,14 +388,16 @@ export function AssetDistributionCard({ data, isLoading, error }: AssetDistribut
     <>
       <button
         onClick={() => setIsModalOpen(true)}
-        className="min-w-[280px] sm:min-w-[310px] shrink-0 rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-ice-300/50 hover:shadow-md cursor-pointer group"
+        className="group rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-border hover:bg-muted/20"
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <ChartPieSlice className="h-4 w-4 text-ice-500" />
-            <span className="text-xs text-muted-foreground">Asset Distribution</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted">
+              <ChartPieSlice className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+            <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distribution</span>
           </div>
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-ice-600 dark:text-ice-400 opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
             <ArrowsOutSimple className="h-3 w-3" />
             Details
           </span>
@@ -404,15 +411,12 @@ export function AssetDistributionCard({ data, isLoading, error }: AssetDistribut
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: topCategory.color }} />
                 <span className="text-xs font-medium text-foreground truncate">
-                  {topCategory.name} ({topCategory.percentage}%)
+                  {topCategory.name} · {topCategory.percentage}%
                 </span>
               </div>
             )}
             <span className="text-xs text-muted-foreground">
-              {totalPositions} total position{totalPositions !== 1 ? "s" : ""}
-            </span>
-            <span className="text-xs text-ice-500 dark:text-ice-400 font-medium">
-              Expand breakdown →
+              {totalPositions} position{totalPositions !== 1 ? "s" : ""} · {data.length} types
             </span>
           </div>
         </div>

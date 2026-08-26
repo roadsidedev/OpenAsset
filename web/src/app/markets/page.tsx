@@ -8,43 +8,131 @@ import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 import { PlatformStatsDashboard } from "@/components/PlatformStatsDashboard";
 import { cn } from "@/lib/utils";
 
-const CATEGORY_TABS = ["All Markets", "RWA", "Tokenized Equities", "Tokens", "NFT"] as const;
+const CATEGORY_TABS = [
+  "All Markets",
+  "RWA",
+  "Tokenized Equities",
+  "Tokens",
+  "NFT",
+] as const;
+
 type Category = (typeof CATEGORY_TABS)[number];
 
 export default function MarketsPage() {
-  const [start] = useState(0);
+  const [start, setStart] = useState(0);
   const [category, setCategory] = useState<Category>("All Markets");
   const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const { data, isLoading, error } = useMarkets(start, 50);
+
   const allMarkets = data?.markets || [];
-  const filteredMarkets = allMarkets.filter((market) => {
-    if (!search) return true;
-    const query = search.toLowerCase();
-    return market.marketAddress.toLowerCase().includes(query) || market.collateralAsset.toLowerCase().includes(query) || market.loanAsset.toLowerCase().includes(query);
+
+  const filteredMarkets = allMarkets.filter((m) => {
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        m.marketAddress.toLowerCase().includes(q) ||
+        m.collateralAsset.toLowerCase().includes(q) ||
+        m.loanAsset.toLowerCase().includes(q)
+      );
+    }
+    return true;
   });
 
   return (
-    <div className="app-page min-h-dvh">
-      <main className="mx-auto max-w-7xl space-y-10 px-4 pb-20 pt-8 md:px-8 md:pt-12">
-        <section aria-labelledby="market-pulse-heading">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow-label">Protocol signal</p><h1 id="market-pulse-heading" className="mt-2 font-serif text-3xl tracking-tight text-foreground">Market pulse</h1></div><div className="editorial-status-label"><span className="editorial-status-dot" />Network · Active</div></div>
-          <div className="editorial-stats-grid"><PlatformStatsDashboard /></div>
+    <div className="min-h-dvh">
+      <main className="mx-auto max-w-[1160px] px-4 py-6 md:px-6 md:py-7">
+        {/* Market pulse */}
+        <section className="space-y-3.5">
+          <div className="flex items-baseline justify-between gap-4">
+            <h1 className="font-display text-[28px] leading-[0.95] tracking-[-0.025em] text-foreground md:text-[32px]">
+              Market pulse
+            </h1>
+            <span className="hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground md:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Network · Active
+            </span>
+          </div>
+          <PlatformStatsDashboard />
         </section>
 
-        <section id="markets" className="scroll-mt-24" aria-labelledby="markets-heading">
-          <div className="mb-5"><p className="eyebrow-label">Explore liquidity</p><h2 id="markets-heading" className="mt-2 font-serif text-3xl tracking-tight text-foreground md:text-4xl">Open markets</h2></div>
-          <div className="market-filter-row mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide" aria-label="Market categories">
-            {CATEGORY_TABS.map((tab) => <button key={tab} type="button" onClick={() => setCategory(tab)} className={cn("editorial-filter whitespace-nowrap", category === tab && "editorial-filter-active")}>{tab}</button>)}
-            <div className={cn("market-search-control relative ml-auto shrink-0", searchOpen && "market-search-control-open")}>
-              <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input type="search" aria-label="Search markets" placeholder="Search markets" value={search} onChange={(event) => setSearch(event.target.value)} className="editorial-input h-10 w-10 cursor-pointer pl-10 pr-3 md:h-11 md:w-64 md:cursor-text" />
-              <button type="button" aria-label={searchOpen ? "Close market search" : "Open market search"} aria-expanded={searchOpen} onClick={() => setSearchOpen((open) => !open)} className="market-search-toggle absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-full text-muted-foreground md:hidden"><span className="sr-only">{searchOpen ? "Close market search" : "Open market search"}</span></button>
-            </div>
+        {/* Open markets */}
+        <section className="mt-8 space-y-4 md:mt-10">
+          <div className="flex items-end justify-between gap-4">
+            <h2 className="font-display text-[22px] leading-none tracking-[-0.022em] text-foreground md:text-[24px]">
+              Open markets
+            </h2>
+            <span className="hidden text-xs text-muted-foreground md:inline">
+              {filteredMarkets.length} {filteredMarkets.length === 1 ? "market" : "markets"}
+            </span>
           </div>
-          {error && <div className="editorial-error mb-6 rounded-2xl p-4 text-sm text-destructive">Error loading markets: {error.message}</div>}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {isLoading ? Array.from({ length: 6 }).map((_, index) => <MarketCardSkeleton key={index} />) : filteredMarkets.length > 0 ? filteredMarkets.map((market) => <MarketCard key={market.marketAddress} market={market} />) : <div className="editorial-empty col-span-full py-20 text-center"><p className="font-serif text-xl text-foreground">No markets found</p><p className="mt-2 text-sm text-muted-foreground">Try another search or browse a different category.</p></div>}
+
+          {/* Filters + Search */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+              {CATEGORY_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setCategory(tab)}
+                  className={cn(
+                    "whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium leading-none transition-colors",
+                    category === tab
+                      ? "bg-foreground text-background"
+                      : "border border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/15"
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative ml-auto hidden shrink-0 items-center md:flex">
+              <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search markets"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 w-[240px] rounded-full border border-border bg-card pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground/15 focus:ring-2 focus:ring-foreground/5"
+              />
+            </div>
+
+          </div>
+
+          {/* Mobile search */}
+          <div className="relative md:hidden">
+            <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search markets"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground/15 focus:ring-2 focus:ring-foreground/5"
+            />
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-3.5 text-sm text-destructive">
+              Error loading markets: {error.message}
+            </div>
+          )}
+
+          {/* Markets Grid */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <MarketCardSkeleton key={i} />
+                ))
+              : filteredMarkets.length > 0
+                ? filteredMarkets.map((market) => (
+                    <MarketCard key={market.marketAddress} market={market} />
+                  ))
+                : (
+                    <div className="col-span-full rounded-2xl border border-dashed border-border bg-card/50 py-12 text-center">
+                      <p className="text-sm font-medium text-foreground">No markets found</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Try a different category or search term</p>
+                    </div>
+                  )}
           </div>
         </section>
       </main>

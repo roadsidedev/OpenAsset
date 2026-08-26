@@ -9,6 +9,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAuthApi } from "@/hooks/useAuthApi";
 import { useTheme } from "@/components/ThemeProvider";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { NetworkSwitcher } from "@/components/NetworkSwitcher";
 import { useState } from "react";
 import Image from "next/image";
 
@@ -33,13 +34,13 @@ export function Navbar() {
 
   const NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: SquaresFour },
-    { label: "Positions", href: "/portfolio", icon: Briefcase },
+    { label: "Portfolio", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
 
   const MOBILE_NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: SquaresFour },
-    { label: "Positions", href: "/portfolio", icon: Briefcase },
+    { label: "Portfolio", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
 
@@ -88,32 +89,32 @@ export function Navbar() {
   return (
     <>
       {/* Desktop Top Nav */}
-      <header className="app-navbar sticky top-3 z-40 mx-4 hidden rounded-2xl border border-border/70 md:block">
-        <div className="relative mx-auto flex h-[62px] max-w-7xl items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2 group focus:outline-none" aria-label="OpenAsset home">
+      <header className="sticky top-0 z-40 hidden border-b border-border/70 glass md:block">
+        <div className="mx-auto flex h-[56px] max-w-[1160px] items-center justify-between px-5 md:px-6">
+          <div className="flex items-center gap-7">
+            <Link href="/markets" className="flex items-center gap-2.5 group focus:outline-none">
               <Image
-                src="/openasset-logo-mark.png"
+                src="/openasset-logo.png"
                 alt="OpenAsset Market"
-                width={36}
-                height={36}
-                className="brand-logo group-hover:scale-105 transition-transform"
+                width={32}
+                height={32}
+                className="brand-logo"
               />
-              <span className="text-xl font-bold tracking-tight text-foreground group-hover:scale-105 transition-transform">
+              <span className="text-[17px] font-semibold tracking-[-0.025em] text-foreground">
                 OpenAsset
               </span>
             </Link>
 
-            <nav className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 text-xs font-medium text-muted-foreground">
+            <nav className="flex items-center gap-1 text-[13.5px] font-medium text-muted-foreground">
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "app-nav-link rounded-full px-4 py-2 transition-all",
+                    "rounded-full px-3.5 py-1.5 transition-colors",
                     pathname === item.href || pathname?.startsWith(item.href + "/")
-                      ? "bg-primary text-primary-foreground font-bold"
-                      : "hover:text-foreground hover:bg-accent"
+                      ? "bg-foreground text-background"
+                      : "hover:bg-muted hover:text-foreground"
                   )}
                 >
                   {item.label}
@@ -123,6 +124,8 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
+            <NetworkSwitcher />
+
             <Button
               onClick={toggleTheme}
               variant="ghost"
@@ -136,12 +139,7 @@ export function Navbar() {
             {renderAuthButton()}
 
             <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="workspace-menu-trigger h-9 w-9 text-muted-foreground hover:text-foreground"
-                aria-label="Open workspace menu"
-              >
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
                 <List className={cn("h-4.5 w-4.5 transition-premium", menuOpen && "rotate-90")} />
               </Button>
             </HamburgerMenu>
@@ -150,22 +148,22 @@ export function Navbar() {
       </header>
 
       {/* Mobile Top Nav */}
-      <header className="app-navbar sticky top-3 z-40 mx-3 flex h-14 items-center justify-between rounded-2xl border border-border/70 px-3 md:hidden">
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border glass px-4 md:hidden">
         <div className="flex min-w-0 items-center gap-1">
           <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <Button
               variant="ghost"
               size="icon"
-              className="workspace-menu-trigger h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-              aria-label="Open workspace menu"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="Open menu"
             >
               <List className={cn("h-4 w-4 transition-premium", menuOpen && "rotate-90")} />
             </Button>
           </HamburgerMenu>
 
-          <Link href="/" className="flex min-w-0 items-center gap-2" aria-label="OpenAsset home">
+          <Link href="/markets" className="flex min-w-0 items-center gap-2">
             <Image
-              src="/openasset-logo-mark.png"
+              src="/openasset-logo.png"
               alt="OpenAsset Market"
               width={30}
               height={30}
@@ -178,6 +176,8 @@ export function Navbar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          <NetworkSwitcher compact />
+
           {/* Theme Toggle — visible on mobile */}
           <Button
             onClick={toggleTheme}
@@ -193,8 +193,8 @@ export function Navbar() {
       </header>
 
       {/* Mobile Bottom Nav — Twitter-style */}
-      <nav className="app-mobile-dock fixed bottom-3 left-3 right-3 z-40 rounded-2xl border border-border/70 md:hidden">
-        <div className="grid h-14 grid-cols-3">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border glass md:hidden">
+        <div className="grid grid-cols-3 h-14">
           {MOBILE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -203,7 +203,7 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "app-nav-link flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
+                  "flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
                   isActive ? "text-ice-500 dark:text-ice-300" : "text-muted-foreground"
                 )}
               >
@@ -219,8 +219,8 @@ export function Navbar() {
       <Link
         href="/create-market"
         className={cn(
-          "editorial-fab fixed z-50 md:hidden",
-          "right-4 bottom-[5.25rem]",
+          "fixed z-50 md:hidden",
+          "right-4 bottom-[4.5rem]",
           "flex h-14 w-14 items-center justify-center rounded-full",
           "bg-ice-300 text-slate-900 shadow-lg shadow-ice-300/25",
           "transition-all duration-200 active-press",

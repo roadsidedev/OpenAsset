@@ -8,14 +8,13 @@ import Link from "next/link";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLanding = pathname === "/";
   const isDocs =
     pathname === "/docs" ||
     pathname?.startsWith("/docs/") ||
     pathname === "/doc" ||
     pathname?.startsWith("/doc/");
 
-  if (isLanding || isDocs) {
+  if (isDocs) {
     return <>{children}</>;
   }
 
@@ -33,22 +32,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <CreateMarketFAB />
 
-      <footer className="hidden border-t border-border bg-background/50 py-8 px-4 md:block">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-xs text-muted-foreground md:flex-row">
+      <footer className="hidden border-t border-border/60 bg-card/40 px-5 py-6 md:block md:px-6">
+        <div className="mx-auto flex max-w-[1160px] flex-col items-center justify-between gap-3 text-xs text-muted-foreground md:flex-row">
           <div className="flex items-center gap-2">
-            <Image src="/openasset-logo-mark.png" alt="OpenAsset" width={20} height={20} className="brand-logo" />
-            <span className="font-bold text-foreground">OpenAsset</span>
-            <span>— Market Infrastructure</span>
+            <Image src="/openasset-logo.png" alt="OpenAsset" width={18} height={18} className="brand-logo opacity-90" />
+            <span className="font-semibold tracking-tight text-foreground">OpenAsset</span>
+            <span className="opacity-70">— Market infrastructure</span>
           </div>
-          <div className="flex items-center gap-6">
-            <Link href="/docs" className="hover:text-foreground transition-premium">Docs</Link>
-            <Link href="/markets" className="hover:text-foreground transition-premium">Markets</Link>
-            <Link href="/portfolio" className="hover:text-foreground transition-premium">Portfolio</Link>
-            <Link href="/account" className="hover:text-foreground transition-premium">Account</Link>
+          <div className="flex items-center gap-5">
+            <Link href="/docs" className="hover:text-foreground transition-colors">Docs</Link>
+            <Link href="/markets" className="hover:text-foreground transition-colors">Markets</Link>
+            <Link href="/portfolio" className="hover:text-foreground transition-colors">Portfolio</Link>
+            <Link href="/account" className="hover:text-foreground transition-colors">Account</Link>
           </div>
-          <div className="flex items-center gap-6">
-            <Link href="/privacy" className="hover:text-foreground transition-premium">Privacy Policy</Link>
-            <Link href="/terms" className="hover:text-foreground transition-premium">Terms of Service</Link>
+          <div className="flex items-center gap-5">
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
           </div>
         </div>
       </footer>

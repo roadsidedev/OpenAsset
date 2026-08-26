@@ -105,40 +105,40 @@ function PortfolioContent() {
     : [];
 
   return (
-    <div className="app-page min-h-dvh">
-      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
+    <div className="min-h-dvh">
+      <main className="mx-auto max-w-[1160px] px-4 py-6 md:px-6 md:py-7 space-y-6">
         {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-          <h1 className="text-2xl font-bold text-foreground text-balance">Portfolio</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="font-display text-[28px] leading-none tracking-[-0.025em] text-foreground md:text-[30px]">Portfolio</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
               Track active debt positions and markets you have launched
             </p>
           </div>
 
           {/* Tab Selector */}
-          <div className="flex items-center gap-1 p-1 rounded-2xl bg-muted text-xs font-semibold">
+          <div className="flex items-center gap-1 rounded-full border border-border bg-card p-1 text-[13px] font-medium">
             <button
               onClick={() => setTab("loans")}
               className={cn(
-                "px-4 py-2 rounded-xl transition-all",
+                "rounded-full px-4 py-1.5 transition-colors",
                 tab === "loans"
-                  ? "bg-card text-foreground shadow-sm"
+                  ? "bg-foreground text-background shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              My Loans (Borrowed)
+              My loans
             </button>
             <button
               onClick={() => setTab("markets")}
               className={cn(
-                "px-4 py-2 rounded-xl transition-all",
+                "rounded-full px-4 py-1.5 transition-colors",
                 tab === "markets"
-                  ? "bg-card text-foreground shadow-sm"
+                  ? "bg-foreground text-background shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              My Created Markets (LP)
+              My markets
             </button>
           </div>
         </div>
