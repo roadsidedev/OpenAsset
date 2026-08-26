@@ -6,6 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { apiFetchJson } from '@/lib/apiClient';
 
 export interface ProtocolStats {
   tvl: string;
@@ -17,11 +18,7 @@ export const useProtocolStats = () => {
   return useQuery<ProtocolStats>({
     queryKey: ['protocolStats'],
     queryFn: async () => {
-      // Fetch a large batch to compute aggregate stats
-      const res = await fetch('/api/v1/markets?start=0&count=500');
-      if (!res.ok) throw new Error('Failed to fetch protocol stats');
-      const json = await res.json();
-      const data = json.data;
+      const data = await apiFetchJson<{ total: number; markets: any[] }>(`/api/v1/markets?start=0&count=500`);
       const markets = data?.markets || [];
 
       let tvl = BigInt(0);
@@ -42,10 +39,14 @@ export const useProtocolStats = () => {
       return {
         tvl: tvl.toString(),
         activeMarkets,
-        totalMarkets: data?.total ?? markets.length,
+        totalMarkets: (data as any)?.total ?? markets.length,
       };
     },
-    staleTime: 60_000, // 1 minute — stats don't change fast
+    staleTime: 60_000,
+    gcTime: 300000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
   });
 };
 

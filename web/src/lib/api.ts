@@ -1,23 +1,17 @@
-// Use relative path to leverage Next.js rewrites
+import { apiFetchJson } from '@/lib/apiClient';
+
 const API_BASE = '/api/v1';
 
-export async function fetchFromApi(endpoint: string, options: RequestInit = {}) {
-  // Ensure endpoint starts with /
+export async function fetchFromApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${API_BASE}${path}`;
-  
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  const data = await apiFetchJson<T>(url, options as any);
+  if (data === null) throw new Error(`Request failed: ${path} not available`);
+  return data as any;
+}
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Request failed with status ${response.status}`);
-  }
-
-  return response.json();
+export async function fetchFromApiSoft<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE}${path}`;
+  return apiFetchJson<T>(url, options as any);
 }

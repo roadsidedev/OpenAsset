@@ -1,13 +1,15 @@
 /**
  * @file useMarkets.ts
- * @description Hook for querying markets from backend API with on-chain fallback
+ * @description Unified market discovery — backend first, multichain on-chain fallback.
+ * Not dependent on wallet network selector. Persists via TanStack Query cache.
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { usePublicClient, useAccount } from 'wagmi';
 import { type Address, parseAbi } from 'viem';
 import { MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI } from '@/lib/contractAbis';
 import { getContract } from '@/lib/contracts';
+import { apiFetchJson, isBackendConfigured } from '@/lib/apiClient';
+import { createChainClient, discoveryChainIds, DEFAULT_CHAIN_ID } from '@/lib/chains';
 
 export interface Market {
   marketAddress: string;
@@ -27,17 +29,24 @@ export interface Market {
     available: string;
     reserved: string;
   };
+  chainId?: number;
 }
 
-async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClient>, chainId: number): Promise<Market[]> {
+async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
   const factoryAddress = getContract(chainId, 'marketFactory');
-  if (!factoryAddress || !publicClient) throw new Error('Chain not supported');
+  const publicClient = createChainClient(chainId);
+  if (!factoryAddress || factoryAddress === '0x0000000000000000000000000000000000000000' || !publicClient) return [];
 
-  const marketAddresses = await publicClient.readContract({
-    address: factoryAddress as Address,
-    abi: MARKET_FACTORY_ABI_TYPED,
-    functionName: 'getAllMarkets',
-  }) as string[];
+  let marketAddresses: string[] = [];
+  try {
+    marketAddresses = (await publicClient.readContract({
+      address: factoryAddress as Address,
+      abi: MARKET_FACTORY_ABI_TYPED,
+      functionName: 'getAllMarkets',
+    })) as string[];
+  } catch {
+    return [];
+  }
 
   const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
 
@@ -73,7 +82,6 @@ async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClie
             args: [BigInt(0)],
           }) as string) || '';
         } catch {
-          // token ID 0 may not exist, try ID 1
           try {
             lpOwner = (await publicClient.readContract({
               address: lpTokenAddr as Address,
@@ -102,6 +110,7 @@ async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClie
           available: availLiq.toString(),
           reserved: totalBorrowed.toString(),
         },
+        chainId,
       });
     } catch {
       // Skip markets that fail to read
@@ -110,140 +119,176 @@ async function fetchOnChainMarkets(publicClient: ReturnType<typeof usePublicClie
   return markets;
 }
 
-export const useMarkets = (start = 0, count = 20) => {
-  const publicClient = usePublicClient();
-  const { chain } = useAccount();
-  const chainId = chain?.id;
+async function fetchAggregatedOnChainMarkets(): Promise<Market[]> {
+  const ids = discoveryChainIds();
+  const batches = await Promise.all(ids.map((id) => fetchOnChainMarketsForChain(id)));
+  // flatten and deduplicate by marketAddress
+  const seen = new Set<string>();
+  const all: Market[] = [];
+  for (const batch of batches) {
+    for (const m of batch) {
+      const key = m.marketAddress.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        all.push(m);
+      }
+    }
+  }
+  return all;
+}
 
+export const useMarkets = (start = 0, count = 20) => {
   return useQuery<{ total: number; start: number; count: number; markets: Market[] }>({
-    queryKey: ['markets', start, count, chainId],
+    queryKey: ['markets', 'unified', start, count],
     queryFn: async () => {
-      try {
-        const res = await fetch(`/api/v1/markets?start=${start}&count=${count}`);
-        if (res.ok) {
-          const json = await res.json();
-          return json.data;
+      // 1) Try backend — unified discovery layer (already aggregates chains via indexer)
+      // This path is chain-agnostic and preferred. Only hit backend if configured to avoid 404 spam.
+      const shouldTryBackend = isBackendConfigured();
+      if (shouldTryBackend) {
+        const data = await apiFetchJson<{ total: number; start: number; count: number; markets: Market[] }>(
+          `/api/v1/markets?start=${start}&count=${count}`
+        );
+        if (data && Array.isArray(data.markets)) {
+          // backend may return empty even when on-chain has data (indexer lag) → merge fallback below
+          if (data.markets.length > 0) {
+            return { total: data.total ?? data.markets.length, start: data.start ?? start, count: data.count ?? count, markets: data.markets };
+          }
         }
-      } catch {
-        // Backend unavailable, fall through to on-chain
+      } else {
+        // No backend configured (local / missing env) → avoid noisy 404 fetch, go straight to on-chain
       }
 
-      // On-chain fallback
-      const chainMarkets = await fetchOnChainMarkets(publicClient, chainId);
-      return { total: chainMarkets.length, start, count, markets: chainMarkets };
+      // 2) Fallback: multichain on-chain aggregation (not dependent on wallet)
+      const all = await fetchAggregatedOnChainMarkets();
+      const sliced = all.slice(start, start + count);
+      return { total: all.length, start, count, markets: sliced };
     },
     staleTime: 30000,
+    gcTime: 300000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
   });
 };
 
 export const useMarket = (address: string) => {
-  const publicClient = usePublicClient();
-  const { chain } = useAccount();
-  const chainId = chain?.id;
-
   return useQuery<Market>({
-    queryKey: ['market', address, chainId],
+    queryKey: ['market', address],
     queryFn: async () => {
-      try {
-        const res = await fetch(`/api/v1/markets/${address}`);
-        if (res.ok) {
-          return (await res.json()).data;
-        }
-      } catch {
-        // Fall through to on-chain
+      // backend preferred, but skip noisy fetch if not configured
+      if (isBackendConfigured()) {
+        const data = await apiFetchJson<Market>(`/api/v1/markets/${address}`);
+        if (data && (data as any).marketAddress) return data as Market;
       }
 
-      if (!publicClient || !address) throw new Error('Cannot fetch market');
+      if (!address) throw new Error('Cannot fetch market');
 
+      // fallback: try each chain's public client
       const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
-
-      const [stats, status, lpTokenAddr] = await Promise.all([
-        publicClient.readContract({
-          address: address as Address,
-          abi: parseAbi(LENDING_MARKET_ABI),
-          functionName: 'getMarketStats',
-        }) as Promise<[bigint, bigint, bigint, bigint, number]>,
-        publicClient.readContract({
-          address: address as Address,
-          abi: parseAbi(LENDING_MARKET_ABI),
-          functionName: 'status',
-        }) as Promise<number>,
-        publicClient.readContract({
-          address: address as Address,
-          abi: parseAbi(LENDING_MARKET_ABI),
-          functionName: 'lpToken',
-        }) as Promise<string>,
-      ]);
-
-      let lpOwner = '';
-      if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
+      for (const chainId of discoveryChainIds()) {
+        const publicClient = createChainClient(chainId);
+        if (!publicClient) continue;
         try {
-          lpOwner = (await publicClient.readContract({
-            address: lpTokenAddr as Address,
-            abi: parseAbi(ERC721_OWNER_ABI),
-            functionName: 'ownerOf',
-            args: [BigInt(0)],
-          }) as string) || '';
+          const [stats, status, lpTokenAddr] = await Promise.all([
+            publicClient.readContract({
+              address: address as Address,
+              abi: parseAbi(LENDING_MARKET_ABI),
+              functionName: 'getMarketStats',
+            }) as Promise<[bigint, bigint, bigint, bigint, number]>,
+            publicClient.readContract({
+              address: address as Address,
+              abi: parseAbi(LENDING_MARKET_ABI),
+              functionName: 'status',
+            }) as Promise<number>,
+            publicClient.readContract({
+              address: address as Address,
+              abi: parseAbi(LENDING_MARKET_ABI),
+              functionName: 'lpToken',
+            }) as Promise<string>,
+          ]);
+
+          let lpOwner = '';
+          if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
+            try {
+              lpOwner = (await publicClient.readContract({
+                address: lpTokenAddr as Address,
+                abi: parseAbi(ERC721_OWNER_ABI),
+                functionName: 'ownerOf',
+                args: [BigInt(0)],
+              }) as string) || '';
+            } catch {
+              try {
+                lpOwner = (await publicClient.readContract({
+                  address: lpTokenAddr as Address,
+                  abi: parseAbi(ERC721_OWNER_ABI),
+                  functionName: 'ownerOf',
+                  args: [BigInt(1)],
+                }) as string) || '';
+              } catch {}
+            }
+          }
+
+          return {
+            marketAddress: address,
+            owner: lpOwner,
+            collateralAsset: '',
+            loanAsset: '',
+            assetType: 0,
+            oracleType: 0,
+            ltvBps: 0,
+            aprBps: 0,
+            durationSeconds: 0,
+            createdAt: 0,
+            active: (status as number) === 0,
+            liquidity: {
+              total: (stats[0] as bigint).toString(),
+              available: (stats[1] as bigint).toString(),
+              reserved: (stats[2] as bigint).toString(),
+            },
+            chainId,
+          };
         } catch {
-          try {
-            lpOwner = (await publicClient.readContract({
-              address: lpTokenAddr as Address,
-              abi: parseAbi(ERC721_OWNER_ABI),
-              functionName: 'ownerOf',
-              args: [BigInt(1)],
-            }) as string) || '';
-          } catch {}
+          // try next chain
         }
       }
-
-      return {
-        marketAddress: address,
-        owner: lpOwner,
-        collateralAsset: '',
-        loanAsset: '',
-        assetType: 0,
-        oracleType: 0,
-        ltvBps: 0,
-        aprBps: 0,
-        durationSeconds: 0,
-        createdAt: 0,
-        active: (status as number) === 0,
-        liquidity: {
-          total: (stats[0] as bigint).toString(),
-          available: (stats[1] as bigint).toString(),
-          reserved: (stats[2] as bigint).toString(),
-        },
-      };
+      throw new Error('Market not found on any supported chain');
     },
     enabled: !!address && address.startsWith('0x'),
     staleTime: 30000,
+    gcTime: 300000,
+    retry: 1,
   });
 };
 
 export const useMarketLiquidity = (address: string) => {
-  const publicClient = usePublicClient();
-  const { chain } = useAccount();
-  const chainId = chain?.id;
-
   return useQuery({
-    queryKey: ['marketLiquidity', address, chainId],
+    queryKey: ['marketLiquidity', address],
     queryFn: async () => {
-      try {
-        const res = await fetch(`/api/v1/markets/${address}/liquidity`);
-        if (res.ok) return (await res.json()).data;
-      } catch {}
+      if (isBackendConfigured()) {
+        const data = await apiFetchJson<{ total: string; available: string; reserved: string }>(`/api/v1/markets/${address}/liquidity`);
+        if (data && (data as any).total) return data;
+      }
 
-      if (!publicClient || !address) throw new Error('Cannot fetch liquidity');
+      if (!address) throw new Error('Cannot fetch liquidity');
 
-      const [totalLiq, availLiq] = await publicClient.readContract({
-        address: address as Address,
-        abi: parseAbi(LENDING_MARKET_ABI),
-        functionName: 'getMarketStats',
-      }) as [bigint, bigint];
-
-      return { total: totalLiq.toString(), available: availLiq.toString(), reserved: '0' };
+      for (const chainId of discoveryChainIds()) {
+        const publicClient = createChainClient(chainId);
+        if (!publicClient) continue;
+        try {
+          const [totalLiq, availLiq] = await publicClient.readContract({
+            address: address as Address,
+            abi: parseAbi(LENDING_MARKET_ABI),
+            functionName: 'getMarketStats',
+          }) as [bigint, bigint];
+          return { total: totalLiq.toString(), available: availLiq.toString(), reserved: '0', chainId };
+        } catch {}
+      }
+      // graceful empty, not throw for UX
+      return { total: '0', available: '0', reserved: '0' };
     },
     enabled: !!address && address.startsWith('0x'),
     staleTime: 15000,
+    gcTime: 120000,
+    retry: 1,
   });
 };

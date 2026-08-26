@@ -4,6 +4,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { apiFetchJson } from '@/lib/apiClient';
 
 export interface ActivityEvent {
   type: string;
@@ -15,13 +16,14 @@ export const useActivity = (address: string | undefined, { enabled = true }: { e
   return useQuery<{ events: ActivityEvent[]; total: number }>({
     queryKey: ['activity', address],
     queryFn: async () => {
-      if (!address) throw new Error('No address');
-      const res = await fetch(`/api/v1/users/${address}/activity`);
-      if (!res.ok) throw new Error('Failed to fetch activity');
-      const json = await res.json();
-      return json.data;
+      if (!address) return { events: [], total: 0 };
+      const data = await apiFetchJson<{ events: ActivityEvent[]; total: number }>(`/api/v1/users/${address}/activity`);
+      return data ?? { events: [], total: 0 };
     },
     enabled: !!address && address.startsWith('0x') && enabled,
     staleTime: 30000,
+    gcTime: 300000,
+    retry: 1,
+    placeholderData: (prev) => prev,
   });
 };

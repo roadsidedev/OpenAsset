@@ -6,6 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { apiFetchJson } from '@/lib/apiClient';
 
 export interface AssetDistribution {
   label: string;
@@ -60,18 +61,17 @@ export const usePlatformStats = () => {
   return useQuery<PlatformStats>({
     queryKey: ['platformStats'],
     queryFn: async () => {
-      const [marketsRes, loansRes] = await Promise.all([
-        fetch('/api/v1/markets?start=0&count=500'),
-        fetch('/api/loans?take=100&skip=0'),
+      const [marketsData, loansData] = await Promise.all([
+        apiFetchJson<{ total: number; markets: any[] }>(`/api/v1/markets?start=0&count=500`),
+        apiFetchJson<{ total: number; loans: any[] }>(`/api/v1/loans?take=100&skip=0`),
       ]);
 
       // --- Markets ---
       let totalActiveMarkets = 0;
       const assetTypeCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0 };
 
-      if (marketsRes.ok) {
-        const mJson = await marketsRes.json();
-        const markets = mJson.data?.markets || [];
+      if (marketsData?.markets) {
+        const markets = marketsData.markets;
         for (const m of markets) {
           if (m.active) totalActiveMarkets++;
           const t = Number(m.assetType);
@@ -83,13 +83,8 @@ export const usePlatformStats = () => {
       let totalActiveLoans = 0;
       let collateralWei = BigInt(0);
 
-      if (loansRes.ok) {
-        const lJson = await loansRes.json();
-        const loans = lJson.data?.loans || [];
-        const totalLoansFromApi = lJson.data?.total ?? loans.length;
-
-        // The API may not return total separately for ACTIVE filter;
-        // count from the returned batch.
+      if (loansData?.loans) {
+        const loans = loansData.loans;
         for (const loan of loans) {
           if (loan.status === 'ACTIVE') {
             totalActiveLoans++;
@@ -99,14 +94,6 @@ export const usePlatformStats = () => {
               } catch { /* skip */ }
             }
           }
-        }
-
-        // If no status filter was applied, totalActiveLoans from batch may be
-        // accurate only for the first 100. For small platforms this is fine.
-        // We use the total count from the API for the "Total Loans" stat,
-        // but here we only track active ones.
-        if (totalActiveLoans === 0 && totalLoansFromApi > 0) {
-          // loans endpoint returned data but none were ACTIVE in this batch
         }
       }
 
@@ -179,5 +166,9 @@ export const usePlatformStats = () => {
       };
     },
     staleTime: 60_000,
+    gcTime: 300000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
   });
 };
