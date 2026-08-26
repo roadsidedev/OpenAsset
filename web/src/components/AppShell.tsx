@@ -13,8 +13,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pathname?.startsWith("/docs/") ||
     pathname === "/doc" ||
     pathname?.startsWith("/doc/");
+  const isLanding = pathname === "/";
 
-  if (isDocs) {
+  if (isDocs || isLanding) {
     return <>{children}</>;
   }
 
@@ -34,11 +35,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <footer className="hidden border-t border-border/60 bg-card/40 px-5 py-6 md:block md:px-6">
         <div className="mx-auto flex max-w-[1160px] flex-col items-center justify-between gap-3 text-xs text-muted-foreground md:flex-row">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity" aria-label="OpenAsset — back to landing">
             <Image src="/openasset-logo.png" alt="OpenAsset" width={18} height={18} className="brand-logo opacity-90" />
             <span className="font-semibold tracking-tight text-foreground">OpenAsset</span>
             <span className="opacity-70">— Market infrastructure</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-5">
             <Link href="/docs" className="hover:text-foreground transition-colors">Docs</Link>
             <Link href="/markets" className="hover:text-foreground transition-colors">Markets</Link>
