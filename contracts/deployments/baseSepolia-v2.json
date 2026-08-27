@@ -1,11 +1,11 @@
 {
   "network": "baseSepolia",
   "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
-  "timestamp": "2026-08-24T20:15:19.670Z",
+  "timestamp": "2026-08-27T16:15:35.000Z",
   "contracts": {
     "adapterRegistry": "0x80f70Da0e0e7A2b9D3A1eE4956309b295329A7D7",
-    "marketDeployer": "0xD5d4FEfA4f6Fb3988f26e9A3582c97E7c12a6470",
-    "marketFactory": "0xFa615F9b9187399dB68357A3445383E1cbc8a12c",
+    "marketDeployer": "0xCB8BD22F1aa8bABa2E759DE49Abee40Afb60D5B1",
+    "marketFactory": "0x9531081E31BC0B6b3Db4E64e47878D261F0F5De4",
     "erc20Adapter": "0x707901FACDEB84db2830f70Ac0e5e0D0Eeb5C664",
     "erc721Adapter": "0x46D51374D1C0b4056d7E018734D6f181C4970e87",
     "chainlinkAdapter": "0xFf3E92A3539bAce12DD1901a3D7b8a2bF1d72e46",
@@ -16,8 +16,9 @@
     "dexSwapLiquidation": "0x569F318CFfd60C3b305aa082050c59f192d4c5F0",
     "nftAuctionLiquidation": "0x1746cB9aF9F39125cD8f17Eda680Eb8a1161c020",
     "b20AssetAdapter": "0x9163527519461FCc6b0c2fC0d4b1CF37Cfc54493",
-    "b20PolicyComplianceAdapter": "0xe894687bA1Dca31C73c5C0C6054d73513049fA61",
-    "chainlinkEquityFeedAdapter": "0x24a5dED622d3CB0815dFC56dE11Da6AcF71d7351"
+    "b20PolicyComplianceAdapter": "0xA133495C0b94bD888740C4eA6883D1e6c7E12A40",
+    "chainlinkEquityFeedAdapter": "0xe235167a3A5264b6e55692cCFDDBAA800CD54AC0",
+    "b20ProviderConfigurator": "0xf8915Bd2397f69E9e92f053a92a1D3D7b016DaA9"
   },
-  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market."
+  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market. Fixed LendingMarketV2 interest accrual 2026-08-27."
 }

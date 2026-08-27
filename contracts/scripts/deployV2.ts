@@ -158,6 +158,19 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     },
     uniswapV3Router: process.env.ROBINHOOD_UNISWAP_V3_ROUTER || "",
   },
+  robinhoodTestnet: {
+    auditGovernance: "",
+    owner: "",
+    protocolTreasury: "",
+    lendingAssets: process.env.ROBINHOOD_USDC_ADDRESS ? [process.env.ROBINHOOD_USDC_ADDRESS] : [],
+    l2Sequencer: process.env.ROBINHOOD_SEQUENCER_FEED || "",
+    uniswapV3QuoteToken: process.env.ROBINHOOD_USDC_ADDRESS || "",
+    robinhoodProviderEnabled: true,
+    providerAssets: {
+      OPENASSET_PROVIDER_ROBINHOOD: parseAddressList(process.env.ROBINHOOD_STOCK_TOKEN_ADDRESSES || ROBINHOOD_AAPL_TOKEN),
+    },
+    uniswapV3Router: process.env.ROBINHOOD_UNISWAP_V3_ROUTER || "",
+  },
   mainnet: {
     auditGovernance: "",
     owner: "",
@@ -240,9 +253,16 @@ async function deployAdapterRegistry(config: DeploymentConfig, existing?: Record
 }
 
 async function deployMarketDeployer(existing?: Record<string, string>) {
-  if (existing?.marketDeployer) {
+  const forceRedeployDeployer = (process.env.FORCE_REDEPLOY_KEYS || "")
+    .split(",")
+    .map((k) => k.trim())
+    .includes("marketDeployer");
+  if (existing?.marketDeployer && !forceRedeployDeployer) {
     console.log(`  MarketDeployer (reuse): ${existing.marketDeployer}`);
     return { address: existing.marketDeployer };
+  }
+  if (existing?.marketDeployer && forceRedeployDeployer) {
+    console.log(`  MarketDeployer (force redeploy, was ${existing.marketDeployer})`);
   }
   console.log("\n=== Deploying MarketDeployer ===");
   const Deployer = await ethers.getContractFactory("MarketDeployer");
