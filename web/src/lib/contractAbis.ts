@@ -157,6 +157,7 @@ export const LENDING_MARKET_ABI = [
   'function lendingAsset() external view returns (address)',
   'function assetAdapter() external view returns (address)',
   'function oracleAdapter() external view returns (address)',
+  'function complianceAdapter() external view returns (address)',
   'function liquidationAdapter() external view returns (address)',
   'function positionAdapter() external view returns (address)',
   'function ltvBps() external view returns (uint256)',

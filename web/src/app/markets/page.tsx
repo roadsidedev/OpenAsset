@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useEnrichedMarkets } from "@/hooks/useEnrichedMarkets";
 import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 import { PlatformStatsDashboard } from "@/components/PlatformStatsDashboard";
 import { cn } from "@/lib/utils";
+import { assetSearchHaystack } from "@/lib/assetIdentity";
 
 const CATEGORY_TABS = [
   "All Markets",
@@ -25,18 +27,24 @@ export default function MarketsPage() {
   const { data, isLoading, error } = useMarkets(start, 50);
 
   const allMarkets = data?.markets || [];
+  const { enriched } = useEnrichedMarkets(allMarkets);
 
-  const filteredMarkets = allMarkets.filter((m) => {
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        m.marketAddress.toLowerCase().includes(q) ||
-        m.collateralAsset.toLowerCase().includes(q) ||
-        m.loanAsset.toLowerCase().includes(q)
-      );
+  const filteredEnriched = useMemo(() => {
+    let list = enriched;
+    if (category !== "All Markets") {
+      const cat = category as string;
+      list = list.filter((e) => e.identity.category === cat);
     }
-    return true;
-  });
+    if (search) {
+      const q = search.toLowerCase().trim();
+      if (q) {
+        list = list.filter((e) => assetSearchHaystack(e.identity, e.market).includes(q));
+      }
+    }
+    return list;
+  }, [enriched, category, search]);
+
+  const filteredMarketsCount = filteredEnriched.length;
 
   return (
     <div className="min-h-dvh">
@@ -62,7 +70,7 @@ export default function MarketsPage() {
               Open markets
             </h2>
             <span className="hidden text-xs text-muted-foreground md:inline">
-              {filteredMarkets.length} {filteredMarkets.length === 1 ? "market" : "markets"}
+              {filteredMarketsCount} {filteredMarketsCount === 1 ? "market" : "markets"}
             </span>
           </div>
 
@@ -123,9 +131,15 @@ export default function MarketsPage() {
               ? Array.from({ length: 6 }).map((_, i) => (
                   <MarketCardSkeleton key={i} />
                 ))
-              : filteredMarkets.length > 0
-                ? filteredMarkets.map((market) => (
-                    <MarketCard key={market.marketAddress} market={market} />
+              : filteredEnriched.length > 0
+                ? filteredEnriched.map(({ market, identity, oracleLabel, loanAssetSymbol }) => (
+                    <MarketCard
+                      key={market.marketAddress}
+                      market={market}
+                      identity={identity}
+                      oracleLabel={oracleLabel}
+                      loanAssetSymbol={loanAssetSymbol}
+                    />
                   ))
                 : (
                     <div className="col-span-full rounded-2xl border border-dashed border-border bg-card/50 py-12 text-center">

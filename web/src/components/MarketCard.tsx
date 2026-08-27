@@ -4,13 +4,9 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
-import { resolveTokenLogo } from "@/lib/brandLogos";
 import type { Market } from "@/hooks/useMarkets";
-import { isB20Token, getB20Info, isWithinB20TradingWindow } from "@/lib/b20";
-import { PROVIDER_IDS } from "@/lib/providerBundles";
-import { useTokenMetadata } from "@/lib/tokenMetadata";
-import { useAccount } from "wagmi";
-import { isAddress } from "viem";
+import type { AssetIdentity } from "@/lib/assetIdentity";
+import { isWithinB20TradingWindow } from "@/lib/b20";
 
 function formatLtv(ltvBps: number) {
   return `${(ltvBps / 100).toFixed(1)}%`;
@@ -22,6 +18,7 @@ function formatApr(aprBps: number) {
 
 function formatDuration(seconds: number) {
   const days = Math.floor(seconds / 86400);
+  if (days === 0) return "<1d";
   return `${days}d`;
 }
 
@@ -30,110 +27,155 @@ function formatLiquidity(available: string) {
     const val = parseFloat(available);
     if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
     if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
+    if (val >= 1) return `$${val.toFixed(2)}`;
+    if (val === 0) return `$0`;
     return `$${val.toFixed(2)}`;
   } catch {
     return "$0";
   }
 }
 
+function shortAddr(addr: string) {
+  if (!addr || addr.length < 10) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
 interface MarketCardProps {
   market: Market;
+  identity?: AssetIdentity | null;
+  oracleLabel?: string;
+  loanAssetSymbol?: string | null;
   className?: string;
 }
 
-export function MarketCard({ market, className }: MarketCardProps) {
-  const { chain } = useAccount();
-  const chainId = market.chainId ?? chain?.id;
-  const b20 = isB20Token(market.collateralAsset, chainId) ? getB20Info(market.collateralAsset, chainId) : undefined;
-  const isB20 = !!b20;
-  const isRobinhood = market.providerId?.toLowerCase() === PROVIDER_IDS.ROBINHOOD.toLowerCase();
-  const providerLabel = isB20 ? 'Base B20' : isRobinhood ? 'Robinhood Stock Token' : 'ERC-20';
+export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, className }: MarketCardProps) {
+  // Fallback identity if not provided (legacy use without enrichment)
+  const id: AssetIdentity | null = identity || null;
+  const displaySymbol = id?.displaySymbol || (market.collateralAsset ? market.collateralAsset.slice(2, 6).toUpperCase() : market.marketAddress.slice(2, 6).toUpperCase());
+  const displayName = id?.name || "Unknown Asset";
+  const issuerLabel = id?.issuer || null;
+  const categoryLabel = id?.categoryLabel || "Tokens";
+  const logoUri = id?.logoUri || null;
+  const category = id?.category || "Tokens";
+  const isB20 = !!id?.isB20;
   const hoursOpen = isB20 ? isWithinB20TradingWindow() : true;
-  const isValidAddr = isAddress(market.collateralAsset as `0x${string}`);
-  const { data: collateralMeta } = useTokenMetadata(isValidAddr && !isB20 ? market.collateralAsset : undefined, chainId);
-  // Resolve brand logo for market collateral (B20 or generic)
-  const metaSymbol = collateralMeta?.symbol;
-  const metaLogo = collateralMeta?.logoUri;
-  const brandSymbol = isB20 ? b20!.symbol : (metaSymbol || market.collateralAsset?.slice(0, 6) || 'UNKNOWN');
-  const logoUri = isB20 ? resolveTokenLogo(b20!.symbol, null) : (metaLogo ?? (metaSymbol ? resolveTokenLogo(metaSymbol, null) : null));
+
+  // Loan asset display: resolved symbol or shortened address
+  const loanSym = loanAssetSymbol || (market.loanAsset ? shortAddr(market.loanAsset).toUpperCase() : "—");
+  const collateralShort = market.collateralAsset ? shortAddr(market.collateralAsset) : shortAddr(market.marketAddress);
+
+  const showCategoryPill = true;
 
   return (
     <Link
       href={`/markets/${market.marketAddress}`}
       className={cn(
-        "group block rounded-2xl border border-border/70 bg-card p-5",
+        "group flex h-full flex-col justify-between rounded-2xl border border-border/70 bg-card p-5",
         "transition-colors hover:border-border hover:bg-card",
         "hover-lift",
-        isB20 ? "border-ice-200 dark:border-ice-500/20" : isRobinhood ? "border-violet-200 dark:border-violet-500/20" : "",
+        isB20 ? "border-ice-200 dark:border-ice-500/20" : "",
         className
       )}
     >
-      <div className="flex flex-col justify-between h-full space-y-4">
-        {/* Header */}
-        <div className="space-y-3.5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0 flex-1">
-              <div className="shrink-0">
-                <TokenIcon symbol={isB20 ? b20!.symbol : brandSymbol} logoUri={logoUri} className="h-9 w-9" />
-              </div>
-              <div className="min-w-0 flex-1">
+      {/* Header — brand identity */}
+      <div className="space-y-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="shrink-0">
+              <TokenIcon symbol={displaySymbol} logoUri={logoUri} className="h-10 w-10" />
+            </div>
+            <div className="min-w-0 flex-1">
+              {/* Ticker + category pill inline */}
+              <div className="flex flex-wrap items-center gap-1.5">
                 <h3 className="truncate text-[15px] font-semibold leading-tight tracking-tight text-foreground">
-                  {isB20 ? `${b20!.symbol} Market` : isRobinhood ? `${brandSymbol} Market` : `Market ${market.marketAddress.slice(0, 8)}…`}
+                  {displaySymbol}
                 </h3>
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] leading-none text-muted-foreground">
-                  <span className="truncate font-mono tracking-tight">{isB20 ? `${b20!.address.slice(0, 10)}…` : `${market.collateralAsset.slice(0, 10)}…`}</span>
-                  <span className="shrink-0 opacity-40">·</span>
-                  <span className="shrink-0">{isB20 ? b20!.name : providerLabel}</span>
-                  {(isB20 || isRobinhood) && <span className={cn("shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none", isB20 ? "border-ice-200 bg-ice-50 text-ice-700 dark:border-ice-400/20 dark:bg-ice-400/10 dark:text-ice-300" : "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-400/20 dark:bg-violet-400/10 dark:text-violet-300")}>{isB20 ? "B20" : "RH"}</span>}
-                </div>
-                {isB20 && (
-                  <div className={cn("mt-1.5 text-[11px] font-medium leading-none", hoursOpen ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
-                    {hoursOpen ? "● Open · 24/5" : "○ Closed — originations paused"}
-                  </div>
+                {showCategoryPill && (
+                  <span className="shrink-0 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                    {categoryLabel}
+                  </span>
                 )}
               </div>
-            </div>
-            <Badge
-              variant={market.active ? "default" : "secondary"}
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium leading-none",
-                market.active
-                  ? "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
-                  : "border border-border bg-muted text-muted-foreground"
+              {/* Name + issuer */}
+              <div className="mt-0.5 truncate text-[13px] font-medium leading-tight text-foreground">
+                {displayName}
+                {issuerLabel && issuerLabel.toLowerCase() !== displayName.toLowerCase() ? (
+                  <span className="font-normal text-muted-foreground"> · {issuerLabel}</span>
+                ) : null}
+              </div>
+              {/* Address line: collateral · loan asset · oracle */}
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] leading-none text-muted-foreground">
+                <span className="font-mono tracking-tight">{collateralShort}</span>
+                <span className="opacity-40">·</span>
+                <span className="font-medium">→ {loanSym}</span>
+                {oracleLabel && oracleLabel !== "—" ? (
+                  <>
+                    <span className="opacity-40">·</span>
+                    <span className="shrink-0">{oracleLabel}</span>
+                  </>
+                ) : null}
+              </div>
+              {/* B20 trading window hint — keep for tokenized equities but brand-agnostic wording */}
+              {isB20 && (
+                <div
+                  className={cn(
+                    "mt-1.5 text-[11px] font-medium leading-none",
+                    hoursOpen ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                  )}
+                >
+                  {hoursOpen ? "● Open · 24/5" : "○ Closed — originations paused"}
+                </div>
               )}
-            >
-              {market.active ? "Active" : "Inactive"}
-            </Badge>
-          </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/50 bg-muted/40 p-3">
-            <div className="space-y-1">
-              <span className="block text-[11px] font-medium leading-none text-muted-foreground">Total liquidity</span>
-              <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">{formatLiquidity(market.liquidity.total)}</span>
-            </div>
-            <div className="space-y-1">
-              <span className="block text-[11px] font-medium leading-none text-muted-foreground">Borrow APR</span>
-              <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">{formatApr(market.aprBps)}</span>
-            </div>
-            <div className="space-y-1">
-              <span className="block text-[11px] font-medium leading-none text-muted-foreground">Max LTV</span>
-              <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">{formatLtv(market.ltvBps)}</span>
-            </div>
-            <div className="space-y-1">
-              <span className="block text-[11px] font-medium leading-none text-muted-foreground">Available</span>
-              <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">{formatLiquidity(market.liquidity.available)}</span>
+              {/* Generic category hint for non-B20: subtle */}
+              {!isB20 && category === "NFT" && (
+                <div className="mt-1.5 text-[11px] font-medium leading-none text-muted-foreground">NFT collateral</div>
+              )}
             </div>
           </div>
+          <Badge
+            variant={market.active ? "default" : "secondary"}
+            className={cn(
+              "shrink-0 rounded-full px-2 py-1 text-[11px] font-medium leading-none",
+              market.active
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
+                : "border border-border bg-muted text-muted-foreground"
+            )}
+          >
+            {market.active ? "Active" : "Inactive"}
+          </Badge>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border/60 pt-3.5 text-xs">
-          <span className="text-muted-foreground">Duration · {formatDuration(market.durationSeconds)}</span>
-          <span className="inline-flex items-center gap-1 font-medium text-foreground transition-transform group-hover:translate-x-0.5">
-            View pool <span aria-hidden>→</span>
-          </span>
+        {/* Stats — core snapshot */}
+        <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/50 bg-muted/40 p-3">
+          <div className="space-y-1">
+            <span className="block text-[11px] font-medium leading-none text-muted-foreground">Total liquidity</span>
+            <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">
+              {formatLiquidity(market.liquidity.total)}
+            </span>
+          </div>
+          <div className="space-y-1">
+            <span className="block text-[11px] font-medium leading-none text-muted-foreground">Borrow APR</span>
+            <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">{formatApr(market.aprBps)}</span>
+          </div>
+          <div className="space-y-1">
+            <span className="block text-[11px] font-medium leading-none text-muted-foreground">Max LTV</span>
+            <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">{formatLtv(market.ltvBps)}</span>
+          </div>
+          <div className="space-y-1">
+            <span className="block text-[11px] font-medium leading-none text-muted-foreground">Available</span>
+            <span className="block text-sm font-semibold leading-none text-foreground tabular-nums">
+              {formatLiquidity(market.liquidity.available)}
+            </span>
+          </div>
         </div>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3.5 text-xs">
+        <span className="text-muted-foreground">Duration · {formatDuration(market.durationSeconds)}</span>
+        <span className="inline-flex items-center gap-1 font-medium text-foreground transition-transform group-hover:translate-x-0.5">
+          View pool <span aria-hidden>→</span>
+        </span>
       </div>
     </Link>
   );

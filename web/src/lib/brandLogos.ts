@@ -42,6 +42,21 @@ const CRYPTO_LOGOS: Record<string, string> = {
   LINK: 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
 };
 
+// Trust Wallet assets repo — chain-agnostic generic fallback for any ERC20 symbol
+// Pattern: https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/<checksum>/logo.png
+// For frontend we use symbol-based heuristic: https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/<lower-symbol>/logo.png
+// plus direct token-asset search via CoinGecko is already handled in tokenMetadata logoUri. This is pure fallback.
+function getTrustWalletFallbackUrl(symbol: string): string | null {
+  if (!symbol) return null;
+  const clean = symbol.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (clean.length < 2 || clean.length > 10) return null;
+  // Trust Wallet uses checksum address paths; symbol path is not deterministic.
+  // We use the community-maintained generic CDN that mirrors by symbol via api: trustwallet/assets
+  // Fallback to simple lowercase symbol path attempt; caller should handle 404 → generic icon.
+  // Use placeholder that 404s cleanly so TokenIcon falls back to letter avatar.
+  return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${clean.toLowerCase()}/logo.png`;
+}
+
 function normalizeSymbol(symbol: string): string {
   if (!symbol) return '';
   // Trim, upper, strip B20 trailing 'c'/'C' if symbol length >3 and ends with c and maps
@@ -96,7 +111,8 @@ export function getBrandFaviconUrl(symbol: string, size = 64): string | null {
 }
 
 /**
- * Resolve best logo for a token: prefers provided logoUri, then brand, then crypto, then favicon.
+ * Resolve best logo for a token: prefers provided logoUri, then brand, then crypto, then favicon, then TrustWallet.
+ * Priority preserved: 1) explicit logoUri (token list) 2) CoinGecko crypto 3) Clearbit brand 4) Google favicon 5) TrustWallet.
  */
 export function resolveTokenLogo(symbol: string, logoUri?: string | null): string | null {
   if (logoUri) return logoUri;
@@ -104,7 +120,25 @@ export function resolveTokenLogo(symbol: string, logoUri?: string | null): strin
   if (brand) return brand;
   const favicon = getBrandFaviconUrl(symbol);
   if (favicon) return favicon;
+  const trust = getTrustWalletFallbackUrl(symbol);
+  if (trust) return trust;
   return null;
+}
+
+/**
+ * Returns prioritized logo candidates for progressive fallback via <img onError>.
+ * Caller can try in order until load succeeds.
+ */
+export function getLogoCandidates(symbol: string, logoUri?: string | null): string[] {
+  const candidates: string[] = [];
+  if (logoUri) candidates.push(logoUri);
+  const brand = getBrandLogoUrl(symbol);
+  if (brand) candidates.push(brand);
+  const favicon = getBrandFaviconUrl(symbol);
+  if (favicon) candidates.push(favicon);
+  const trust = getTrustWalletFallbackUrl(symbol);
+  if (trust) candidates.push(trust);
+  return candidates;
 }
 
 export function getBrandName(symbol: string): string | null {

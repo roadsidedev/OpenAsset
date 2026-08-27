@@ -86,15 +86,20 @@ export function TokenPreview({ name, symbol, decimals, logoUri, address, error, 
 }
 
 export function TokenIcon({ symbol, logoUri, className }: { symbol: string; logoUri?: string | null; className?: string }) {
-  const resolved = resolveTokenLogo(symbol, logoUri);
-  const [failed, setFailed] = useState(false);
-  if (resolved && !failed) {
+  const { getLogoCandidates } = require('@/lib/brandLogos') as typeof import('@/lib/brandLogos');
+  const candidates = getLogoCandidates(symbol, logoUri);
+  const [idx, setIdx] = useState(0);
+  const current = candidates[idx] || null;
+  if (current) {
     return (
       <img
-        src={resolved}
+        src={current}
         alt={`${symbol} logo`}
         className={cn('h-6 w-6 rounded-full object-contain bg-white p-0.5 shadow-sm', className)}
-        onError={() => setFailed(true)}
+        onError={() => {
+          if (idx + 1 < candidates.length) setIdx((i) => i + 1);
+          else setIdx(candidates.length); // exhaust → fallback
+        }}
         loading="lazy"
       />
     );

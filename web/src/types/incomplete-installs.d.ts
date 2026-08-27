@@ -76,4 +76,5 @@ declare module '@tanstack/react-query' {
   export const QueryClient: any;
   export const QueryClientProvider: any;
   export function useQuery<T = any>(options: any): any;
+  export function useQueries(options: any): any;
 }

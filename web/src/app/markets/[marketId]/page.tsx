@@ -9,10 +9,10 @@ import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
-import { isB20Token, getB20Info } from "@/lib/b20";
 import { formatUnits, isAddress, parseUnits } from "viem";
 import { IORACLE_ADAPTER_ABI, MARKET_STATUS } from "@/lib/contractAbis";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
+import { resolveAssetIdentity } from "@/lib/assetIdentity";
 import { ArrowLeft, Warning, CheckCircle } from "@phosphor-icons/react";
 
 function formatLtv(ltvBps: number) {
@@ -165,6 +165,21 @@ export default function MarketDetailPage() {
   const statusLabel = MARKET_STATUS[marketStatus as keyof typeof MARKET_STATUS] || "Unknown";
   const isPaused = statusLabel !== "ACTIVE";
 
+  // Brand-agnostic identity derived from adapter + collateral metadata (same as MarketCard)
+  const isAddr = isAddress(market.collateralAsset as `0x${string}`);
+  const { data: collateralMeta } = useTokenMetadata(isAddr ? market.collateralAsset : undefined, market.chainId);
+  const { data: loanMeta } = useTokenMetadata(
+    market.loanAsset && isAddress(market.loanAsset as `0x${string}`) ? market.loanAsset : undefined,
+    market.chainId
+  );
+  const identity = resolveAssetIdentity({
+    market,
+    tokenSymbol: collateralMeta?.symbol || collateralToken?.symbol || null,
+    tokenName: collateralMeta?.name || collateralToken?.name || null,
+    tokenLogoUri: collateralMeta?.logoUri || collateralToken?.logoUri || null,
+    loanAssetSymbol: loanMeta?.symbol || null,
+  });
+
   return (
     <div className="min-h-dvh">
       <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-8">
@@ -177,27 +192,32 @@ export default function MarketDetailPage() {
           Back to Markets
         </Link>
 
-        {/* Market Header */}
+        {/* Market Header — brand-agnostic, mirrors MarketCard */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-6 rounded-3xl border border-border bg-card">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex items-center gap-3 flex-wrap">
-              {(() => {
-                const isB20 = isB20Token(market.collateralAsset, market.chainId);
-                const b20 = isB20 ? getB20Info(market.collateralAsset, market.chainId) : undefined;
-                return (
-                  <>
-                    {isB20 && b20 ? (
-                      <TokenIcon symbol={b20.symbol} logoUri={null} className="h-8 w-8" />
-                    ) : null}
-                    <h1 className="text-2xl font-bold text-foreground text-balance">
-                      {isB20 && b20 ? `${b20.symbol} Market` : `Market ${market.marketAddress.slice(0, 10)}...`}
-                    </h1>
+              <TokenIcon symbol={identity.displaySymbol} logoUri={identity.logoUri} className="h-10 w-10" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-bold text-foreground text-balance">
+                    {identity.displaySymbol}
+                  </h1>
+                  <span className="text-xs px-2.5 py-1 rounded-full border border-border bg-muted font-medium text-muted-foreground">
+                    {identity.categoryLabel}
+                  </span>
+                  {identity.isB20 && (
                     <span className="text-xs px-3 py-1 rounded-full bg-ice-50 dark:bg-ice-500/15 text-ice-700 dark:text-ice-300 font-semibold border border-ice-200/50 dark:border-ice-400/20">
-                      {isB20 ? 'B20' : 'ERC20'}
+                      Tokenized
                     </span>
-                  </>
-                );
-              })()}
+                  )}
+                </div>
+                <div className="text-sm font-medium text-foreground">
+                  {identity.name}
+                  {identity.issuer && identity.issuer.toLowerCase() !== identity.name.toLowerCase() ? (
+                    <span className="font-normal text-muted-foreground"> · {identity.issuer}</span>
+                  ) : null}
+                </div>
+              </div>
               {isPaused ? (
                 <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
                   <Warning className="h-3 w-3" />
@@ -211,9 +231,9 @@ export default function MarketDetailPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Collateral: <span className="font-mono">{market.collateralAsset.slice(0, 10)}...</span> · 
-              Loan Asset: <span className="font-mono">{market.loanAsset.slice(0, 10)}...</span> · 
-              Owner: <span className="font-mono">{market.owner.slice(0, 10)}...</span>
+              Collateral: <span className="font-mono">{market.collateralAsset ? `${market.collateralAsset.slice(0, 10)}…` : "—"}</span> · 
+              Loan: <span className="font-mono">{loanMeta?.symbol || (market.loanAsset ? `${market.loanAsset.slice(0, 10)}…` : "—")}</span> · 
+              Owner: <span className="font-mono">{market.owner ? `${market.owner.slice(0, 10)}…` : "—"}</span>
             </p>
           </div>
         </div>
@@ -362,7 +382,7 @@ export default function MarketDetailPage() {
               {/* Collateral Input */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground">
-                  Deposit Collateral
+                  Deposit Collateral · {identity.displaySymbol}
                 </label>
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-muted/50 border border-border">
                   <input
@@ -373,8 +393,9 @@ export default function MarketDetailPage() {
                     disabled={isPaused}
                     className="bg-transparent text-lg font-bold w-1/2 focus:outline-none placeholder:text-muted-foreground disabled:opacity-50"
                   />
-                  <span className="text-xs font-bold text-muted-foreground font-mono">
-                    {market.collateralAsset.slice(0, 8)}
+                  <span className="text-xs font-bold text-foreground inline-flex items-center gap-1.5">
+                    <TokenIcon symbol={identity.displaySymbol} logoUri={identity.logoUri} className="h-5 w-5" />
+                    {identity.displaySymbol}
                   </span>
                 </div>
                 {collateralAmount && (
