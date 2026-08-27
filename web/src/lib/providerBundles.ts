@@ -23,14 +23,20 @@ export interface ProviderAsset {
   requiresAllowlist: boolean;
 }
 
-export const PROVIDER_CHAIN_CONFIG: Record<ProviderFamily, { chainId: number; sequencerFeed?: string }> = {
+export const PROVIDER_CHAIN_CONFIG: Record<ProviderFamily, { chainIds: number[]; sequencerFeeds: Record<number, string | undefined> }> = {
   b20: {
-    chainId: 8453,
-    sequencerFeed: process.env.NEXT_PUBLIC_BASE_SEQUENCER_FEED_8453,
+    chainIds: [8453, 84532],
+    sequencerFeeds: {
+      8453: process.env.NEXT_PUBLIC_BASE_SEQUENCER_FEED_8453,
+      84532: process.env.NEXT_PUBLIC_BASE_SEQUENCER_FEED_84532,
+    },
   },
   robinhood: {
-    chainId: 4663,
-    sequencerFeed: process.env.NEXT_PUBLIC_ROBINHOOD_SEQUENCER_FEED_4663,
+    chainIds: [4663, 46630],
+    sequencerFeeds: {
+      4663: process.env.NEXT_PUBLIC_ROBINHOOD_SEQUENCER_FEED_4663,
+      46630: process.env.NEXT_PUBLIC_ROBINHOOD_SEQUENCER_FEED_46630,
+    },
   },
 };
 
@@ -44,6 +50,19 @@ const ROBINHOOD_ASSETS: ProviderAsset[] = [
     name: 'Apple · Robinhood Stock Token',
     decimals: 18,
     feed: '0x6B22A786bAa607d76728168703a39Ea9C99f2cD0',
+    legalLabel: 'Robinhood tokenized debt security; not direct Apple shares',
+    priceModel: 'chainlink-multiplier-adjusted',
+    requiresAllowlist: true,
+  },
+  {
+    providerId: PROVIDER_IDS.ROBINHOOD,
+    provider: 'robinhood',
+    chainId: 46630,
+    address: process.env.NEXT_PUBLIC_ROBINHOOD_AAPL_ADDRESS_46630 || '0xAf6D6d1F38d50d5C5C8219Be2938774a64E1f948',
+    symbol: 'AAPL',
+    name: 'Apple · Robinhood Stock Token (testnet)',
+    decimals: 18,
+    feed: process.env.NEXT_PUBLIC_ROBINHOOD_AAPL_FEED_46630 || '0x43a7feb2cfa522000228374cad606b5673C4dAF1',
     legalLabel: 'Robinhood tokenized debt security; not direct Apple shares',
     priceModel: 'chainlink-multiplier-adjusted',
     requiresAllowlist: true,
@@ -84,9 +103,9 @@ export function getProviderAssets(chainId: number | undefined, provider?: Provid
 }
 
 export function getProviderSequencerFeed(chainId: number, provider: ProviderFamily): string | undefined {
-  return PROVIDER_CHAIN_CONFIG[provider]?.chainId === chainId
-    ? PROVIDER_CHAIN_CONFIG[provider].sequencerFeed
-    : undefined;
+  const config = PROVIDER_CHAIN_CONFIG[provider];
+  if (!config?.chainIds.includes(chainId)) return undefined;
+  return config.sequencerFeeds[chainId];
 }
 
 export function getProviderLabel(provider: ProviderFamily | undefined): string {

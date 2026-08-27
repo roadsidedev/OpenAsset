@@ -19,6 +19,7 @@ import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, Magnifying
 import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
 import { adapterSupportsPicker, getSuggestedAdaptersForB20, getSuggestedAdaptersForRobinhood } from "@/lib/supportedAssets";
 import { getProviderAsset, getProviderAssetByAddress, getProviderSequencerFeed, PROVIDER_IDS } from "@/lib/providerBundles";
+import { DEFAULT_CHAIN_ID } from "@/lib/chains";
 
 interface AdapterOption {
   address: string;
@@ -38,7 +39,7 @@ export default function CreateMarketPage() {
   const router = useRouter();
   const { address: userAddress, chain } = useAccount();
   const publicClient = usePublicClient();
-  const chainId = chain?.id;
+  const chainId = chain?.id ?? DEFAULT_CHAIN_ID;
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
   const { createMarket, clearError } = useContractInteraction();
   const [isDeploying, setIsDeploying] = useState(false);
@@ -61,39 +62,38 @@ export default function CreateMarketPage() {
   const isRobinhoodSelected = providerAsset?.provider === 'robinhood';
   const b20HoursLabel = isWithinB20TradingWindow() ? b20MarketHoursLabel() : b20MarketHoursLabel();
 
-  const isB20Chain = chainId === 8453;
-  const isRobinhoodChain = chainId === 4663;
-  // All adapters from hardcoded contract addresses — always available, no on-chain reads
+  const isRobinhoodChain = chainId === 4663 || chainId === 46630;
+  const isDeployed = (addr?: string) => !!addr && addr !== "0x0000000000000000000000000000000000000000";
   const adapters = useMemo((): Record<string, AdapterOption[]> => {
     if (!contracts) return {};
-    const isB20 = isB20Chain && contracts.b20AssetAdapter && contracts.b20AssetAdapter !== "0x0000000000000000000000000000000000000000";
-    const isRobinhood = isRobinhoodChain && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000";
+    const isB20 = isDeployed(contracts.b20AssetAdapter);
+    const isRobinhood = isDeployed(contracts.robinhoodComplianceAdapter);
     return {
       ASSET: [
-        { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
+        { address: contracts.erc20Adapter || "", name: isRobinhood ? "ERC20Adapter (Robinhood Stock Tokens)" : "ERC20Adapter", type: 0, verified: true, deprecated: false },
         { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
         ...(isB20 ? [{ address: contracts.b20AssetAdapter, name: "B20AssetAdapter (Base Tokenized Stocks)", type: 0, verified: true, deprecated: false }] : []),
-      ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
+      ].filter(a => isDeployed(a.address)),
       ORACLE: [
         { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
-        ...(contracts.uniswapV3TWAPAdapter && contracts.uniswapV3TWAPAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.uniswapV3TWAPAdapter, name: "UniswapV3TWAPAdapter", type: 1, verified: true, deprecated: false }] : []),
-        ...((isB20 || isRobinhood) && contracts.chainlinkEquityFeedAdapter && contracts.chainlinkEquityFeedAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.chainlinkEquityFeedAdapter, name: isRobinhood ? "ChainlinkEquityFeedAdapter (Robinhood Stock Token)": "ChainlinkEquityFeedAdapter (B20 TRV 24/5, 90000s)", type: 1, verified: true, deprecated: false }] : []),
-      ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
+        ...(isDeployed(contracts.uniswapV3TWAPAdapter) ? [{ address: contracts.uniswapV3TWAPAdapter, name: "UniswapV3TWAPAdapter", type: 1, verified: true, deprecated: false }] : []),
+        ...(isDeployed(contracts.chainlinkEquityFeedAdapter) ? [{ address: contracts.chainlinkEquityFeedAdapter, name: isRobinhood ? "ChainlinkEquityFeedAdapter (Robinhood Stock Token)" : "ChainlinkEquityFeedAdapter (B20 TRV 24/5, 90000s)", type: 1, verified: true, deprecated: false }] : []),
+      ].filter(a => isDeployed(a.address)),
       LIQUIDATION: [
         { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter (default for B20 — 24/7 DEX)", type: 3, verified: true, deprecated: false },
         { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
-      ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
+      ].filter(a => isDeployed(a.address)),
       POSITION: [
-        { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
-        { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter (recommended for B20 compliance)", type: 4, verified: true, deprecated: false },
-        { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
-      ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
+        { address: contracts.standardPositionAdapter || "", name: "Standard Position", type: 4, verified: true, deprecated: false },
+        { address: contracts.soulboundPositionAdapter || "", name: "Soulbound Position (ERC721)", type: 4, verified: true, deprecated: false },
+        { address: contracts.transferablePositionAdapter || "", name: "Transferable Position (ERC721)", type: 4, verified: true, deprecated: false },
+      ].filter(a => isDeployed(a.address)),
       COMPLIANCE: [
-        ...(isB20 && contracts.b20PolicyComplianceAdapter && contracts.b20PolicyComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.b20PolicyComplianceAdapter, name: "B20PolicyComplianceAdapter", type: 2, verified: true, deprecated: false }] : []),
-        ...(isRobinhood && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.robinhoodComplianceAdapter, name: "ManagedAllowlistComplianceAdapter (Robinhood)", type: 2, verified: true, deprecated: false }] : []),
-      ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
+        ...(isB20 && isDeployed(contracts.b20PolicyComplianceAdapter) ? [{ address: contracts.b20PolicyComplianceAdapter, name: "B20PolicyComplianceAdapter", type: 2, verified: true, deprecated: false }] : []),
+        ...(isRobinhood && isDeployed(contracts.robinhoodComplianceAdapter) ? [{ address: contracts.robinhoodComplianceAdapter, name: "ManagedAllowlistComplianceAdapter (Robinhood)", type: 2, verified: true, deprecated: false }] : []),
+      ].filter(a => isDeployed(a.address)),
     };
-  }, [contracts, isB20Chain, isRobinhoodChain]);
+  }, [contracts]);
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
@@ -301,7 +301,7 @@ export default function CreateMarketPage() {
         {/* Chain indicator */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2">
           <Wallet className="h-3.5 w-3.5" />
-          <span>Chain: {chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : `Chain ${chainId}`}</span>
+          <span>Chain: {chainId === 84532 ? "Base Sepolia" : chainId === 8453 ? "Base" : chainId === 11155111 ? "Sepolia" : chainId === 4663 ? "Robinhood Chain" : chainId === 46630 ? "Robinhood Testnet" : `Chain ${chainId}`}</span>
           {!contracts && <span className="text-amber-500 font-medium">(unsupported)</span>}
         </div>
 
@@ -457,12 +457,22 @@ export default function CreateMarketPage() {
                 </button>
                 <span className="text-sm text-foreground">Enable Compliance Adapter</span>
               </div>
-              {formData.enableCompliance && (
+              {formData.enableCompliance && (adapters["COMPLIANCE"]?.length ? (
+                <AdapterSelect
+                  label="Compliance Adapter"
+                  description="B20 policy registry or Robinhood managed allowlist."
+                  adapters={adapters["COMPLIANCE"]}
+                  selected={formData.complianceAdapter}
+                  onSelect={(addr) => setFormData({ complianceAdapter: addr })}
+                  required
+                  chainId={chainId}
+                />
+              ) : (
                 <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400">
                   <Warning className="h-4 w-4 mt-0.5 shrink-0" />
-                  No compliance adapter deployed yet. Disable compliance or deploy one first.
+                  No compliance adapter deployed on this chain. Disable compliance or deploy one first.
                 </div>
-              )}
+              ))}
             </div>
           )}
 
@@ -492,7 +502,7 @@ export default function CreateMarketPage() {
               </p>
               <AdapterSelect
                 label="Position Adapter"
-                description="Standard: cheapest gas. Soulbound: non-transferable NFT. Transferable: sellable position."
+                description="Standard: internal mapping, no NFT, lowest gas. Soulbound: non-transferable ERC721. Transferable: ERC721 position sellable on secondary markets."
                 adapters={adapters["POSITION"] || []}
                 selected={formData.positionAdapter}
                 onSelect={(addr) => setFormData({ positionAdapter: addr })}

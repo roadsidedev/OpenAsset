@@ -48,7 +48,7 @@ export async function fetchSupportedAssetsForAdapter(
   limit = 50
 ): Promise<SupportedAsset[]> {
   const q = query ? `&q=${encodeURIComponent(query)}` : '';
-  const providerQuery = chainId === 4663 ? '&provider=robinhood' : '';
+  const providerQuery = chainId === 4663 || chainId === 46630 ? '&provider=robinhood' : '';
   // 1) Try backend B (primary)
   try {
     const res = await fetchFromApi(`/adapters/${adapterAddress}/assets?chainId=${chainId}${providerQuery}${q}&limit=${limit}`);
@@ -72,7 +72,7 @@ export async function fetchSupportedAssetsForAdapter(
 export async function fetchProviderAssets(chainId: number, query?: string): Promise<SupportedAsset[]> {
   try {
     const q = query ? `&q=${encodeURIComponent(query)}` : '';
-    const providerType = chainId === 4663 ? 'robinhood' : 'b20';
+     const providerType = chainId === 4663 || chainId === 46630 ? 'robinhood' : 'b20';
     const res = await fetchFromApi(`/adapters/tokens?chainId=${chainId}&type=${providerType}${q}&limit=50`);
     if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
       return enrichWithLogos(res.data.map((r: any) => ({
@@ -87,7 +87,7 @@ export async function fetchProviderAssets(chainId: number, query?: string): Prom
       })), chainId);
     }
   } catch {}
-  const providerAssets = getProviderAssets(chainId, chainId === 4663 ? 'robinhood' : 'b20');
+  const providerAssets = getProviderAssets(chainId, chainId === 4663 || chainId === 46630 ? 'robinhood' : 'b20');
   if (providerAssets.length > 0) {
     const all = providerAssets.map(providerAssetToSupportedAsset);
     if (!query) return enrichWithLogos(all, chainId);
