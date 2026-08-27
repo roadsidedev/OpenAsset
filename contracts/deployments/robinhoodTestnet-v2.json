@@ -1,0 +1,23 @@
+{
+  "network": "robinhoodTestnet",
+  "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
+  "timestamp": "2026-08-27T16:05:39.549Z",
+  "contracts": {
+    "adapterRegistry": "0xf142745dF011174b76A3FdfEf26eA6bD9caF9A2C",
+    "marketDeployer": "0x0400b71f2E8cE409FdD61C77E9246dDd3375FC81",
+    "marketFactory": "0x331b95CAA15Bf23645A28059937B6D5cb0cA74BB",
+    "erc20Adapter": "0xbF55804fE683da2eA401aFe2b2E6d9f55a1f1AaD",
+    "erc721Adapter": "0x43c4Dd1975B7AEcE2c0b632D2Ff2d8576d31C49F",
+    "chainlinkEquityFeedAdapter": "0xAEf469a4ab0c51D6fa5b5Fd1368d2e3b85ecC602",
+    "robinhoodComplianceAdapter": "0x95599a74Ae215d8208f7Bb6A8e680B0C58F03c67",
+    "robinhoodProviderConfigurator": "0x2296a019079BA10E4430DC8012504d92B5B8A795",
+    "chainlinkAdapter": "0x47518aBb5eDE5e05BcF428c397a0998b68Ed939b",
+    "uniswapV3TWAPAdapter": "0xc0c571b98891163b704A06AE0648A969f47Bf797",
+    "standardPosition": "0xA34C6BC828789ee963B492b9AC68675DA0E1252B",
+    "soulboundPosition": "0xc9eF65E04Eb1358E24f21a2F31639BB455E846E5",
+    "transferablePosition": "0x1bb47bB68C33262DB13F0D72181658a97526056e",
+    "dexSwapLiquidation": "0x4bd273BE748073B38A5F4D2415be54C28c754598",
+    "nftAuctionLiquidation": "0x95Be233Bf5D1956C66E1b5E841c63987bf445973"
+  },
+  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market."
+}

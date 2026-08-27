@@ -768,9 +768,19 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     }
 
     function _calculateInterest(Loan storage loan) internal view returns (uint256) {
-        // Simplified: interest is fixed at origination for v1
-        // V2 TODO: implement time-based accrual
-        return (loan.principal * aprBps) / BPS_DENOMINATOR;
+        if (loan.startTime == 0 || loan.principal == 0) return 0;
+        uint256 elapsed;
+        if (loan.frozenInterestAt != 0) {
+            // Interest frozen at cure entry — no further accrual
+            elapsed = loan.frozenInterestAt > loan.startTime ? loan.frozenInterestAt - loan.startTime : 0;
+        } else {
+            elapsed = block.timestamp > loan.startTime ? block.timestamp - loan.startTime : 0;
+        }
+        if (elapsed == 0) return 0;
+        // APR is annualized: interest = principal * aprBps * elapsed / (BPS * 365 days)
+        // set at market creation (immutable aprBps). Uses 365-day year for determinism.
+        uint256 annualInterest = Math.mulDiv(loan.principal, aprBps, BPS_DENOMINATOR);
+        return Math.mulDiv(annualInterest, elapsed, 365 days);
     }
 
     function _getHealthFactor(Loan storage loan) internal view returns (uint256) {

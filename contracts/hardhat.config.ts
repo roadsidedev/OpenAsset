@@ -93,6 +93,12 @@ const config: HardhatUserConfig = {
       accounts: [PRIVATE_KEY],
       gasPrice: "auto",
     },
+    robinhoodTestnet: {
+      url: process.env.ROBINHOOD_TESTNET_RPC_URL || "https://rpc.testnet.chain.robinhood.com",
+      chainId: 46630,
+      accounts: [PRIVATE_KEY],
+      gasPrice: "auto",
+    },
   },
 
   // Etherscan V2 unified API
