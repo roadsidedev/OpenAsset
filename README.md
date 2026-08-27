@@ -1,107 +1,109 @@
-# OpenAsset Market
+# OpenAsset
 
-OpenAsset Market is a decentralized, permissionless lending protocol that enables anyone to launch an isolated lending market for any on-chain asset (ERC20, ERC721,RWA, tokenized stocks etc). It empowers communities, DAOs, and individual LPs to provide liquidity and set their own risk parameters, bringing DeFi utility to the 95% of assets currently excluded from traditional platforms like Aave or Compound.
+**OpenAsset lets anyone create an isolated lending market for almost any asset with measurable value.**
 
-## Key Features
+Most lending protocols only accept a small, governance-approved list of assets. Because they pool everyone's liquidity, one bad collateral decision puts every depositor at risk.
 
-- **Permissionless Market Creation**: Deploy an isolated lending market in minutes without governance approval.
-- **Any Asset Support**: Support for long-tail tokens, gaming assets, and NFT collections.
-- **Isolated Risk**: Each market is independent, preventing contagion risks across the platform.
-- **LP Control**: Liquidity providers define LTV, APR, duration, and liquidation rules.
-- **Uniswap V3 TWAP Integration**: Flash-loan resistant pricing using time-weighted average prices.
-- **Automated Circuit Breakers**: Built-in volatility protection that pauses markets during extreme price swings.
-- **Gradual Liquidation**: A fair liquidation model that only seizes the necessary collateral to cover debt plus a penalty.
+OpenAsset does the opposite. Anyone can launch a fully isolated market — crypto, NFTs, tokenized real-world assets — and choose pricing, compliance, and liquidation logic per market. No listing committee. No shared risk.
 
-## 🛠 Tech Stack
+This is not “a better Aave.” It is infrastructure other lending markets get built on.
 
-- **Smart Contracts**: Solidity 0.8.20+, Hardhat, OpenZeppelin.
-- **Backend**: Node.js, TypeScript, Express, Prisma (PostgreSQL), Redis.
-- **Frontend**: Next.js 16, Tailwind CSS, shadcn/ui, wagmi/viem.
-- **Oracles**: Uniswap V3 TWAP, Chainlink (fallback).
-- **Notifications**: SendGrid (Email), Twilio (SMS), Firebase (Push).
+## What it is
 
-## 📂 Project Structure
+- **Permissionless market creation** — deploy an isolated lending market without a governance vote
+- **Isolated risk** — each market has its own liquidity, collateral, and rules; one failure cannot drain another
+- **Adapters** — custody, pricing, compliance, liquidation, and position representation are swappable modules. New asset classes are supported by writing an adapter, not by rewriting the core
+- **Verified, not blindly trusted** — the engine independently checks adapter reports (balances, price sanity, fail-closed compliance)
+- **Non-custodial** — collateral sits in market-specific contracts, not with OpenAsset
+- **EVM-first** — currently lending in stablecoins (a stated boundary, not an oversight)
+
+## What it is not
+
+- Not a shared liquidity pool
+- Not a claim that every asset is supported today — say *the architecture supports this* until the adapter is live
+- Not a token or points program
+- Not a guarantor of RWA / issuer solvency — that risk sits with whoever chose the collateral
+
+## Who it is for
+
+| Audience | What they do |
+|---|---|
+| **Market creators / LPs** | Launch a market for an asset they understand; set terms; keep yield; never inherit someone else's collateral risk |
+| **Adapter developers** | Write to a Solidity interface; extend coverage without touching the core |
+| **Borrowers** | Borrow against a gaming token, NFT, or tokenized stock without selling it |
+| **RWA / compliance partners** | Use compliance as a first-class module, not a bolt-on |
+
+## Repository
 
 ```text
 openasset/
-├── contracts/        # Smart contracts (Hardhat project)
-├── backend/          # Node.js API and worker services
-├── web/              # Next.js frontend application
-└── .agent/           # AI agent configuration and skills
+├── contracts/        # Solidity (Hardhat)
+├── backend/          # Node.js API, indexer, monitor
+├── web/              # Next.js app + docs
+└── docs/             # Protocol notes, deployment manifests, marketing
 ```
 
-## 🏁 Getting Started
+**Stack:** Solidity 0.8.20+, Hardhat, OpenZeppelin · Node.js, TypeScript, Express, Prisma, Redis · Next.js 16, Tailwind, wagmi/viem · Uniswap V3 TWAP and Chainlink oracles.
 
-### Prerequisites
+## Getting started
 
-- Node.js (v18+)
-- PostgreSQL
-- Docker (optional, for local database)
+**Prerequisites:** Node.js 18+, PostgreSQL, Docker optional.
 
-### Installation
+```bash
+git clone https://github.com/roadsidedev/openasset.git
+cd openasset
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/roadsidedev/openasset.git
-   cd openasset
-   ```
+cd backend && npm install
+cd ../contracts && npm install
+cd ../web && npm install
+```
 
-2. Install dependencies for all components:
-   ```bash
-   # Root (if package.json exists) or individually:
-   cd backend && npm install
-   cd ../contracts && npm install
-   cd ../web && npm install
-   ```
+**Contracts**
 
-### Running the Project
-
-#### 1. Smart Contracts
 ```bash
 cd contracts
 npx hardhat compile
-npx hardhat test      # Run the test suite
+npx hardhat test
 ```
 
-#### 2. Backend
-1. Set up environment variables in `backend/.env` (use `.env.example` as a template).
-2. Run Prisma migrations:
-   ```bash
-   npx prisma generate
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-4. Start workers (optional):
-   ```bash
-   npm run indexer    # Event indexer
-   npm run monitor    # Health & Volatility monitor
-   ```
+**Backend** — copy `backend/.env.example` to `.env`, then:
 
-#### 3. Web Frontend
+```bash
+cd backend
+npx prisma generate
+npm run dev
+# optional: npm run indexer && npm run monitor
+```
+
+**Web**
+
 ```bash
 cd web
 npm run dev
 ```
 
-## 🏗 Architecture
+App: create-market, markets, adapters, docs. Marketing story lives on `/`.
 
-### Isolated Markets
-Unlike shared-pool protocols, oA Market uses a factory pattern to deploy unique `LendingMarket` contracts for each asset pair. This ensures that a bad debt event in one market cannot affect others.
+## Architecture (short)
 
-### TWAP Oracle System
-To prevent price manipulation, oA Market consults Uniswap V3 pools to calculate a Time-Weighted Average Price (TWAP) over a configurable window (e.g., 30 minutes). This makes the protocol highly resistant to flash loan attacks.
+**Isolated markets.** A factory deploys a dedicated `LendingMarket` per market. Bad debt in one market cannot contagion into others.
 
-### Circuit Breaker
-The `monitoringWorker` tracks volatility in real-time. If an asset's price moves beyond the LP-defined threshold within the lookback window, the market automatically pauses new loan requests while still allowing repayments and liquidations.
+**Adapters.** Five interfaces — Asset, Oracle, Compliance, Liquidation, Position. Reference implementations exist for ERC-20, ERC-721, Uniswap V3 TWAP, Chainlink, DEX-swap and NFT-auction liquidation. RWA-oriented modules (session-aware equity feeds, ERC-3643, issuer-redemption liquidation) are architecture-ready; do not claim them live unless the deployment manifest says so.
 
-## 🛡 Security
+**Oracles & circuit breaker.** TWAP pricing resists flash-loan manipulation. If price moves past the creator's threshold, new borrows pause; repayments and liquidations continue.
 
-- **Backend-First Model**: Strict enforcement of business logic on the server side. Frontend is a view layer only.
-- **Zero RLS Policy**: Database access is restricted to the service role within secure backend environments.
-- **Input Validation**: All API inputs are validated using Zod schemas.
-- **Checks-Effects-Interactions**: Smart contracts strictly follow CEI patterns to prevent reentrancy.
+**Liquidation.** Adapters must return unused surplus. The interface requires it.
 
+## Docs & claims
 
+- Product docs: `web/content/` (served at `/docs`)
+- Adapter developers: `docs/ADAPTER_DEVELOPER.md`
+- Deployments: `docs/deployment-manifests/` — check before saying “live on X”
+- Messaging: `docs/marketing/messaging-framework.md`
+- Do not write “audited” unless a named audit exists. Do not write “adapter ecosystem” until a third-party adapter exists.
 
+## License / security
+
+Business logic is enforced on the backend and in contracts (CEI, Zod validation, service-role DB access). Frontend is a view layer.
+
+If you are reviewing the protocol, start with `/docs` and the adapter spec — not this README's feature list.

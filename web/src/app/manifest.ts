@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "OpenAsset",
     short_name: "OpenAsset",
-    description: "Permissionless asset lending markets.",
+    description: "Isolated lending markets for almost any asset with measurable value.",
     start_url: "/markets",
     display: "standalone",
     background_color: "#F7FAFC",

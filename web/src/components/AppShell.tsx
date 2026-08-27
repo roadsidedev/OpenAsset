@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity" aria-label="OpenAsset — back to landing">
             <Image src="/openasset-logo.png" alt="OpenAsset" width={18} height={18} className="brand-logo opacity-90" />
             <span className="font-semibold tracking-tight text-foreground">OpenAsset</span>
-            <span className="opacity-70">— Market infrastructure</span>
+            <span className="opacity-70">— Isolated lending infrastructure</span>
           </Link>
           <div className="flex items-center gap-5">
             <Link href="/docs" className="hover:text-foreground transition-colors">Docs</Link>

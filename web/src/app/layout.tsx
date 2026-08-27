@@ -13,11 +13,13 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "oA | Permissionless Asset Lending",
-  description: "OpenAsset Market — launch a lending market for any asset in minutes.",
+  title: "OpenAsset — Isolated lending markets for almost any asset",
+  description:
+    "OpenAsset lets anyone create an isolated lending market for almost any asset with measurable value. No listing committee. No shared pool.",
   openGraph: {
-    title: "OpenAsset — Permissionless Asset Lending",
-    description: "Launch a lending market for any asset in minutes.",
+    title: "OpenAsset — Isolated lending markets for almost any asset",
+    description:
+      "Create a fully isolated lending market — your collateral, your adapters, your rules. No listing committee. No shared risk.",
     images: ["/openasset-logo.png"],
   },
   icons: {

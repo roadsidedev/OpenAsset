@@ -1130,6 +1130,87 @@
   background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--ice-300) 13%, transparent), transparent 44%), linear-gradient(145deg, color-mix(in srgb, var(--card) 87%, transparent), color-mix(in srgb, var(--background) 76%, transparent));
 }
 
+.landing-steps {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-step {
+  min-height: 240px;
+  padding: 1.6rem;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--card) 78%, transparent), color-mix(in srgb, var(--background) 74%, transparent));
+}
+
+.landing-faq-list {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 28px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--card) 40%, transparent);
+}
+
+.landing-faq {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.landing-faq:last-child {
+  border-bottom: none;
+}
+
+.landing-faq summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 1.15rem 1.4rem;
+  font-family: var(--font-display), ui-serif, serif;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
+}
+
+.landing-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.landing-faq summary::after {
+  content: "+";
+  float: right;
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.9rem;
+}
+
+.landing-faq[open] summary::after {
+  content: "–";
+}
+
+.landing-faq p {
+  margin: 0;
+  padding: 0 1.4rem 1.25rem;
+  max-width: 46rem;
+  color: var(--muted-foreground);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+@media (max-width: 1023px) {
+  .landing-steps {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .landing-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
 .market-filter-row { min-width: 0; }
 
 @keyframes landing-mark-float {
