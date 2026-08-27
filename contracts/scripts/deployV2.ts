@@ -434,10 +434,11 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
     try {
       currentRouter = await dex.router();
     } catch {
-      console.log("  Existing DEX adapter is the pre-router stub; redeploy with FORCE_REDEPLOY_KEYS=dexSwapLiquidation");
-      currentRouter = ethers.ZeroAddress;
+      throw new Error(
+        `Existing DEX adapter at ${deployed.dexSwapLiquidation} is the pre-router stub; redeploy with FORCE_REDEPLOY_KEYS=dexSwapLiquidation`,
+      );
     }
-    if (currentRouter !== ethers.ZeroAddress && currentRouter.toLowerCase() !== config.uniswapV3Router.toLowerCase()) {
+    if (currentRouter === ethers.ZeroAddress || currentRouter.toLowerCase() !== config.uniswapV3Router.toLowerCase()) {
       await waitTx(await dex.setRouter(config.uniswapV3Router), "DEXSwapLiquidationAdapter.setRouter");
     }
   } else {

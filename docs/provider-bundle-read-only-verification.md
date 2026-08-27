@@ -31,9 +31,19 @@ The latest feed answer was `31152209667` at 8 decimals, equivalent to **311.5220
 
 Robinhood Chain documentation lists chain ID 4663, the public RPC, and public sequencer stream endpoints. Its token-contract page identifies the AAPL token as canonical and warns that a same-ticker contract at another address is not the canonical Robinhood Stock Token. Uniswap’s official Robinhood deployment page lists the v3 factory `0x1f7d7550b1b028f7571e69a784071f0205fd2efa`, QuoterV2 `0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7`, and SwapRouter02 `0xcaf681a66d020601342297493863e78c959e5cb2`.
 
-## Remaining verification
+## Read-only pool and quote verification
 
-The official Robinhood documentation lists USDG at `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` and WETH at `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73`. Pool existence, fee tier, liquidity, and quote viability still require direct read-only `UniswapV3Factory.getPool` and pool-state checks. The official Robinhood documentation recommends provider RPCs for production rather than rate-limited public endpoints. The final deployment must also verify the actual lending asset selected by OpenAsset, because the current repository configuration uses a placeholder environment variable rather than a confirmed Robinhood lending-asset manifest.
+The official Robinhood documentation lists USDG at `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` and WETH at `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73`. The official Uniswap v3 factory returned these AAPL/USDG pools with code: fee 500 at `0xaae0d815ee56e4092a5e5c2911e676fea50b2d6d`, fee 3000 at `0x783c9bbb765047cfdd2b84b92b2ca9f11d34b7ed`, and fee 10000 at `0x3714aa8105de1f384481b425788af413748c1837`. No AAPL/USDG fee-100 pool was returned. AAPL/WETH fee 500 exists with nonzero liquidity, but it is not a route into a USDG lending market.
+
+At the probe block, QuoterV2 returned the following USDG outputs for exact-input AAPL quotes. These are read-only point-in-time observations, not a production fee recommendation:
+
+| AAPL input | Fee 500 | Fee 3000 | Fee 10000 |
+| ---: | ---: | ---: | ---: |
+| 0.01 | 3.105192 USDG | 3.097057 USDG | 3.091869 USDG |
+| 0.1 | 31.051444 USDG | 30.970337 USDG | 30.903049 USDG |
+| 1.0 | 310.466559 USDG | 309.680065 USDG | 307.474967 USDG |
+
+The current snapshots favor the fee-500 route for quoted output at these sizes, but pool depth, price impact, expected liquidation sizes, and route reliability must be reviewed before configuring a live market. The official Robinhood documentation recommends provider RPCs for production rather than rate-limited public endpoints. The final deployment must also verify the actual lending asset selected by OpenAsset, because the repository intentionally does not silently assume that USDG satisfies the product requirement for USDC borrowing.
 
 ## Sources
 
