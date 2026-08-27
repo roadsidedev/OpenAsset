@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
+import { useWalletSession } from "@/hooks/useWalletSession";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLoans } from "@/hooks/useLoans";
 import { useActivity } from "@/hooks/useActivity";
@@ -90,7 +91,9 @@ function AccountContent() {
   const [exportPassword, setExportPassword] = useState("");
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const { user, exportWallet, logout: privyLogout } = usePrivy();
-  const { address } = useAccount();
+  const { address: wagmiAddress } = useAccount();
+  const { address: sessionAddress } = useWalletSession();
+  const address = sessionAddress || wagmiAddress;
 
   // Detect embedded wallet (Privy-managed) vs external wallet (MetaMask, etc.)
   const isEmbeddedWallet = user?.wallet?.walletClientType === "privy" || user?.wallet?.connectorType === "embedded";
@@ -122,7 +125,7 @@ function AccountContent() {
   const activeLoans: any[] = loansData?.loans || [];
   const allMarkets: any[] = marketsData?.markets || [];
   const myMarkets = address
-    ? allMarkets.filter((m: any) => m.owner.toLowerCase() === address.toLowerCase())
+    ? allMarkets.filter((m: any) => m.owner && m.owner.toLowerCase() === address.toLowerCase())
     : [];
 
   const totalBorrowed = activeLoans.reduce((s: bigint, l: any) => s + BigInt(l.principal || 0), BigInt(0));
@@ -473,8 +476,8 @@ function AccountContent() {
         )}
       </main>
 
-      <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
-      <WithdrawModal open={withdrawOpen} onOpenChange={setWithdrawOpen} />
+      <DepositModal open={depositOpen} onOpenChange={setDepositOpen} markets={allMarkets} />
+      <WithdrawModal open={withdrawOpen} onOpenChange={setWithdrawOpen} markets={allMarkets} />
     </div>
   );
 }

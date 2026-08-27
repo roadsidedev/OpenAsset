@@ -70,6 +70,7 @@ declare module '@privy-io/react-auth' {
 declare module '@privy-io/wagmi' {
   export function WagmiProvider(props: any): JSX.Element;
   export function usePrivy(): any;
+  export function useSetActiveWallet(): { setActiveWallet: (wallet: any) => Promise<void> };
 }
 
 declare module '@tanstack/react-query' {

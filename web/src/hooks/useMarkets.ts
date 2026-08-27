@@ -29,6 +29,7 @@ export interface Market {
   durationSeconds: number;
   createdAt: number;
   active: boolean;
+  activeLoanCount?: number;
   liquidity: {
     total: string;
     available: string;
@@ -60,7 +61,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
   const markets: Market[] = [];
   for (const addr of marketAddresses) {
     try {
-      const [totalLiq, availLiq, totalBorrowed] = await publicClient.readContract({
+      const [totalLiq, availLiq, totalBorrowed, activeLoanCount] = await publicClient.readContract({
         address: addr as Address,
         abi: parseAbi(LENDING_MARKET_ABI),
         functionName: 'getMarketStats',
@@ -70,6 +71,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
         providerId,
         status,
         lpTokenAddr,
+        marketOwnerAddr,
         collateralAsset,
         loanAsset,
         assetAdapter,
@@ -89,6 +91,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
         }).catch(() => '0x' + '0'.repeat(64)),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'status' }).catch(() => 0),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lpToken' }).catch(() => '0x0000000000000000000000000000000000000000'),
+        publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'marketOwner' }).catch(() => ''),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'collateralAsset' }).catch(() => ''),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingAsset' }).catch(() => ''),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'assetAdapter' }).catch(() => ''),
@@ -101,8 +104,8 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'durationSeconds' }).catch(() => BigInt(0)),
       ]);
 
-      let lpOwner = '';
-      if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
+      let lpOwner = (marketOwnerAddr as string) || '';
+      if (!lpOwner && lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
         try {
           lpOwner = (await publicClient.readContract({
             address: lpTokenAddr as Address,
@@ -141,6 +144,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
         createdAt: 0,
         status: Number(status),
         active: Number(status) === 0,
+        activeLoanCount: Number(activeLoanCount || 0),
         liquidity: {
           total: totalLiq.toString(),
           available: availLiq.toString(),
@@ -208,10 +212,11 @@ export const useMarkets = (start = 0, count = 20) => {
       const sliced = all.slice(start, start + count);
       return { total: all.length, start, count, markets: sliced };
     },
-    staleTime: 30000,
+    staleTime: 15000,
     gcTime: 300000,
     retry: 1,
-    refetchOnWindowFocus: false,
+    refetchInterval: 20000,
+    refetchOnWindowFocus: true,
     placeholderData: (prev) => prev,
   });
 };
@@ -239,8 +244,9 @@ export const useMarket = (address: string) => {
             stats,
             providerId,
             status,
-            lpTokenAddr,
-            collateralAsset,
+              lpTokenAddr,
+              marketOwnerAddr,
+              collateralAsset,
             loanAsset,
             assetAdapter,
             oracleAdapter,
@@ -273,7 +279,12 @@ export const useMarket = (address: string) => {
               address: address as Address,
               abi: parseAbi(LENDING_MARKET_ABI),
               functionName: 'lpToken',
-            }) as Promise<string>,
+            }).catch(() => '0x0000000000000000000000000000000000000000') as Promise<string>,
+            publicClient.readContract({
+              address: address as Address,
+              abi: parseAbi(LENDING_MARKET_ABI),
+              functionName: 'marketOwner',
+            }).catch(() => '') as Promise<string>,
             publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'collateralAsset' }) as Promise<string>,
             publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingAsset' }) as Promise<string>,
             publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'assetAdapter' }) as Promise<string>,
@@ -286,8 +297,8 @@ export const useMarket = (address: string) => {
             publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'durationSeconds' }) as Promise<bigint>,
           ]);
 
-          let lpOwner = '';
-          if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
+          let lpOwner = (marketOwnerAddr as string) || '';
+          if (!lpOwner && lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
             try {
               lpOwner = (await publicClient.readContract({
                 address: lpTokenAddr as Address,
@@ -326,6 +337,7 @@ export const useMarket = (address: string) => {
             createdAt: 0,
             status: Number(status),
             active: (status as number) === 0,
+            activeLoanCount: Number(stats[3] || 0),
             liquidity: {
               total: (stats[0] as bigint).toString(),
               available: (stats[1] as bigint).toString(),

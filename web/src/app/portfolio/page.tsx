@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
+import { useWalletSession } from "@/hooks/useWalletSession";
 import { useLoans } from "@/hooks/useLoans";
 import { useMarkets } from "@/hooks/useMarkets";
 import { LOAN_STATUS } from "@/lib/contractAbis";
@@ -89,7 +90,9 @@ export default function PortfolioPage() {
 
 function PortfolioContent() {
   const [tab, setTab] = useState<PositionsTab>("loans");
-  const { address } = useAccount();
+  const { address: wagmiAddress } = useAccount();
+  const { address: sessionAddress } = useWalletSession();
+  const address = sessionAddress || wagmiAddress;
 
   const borrowerQueryEnabled = !!address && tab === "loans";
   const { data: loansData, isLoading: loansLoading } = useLoans(
@@ -101,7 +104,7 @@ function PortfolioContent() {
   const activeLoans: any[] = loansData?.loans || [];
   const allMarkets: any[] = marketsData?.markets || [];
   const myMarkets = address
-    ? allMarkets.filter((m: any) => m.owner.toLowerCase() === address.toLowerCase())
+    ? allMarkets.filter((m: any) => m.owner && m.owner.toLowerCase() === address.toLowerCase())
     : [];
 
   return (

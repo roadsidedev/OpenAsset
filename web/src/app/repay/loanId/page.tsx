@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
+import { useWalletSession } from '@/hooks/useWalletSession';
 import { LOAN_STATUS } from '@/lib/contractAbis';
 import { ArrowLeft } from "@phosphor-icons/react";
 
@@ -10,7 +10,7 @@ export default function RepayPage() {
   const params = useParams();
   const router = useRouter();
   const loanId = params.loanId as string;
-  const { address: userAddress } = useAccount();
+  const { address: userAddress, ensureWallet } = useWalletSession();
   const [isRepaying, setIsRepaying] = useState(false);
 
   const loan = {
@@ -22,7 +22,10 @@ export default function RepayPage() {
   };
 
   const handleRepay = async () => {
-    if (!userAddress) return;
+    if (!userAddress) {
+      await ensureWallet();
+      return;
+    }
     setIsRepaying(true);
     setTimeout(() => {
       setIsRepaying(false);

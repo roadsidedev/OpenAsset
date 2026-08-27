@@ -90,7 +90,12 @@ export function Navbar() {
       {/* Desktop Top Nav */}
       <header className="sticky top-0 z-40 hidden border-b border-border/70 glass md:block">
         <div className="mx-auto flex h-[56px] max-w-[1160px] items-center justify-between px-5 md:px-6">
-          <div className="flex items-center gap-7">
+          <div className="flex items-center gap-4">
+            <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" aria-label="Open menu">
+                <List className={cn("h-4.5 w-4.5 transition-premium", menuOpen && "rotate-90")} />
+              </Button>
+            </HamburgerMenu>
             <Link href="/" className="flex items-center gap-2.5 group focus:outline-none" aria-label="OpenAsset — back to landing">
               <Image
                 src="/openasset-logo.png"
@@ -134,12 +139,6 @@ export function Navbar() {
             </Button>
 
             {renderAuthButton()}
-
-            <HamburgerMenu open={menuOpen} onOpenChange={setMenuOpen}>
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
-                <List className={cn("h-4.5 w-4.5 transition-premium", menuOpen && "rotate-90")} />
-              </Button>
-            </HamburgerMenu>
           </div>
         </div>
       </header>

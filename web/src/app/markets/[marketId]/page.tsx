@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useAccount, usePublicClient } from "wagmi";
+import { usePublicClient } from "wagmi";
+import { useWalletSession } from "@/hooks/useWalletSession";
 import { useMarket } from "@/hooks/useMarkets";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,7 +44,7 @@ export default function MarketDetailPage() {
   const router = useRouter();
   const params = useParams();
   const marketId = params.marketId as string;
-  const { address: userAddress } = useAccount();
+  const { address: userAddress, isSignedIn, ensureWallet } = useWalletSession();
 
   const { data: market, isLoading, error } = useMarket(marketId);
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
@@ -103,7 +104,11 @@ export default function MarketDetailPage() {
   };
 
   const handleRequestLoan = async () => {
-    if (!userAddress || !market || !collateralAmount) return;
+    if (!userAddress) {
+      await ensureWallet();
+      return;
+    }
+    if (!market || !collateralAmount) return;
     try {
       const amount = parseUnits(collateralAmount, collateralDecimals);
       const maxBorrowRaw = calculateMaxBorrowRaw();
@@ -447,10 +452,10 @@ export default function MarketDetailPage() {
               {/* CTA */}
               <button
                 onClick={handleRequestLoan}
-                disabled={isTxLoading || !collateralAmount || !userAddress || isPaused || !oracleTrusted}
+                disabled={isTxLoading || isPaused || !oracleTrusted || (!!userAddress && !collateralAmount)}
                 className={cn(
                   "w-full py-3.5 rounded-2xl font-bold text-sm transition-premium active-press",
-                  isTxLoading || !collateralAmount || !userAddress || isPaused || !oracleTrusted
+                  isTxLoading || isPaused || !oracleTrusted || (!!userAddress && !collateralAmount)
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-ice-300 dark:bg-ice-400 text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 shadow-glow"
                 )}
@@ -458,7 +463,9 @@ export default function MarketDetailPage() {
                 {isTxLoading
                   ? "Processing..."
                   : !userAddress
-                  ? "Connect Wallet"
+                  ? isSignedIn
+                    ? "Connect Wallet"
+                    : "Sign In to Borrow"
                   : isPaused
                   ? "Market Paused"
                   : !oracleTrusted

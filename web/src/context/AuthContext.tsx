@@ -1,31 +1,55 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { fetchFromApi } from '../lib/api';
+import { WalletSync } from '../components/WalletSync';
 
 const AUTH_STORAGE_KEY = 'openasset_auth_token';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  isSignedIn: boolean;
+  walletAddress?: string;
   isSigning: boolean;
   isLoading: boolean;
   signLoginMessage: () => Promise<void>;
   authenticatedFetch: (endpoint: string, options?: RequestInit) => Promise<any>;
+  login: () => Promise<void>;
+  connectWallet: () => Promise<void>;
+  ensureWallet: () => Promise<string | undefined>;
   logout: () => void;
   user: any;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const UNAUTHED: AuthContextType = {
+  isAuthenticated: false,
+  isSignedIn: false,
+  walletAddress: undefined,
+  isSigning: false,
+  isLoading: false,
+  signLoginMessage: async () => {},
+  authenticatedFetch: async () => null,
+  login: async () => {},
+  connectWallet: async () => {},
+  ensureWallet: async () => undefined,
+  logout: () => {},
+  user: null,
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, authenticated, logout: privyLogout, ready } = usePrivy();
+  const { user, authenticated, logout: privyLogout, ready, login: privyLogin, connectWallet: privyConnectWallet } = usePrivy();
   const { wallets } = useWallets();
+  const { address: wagmiAddress, isConnected } = useAccount();
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
 
-  // Load auth token from local storage on mount
+  const walletAddress = wagmiAddress || user?.wallet?.address || wallets?.[0]?.address;
+
   useEffect(() => {
     const stored = localStorage.getItem(AUTH_STORAGE_KEY);
     if (stored) {
@@ -33,9 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Sync: If Privy has finished initializing and says not authenticated, clear our local state.
-  // We only clear when `ready` is true to avoid wiping the token during page refresh while
-  // Privy is still loading.
   useEffect(() => {
     if (ready && !authenticated && authToken) {
       setAuthToken(null);
@@ -43,37 +64,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [ready, authenticated, authToken]);
 
+  const login = useCallback(async () => {
+    if (typeof privyLogin === 'function') await privyLogin();
+  }, [privyLogin]);
+
+  const connectWallet = useCallback(async () => {
+    if (typeof privyConnectWallet === 'function') await privyConnectWallet();
+  }, [privyConnectWallet]);
+
+  const ensureWallet = useCallback(async () => {
+    if (walletAddress) return walletAddress;
+    if (!authenticated) {
+      await login();
+      return undefined;
+    }
+    await connectWallet();
+    return undefined;
+  }, [walletAddress, authenticated, login, connectWallet]);
+
   const signLoginMessage = useCallback(async () => {
     if (!authenticated || !user?.wallet?.address || !wallets.length) return;
-    
+
     setIsSigning(true);
     try {
-      // FIX: Case-insensitive comparison for wallet address
       const userAddress = user.wallet.address.toLowerCase();
       const wallet = wallets.find((w) => w.address.toLowerCase() === userAddress);
-      
+
       if (!wallet) {
-        console.error('Wallet not found for address:', userAddress);
-        // Fallback: use the first connected wallet if specific match fails 
-        // (sometimes Privy user object lags behind wallet list)
         const fallbackWallet = wallets[0];
         if (!fallbackWallet) throw new Error('No wallets connected');
-        
-        // warn if mismatch
-        if (fallbackWallet.address.toLowerCase() !== userAddress) {
-             console.warn('Using fallback wallet:', fallbackWallet.address);
-        }
       }
 
       const activeWallet = wallet || wallets[0];
 
-      // 1. Fetch nonce from backend
       const { nonce } = await fetchFromApi(`/auth/nonce/${activeWallet.address}`);
 
       const message = `Login to OpenAsset Market: ${nonce}`;
       const signature = await activeWallet.sign(message);
-      
-      // 2. Login to get JWT
+
       const { token } = await fetchFromApi('/auth/login', {
         method: 'POST',
         body: JSON.stringify({
@@ -109,35 +137,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     setAuthToken(null);
-    // We don't call privyLogout() here to separate concerns, 
-    // but the effect above will clean up if Privy logs out.
   }, []);
 
-  const value = {
+  const value = useMemo<AuthContextType>(() => ({
     isAuthenticated: !!authToken,
+    isSignedIn: Boolean(authenticated || isConnected),
+    walletAddress,
     isSigning,
     isLoading: !ready,
     signLoginMessage,
     authenticatedFetch,
+    login,
+    connectWallet,
+    ensureWallet,
     logout,
     user
-  };
+  }), [
+    authToken,
+    authenticated,
+    isConnected,
+    walletAddress,
+    isSigning,
+    ready,
+    signLoginMessage,
+    authenticatedFetch,
+    login,
+    connectWallet,
+    ensureWallet,
+    logout,
+    user,
+  ]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      <WalletSync />
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    return {
-      isAuthenticated: false,
-      isSigning: false,
-      isLoading: false,
-      signLoginMessage: async () => {},
-      authenticatedFetch: async () => null,
-      logout: () => {},
-      user: null,
-    };
+    return UNAUTHED;
   }
   return context;
 }
