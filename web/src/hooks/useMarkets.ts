@@ -39,6 +39,7 @@ export interface Market {
 }
 
 async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
+  try {
   const factoryAddress = getContract(chainId, 'marketFactory');
   const publicClient = createChainClient(chainId);
   if (!factoryAddress || factoryAddress === '0x0000000000000000000000000000000000000000' || !publicClient) return [];
@@ -152,11 +153,20 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
     }
   }
   return markets;
+  } catch {
+    return [];
+  }
 }
 
 async function fetchAggregatedOnChainMarkets(): Promise<Market[]> {
   const ids = discoveryChainIds();
-  const batches = await Promise.all(ids.map((id) => fetchOnChainMarketsForChain(id)));
+  const batches = await Promise.all(ids.map(async (id) => {
+    try {
+      return await fetchOnChainMarketsForChain(id);
+    } catch {
+      return [];
+    }
+  }));
   // flatten and deduplicate by marketAddress
   const seen = new Set<string>();
   const all: Market[] = [];
