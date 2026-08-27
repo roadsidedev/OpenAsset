@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
 import { useAccount, usePublicClient } from "wagmi";
-import { parseUnits, isAddress, type Address } from "viem";
+import { parseUnits, isAddress, encodeAbiParameters, type Address } from "viem";
 import { toast } from "sonner";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
@@ -16,8 +16,9 @@ import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { decodeContractError } from "@/lib/contractErrors";
 import { cn } from "@/lib/utils";
 import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, MagnifyingGlass } from "@phosphor-icons/react";
-import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel } from "@/lib/b20";
-import { adapterSupportsPicker, getSuggestedAdaptersForB20 } from "@/lib/supportedAssets";
+import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
+import { adapterSupportsPicker, getSuggestedAdaptersForB20, getSuggestedAdaptersForRobinhood } from "@/lib/supportedAssets";
+import { getProviderAsset, getProviderAssetByAddress, getProviderSequencerFeed, PROVIDER_IDS } from "@/lib/providerBundles";
 
 interface AdapterOption {
   address: string;
@@ -53,15 +54,20 @@ export default function CreateMarketPage() {
     isAddress(formData.lendingAsset) ? formData.lendingAsset : undefined,
     chainId,
   );
-  const b20Info = isB20Token(formData.collateralAsset) ? getB20Info(formData.collateralAsset) : undefined;
+  const b20Info = isB20Token(formData.collateralAsset, chainId) ? getB20Info(formData.collateralAsset, chainId) : undefined;
+  const providerAsset = getProviderAsset(chainId, formData.collateralAsset);
+  const knownProviderAsset = getProviderAssetByAddress(formData.collateralAsset);
   const isB20Selected = !!b20Info;
+  const isRobinhoodSelected = providerAsset?.provider === 'robinhood';
   const b20HoursLabel = isWithinB20TradingWindow() ? b20MarketHoursLabel() : b20MarketHoursLabel();
 
-  const isB20Chain = chainId === 8453 || chainId === 84532;
+  const isB20Chain = chainId === 8453;
+  const isRobinhoodChain = chainId === 4663;
   // All adapters from hardcoded contract addresses — always available, no on-chain reads
   const adapters = useMemo((): Record<string, AdapterOption[]> => {
     if (!contracts) return {};
     const isB20 = isB20Chain && contracts.b20AssetAdapter && contracts.b20AssetAdapter !== "0x0000000000000000000000000000000000000000";
+    const isRobinhood = isRobinhoodChain && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000";
     return {
       ASSET: [
         { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
@@ -71,7 +77,7 @@ export default function CreateMarketPage() {
       ORACLE: [
         { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
         ...(contracts.uniswapV3TWAPAdapter && contracts.uniswapV3TWAPAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.uniswapV3TWAPAdapter, name: "UniswapV3TWAPAdapter", type: 1, verified: true, deprecated: false }] : []),
-        ...(isB20 && contracts.chainlinkEquityFeedAdapter && contracts.chainlinkEquityFeedAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.chainlinkEquityFeedAdapter, name: "ChainlinkEquityFeedAdapter (B20 TRV 24/5, 90000s)", type: 1, verified: true, deprecated: false }] : []),
+        ...((isB20 || isRobinhood) && contracts.chainlinkEquityFeedAdapter && contracts.chainlinkEquityFeedAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.chainlinkEquityFeedAdapter, name: isRobinhood ? "ChainlinkEquityFeedAdapter (Robinhood Stock Token)": "ChainlinkEquityFeedAdapter (B20 TRV 24/5, 90000s)", type: 1, verified: true, deprecated: false }] : []),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
       LIQUIDATION: [
         { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter (default for B20 — 24/7 DEX)", type: 3, verified: true, deprecated: false },
@@ -84,9 +90,10 @@ export default function CreateMarketPage() {
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
       COMPLIANCE: [
         ...(isB20 && contracts.b20PolicyComplianceAdapter && contracts.b20PolicyComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.b20PolicyComplianceAdapter, name: "B20PolicyComplianceAdapter", type: 2, verified: true, deprecated: false }] : []),
+        ...(isRobinhood && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.robinhoodComplianceAdapter, name: "ManagedAllowlistComplianceAdapter (Robinhood)", type: 2, verified: true, deprecated: false }] : []),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
     };
-  }, [contracts, isB20Chain]);
+  }, [contracts, isB20Chain, isRobinhoodChain]);
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
@@ -98,12 +105,11 @@ export default function CreateMarketPage() {
   };
 
   const canShowPicker = adapterSupportsPicker(formData.assetAdapter, chainId);
-  const handlePickerSelect = (asset: { address: string; symbol: string; isB20?: boolean }) => {
-    const isB20Asset = !!asset.isB20 || isB20Token(asset.address);
-    if (isB20Asset && chainId && contracts) {
+  const handlePickerSelect = (asset: { address: string; symbol: string; isB20?: boolean; provider?: 'b20' | 'robinhood' }) => {
+    const selectedProvider = asset.provider || getProviderAsset(chainId, asset.address)?.provider;
+    if (selectedProvider === 'b20' && chainId && contracts) {
       const suggested = getSuggestedAdaptersForB20(chainId);
       if (suggested) {
-        // Interceptive auto-select: fill collateral + suggest full B20 stack (user can still override)
         setFormData({
           collateralAsset: asset.address,
           assetAdapter: suggested.assetAdapter || formData.assetAdapter,
@@ -113,7 +119,23 @@ export default function CreateMarketPage() {
           positionAdapter: suggested.positionAdapter || formData.positionAdapter,
           enableCompliance: true,
         });
-        toast.success(`${asset.symbol} selected — B20 stack auto-applied (you can override)`);
+        toast.success(`${asset.symbol} selected — Base B20 provider bundle applied`);
+        return;
+      }
+    }
+    if (selectedProvider === 'robinhood' && chainId && contracts) {
+      const suggested = getSuggestedAdaptersForRobinhood(chainId);
+      if (suggested) {
+        setFormData({
+          collateralAsset: asset.address,
+          assetAdapter: suggested.assetAdapter || formData.assetAdapter,
+          oracleAdapter: suggested.oracleAdapter || formData.oracleAdapter,
+          complianceAdapter: suggested.complianceAdapter || formData.complianceAdapter,
+          liquidationAdapter: suggested.liquidationAdapter || formData.liquidationAdapter,
+          positionAdapter: suggested.positionAdapter || formData.positionAdapter,
+          enableCompliance: true,
+        });
+        toast.success(`${asset.symbol} selected — Robinhood provider bundle applied`);
         return;
       }
     }
@@ -125,6 +147,18 @@ export default function CreateMarketPage() {
     if (!formData.collateralAsset) return "Collateral asset is required.";
     if (!isAddress(formData.collateralAsset)) return "Collateral asset is not a valid address.";
     if (!formData.lendingAsset) return "Lending asset is required.";
+    if (knownProviderAsset && knownProviderAsset.chainId !== chainId) {
+      return `${knownProviderAsset.symbol} is a ${knownProviderAsset.provider === 'b20' ? 'Base' : 'Robinhood Chain'} provider asset and cannot be created on this network.`;
+    }
+    if (isRobinhoodChain && !providerAsset) {
+      return "Robinhood Chain markets must use an approved provider-catalog asset; manual generic ERC-20 creation is disabled.";
+    }
+    if (isRobinhoodSelected) {
+      const sequencerFeed = getProviderSequencerFeed(chainId, 'robinhood');
+      if (!sequencerFeed || !isAddress(sequencerFeed) || sequencerFeed === "0x0000000000000000000000000000000000000000") {
+        return "Robinhood Chain sequencer feed is not configured; market creation is blocked fail-closed.";
+      }
+    }
     if (!isAddress(formData.lendingAsset)) return "Lending asset is not a valid address.";
     if (!formData.assetAdapter) return "Asset adapter is required.";
     if (!formData.oracleAdapter) return "Oracle adapter is required.";
@@ -205,7 +239,34 @@ export default function CreateMarketPage() {
         ? parseUnits(formData.liquidity, 6)
         : BigInt(0);
 
-      const result = await createMarket(config, contracts.marketFactory, initialLiquidity);
+      const b20Config = isB20Selected && b20Info
+        ? {
+            feed: b20Info.feed,
+            maxStaleness: BigInt(90000),
+            l2Sequencer: chainId === 8453
+              ? BASE_SEQUENCER_FEED
+              : "0x0000000000000000000000000000000000000000",
+          }
+        : undefined;
+
+      const robinhoodSequencer = getProviderSequencerFeed(chainId, 'robinhood');
+      const robinhoodProviderConfig = isRobinhoodSelected && providerAsset?.feed && robinhoodSequencer
+        ? {
+            providerId: PROVIDER_IDS.ROBINHOOD,
+            providerData: encodeAbiParameters(
+              [{ type: 'address' }, { type: 'uint256' }, { type: 'address' }],
+              [providerAsset.feed as Address, BigInt(86400), robinhoodSequencer as Address],
+            ),
+          }
+        : undefined;
+
+      const result = await createMarket(
+        config,
+        contracts.marketFactory,
+        initialLiquidity,
+        b20Config,
+        robinhoodProviderConfig,
+      );
       toast.success("Market deployed successfully!", {
         id: toastId,
         description: `Tx: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`,

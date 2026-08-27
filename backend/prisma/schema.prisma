@@ -65,6 +65,7 @@ model Market {
     lpAddress       String
     collateralAsset String    // Address of collateral token
     lendingAsset    String    // Stablecoin only (V2)
+    providerId      String?   // keccak256 provider bundle identifier
 
     // The five adapters (V2 core)
     assetAdapter      String
@@ -106,6 +107,7 @@ model Market {
 
     @@index([lpAddress])
     @@index([collateralAsset])
+    @@index([providerId])
     @@index([status])
     @@index([assetAdapter])
     @@index([oracleAdapter])

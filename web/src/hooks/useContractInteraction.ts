@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { usePublicClient, useWalletClient } from 'wagmi';
-import { parseAbi, type Address } from 'viem';
-import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
+import { parseAbi, type Address, type Hex } from 'viem';
+import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
 import { decodeContractError } from '@/lib/contractErrors';
 
 export const useContractInteraction = () => {
@@ -31,7 +31,13 @@ export const useContractInteraction = () => {
   );
 
   const createMarket = useCallback(
-    async (marketConfig: any, factoryAddress: string, initialLiquidity: bigint) => {
+    async (
+      marketConfig: any,
+      factoryAddress: string,
+      initialLiquidity: bigint,
+      b20Config?: { feed: string; maxStaleness: bigint; l2Sequencer: string },
+      providerConfig?: { providerId: Hex; providerData: Hex },
+    ) => {
       setIsLoading(true);
       clearError();
       try {
@@ -60,10 +66,22 @@ export const useContractInteraction = () => {
 
         const hash = await walletClient.writeContract({
           address: factoryAddress as Address,
-          abi: MARKET_FACTORY_ABI_TYPED,
-          functionName: 'createMarket',
-          args: [marketConfig, initialLiquidity],
-        });
+          abi: providerConfig
+            ? MARKET_FACTORY_PROVIDER_ABI
+            : b20Config
+              ? MARKET_FACTORY_B20_ABI
+              : MARKET_FACTORY_ABI_TYPED,
+          functionName: providerConfig
+            ? 'createProviderMarket'
+            : b20Config
+              ? 'createB20Market'
+              : 'createMarket',
+          args: providerConfig
+            ? [marketConfig, initialLiquidity, providerConfig]
+            : b20Config
+              ? [marketConfig, initialLiquidity, b20Config]
+              : [marketConfig, initialLiquidity],
+        } as any);
 
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
@@ -125,7 +143,13 @@ export const useContractInteraction = () => {
   );
 
   const requestLoan = useCallback(
-    async (marketAddress: string, collateralAddress: string, collateralAmount: string, assetAdapter: string) => {
+    async (
+      marketAddress: string,
+      collateralAddress: string,
+      collateralAmount: string,
+      assetAdapter: string,
+      requestedPrincipal?: bigint,
+    ) => {
       setIsLoading(true);
       clearError();
       try {
@@ -157,9 +181,11 @@ export const useContractInteraction = () => {
         const hash = await walletClient.writeContract({
           address: marketAddress as Address,
           abi: parseAbi(LENDING_MARKET_ABI),
-          functionName: 'requestLoan',
-          args: [amount],
-        });
+          functionName: requestedPrincipal === undefined
+            ? 'requestLoan(uint256)'
+            : 'requestLoan(uint256,uint256)',
+          args: requestedPrincipal === undefined ? [amount] : [amount, requestedPrincipal],
+        } as any);
 
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };

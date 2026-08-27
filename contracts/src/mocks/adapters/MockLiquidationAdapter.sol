@@ -67,4 +67,8 @@ contract MockLiquidationAdapter is ILiquidationAdapter {
     function cureWindowSeconds() external view override returns (uint256) {
         return cureWindow;
     }
+
+    function requiresCollateralHandoff() external pure override returns (bool) {
+        return false;
+    }
 }

@@ -32,6 +32,9 @@ const envSchema = z.object({
   B20_ASSET_ADAPTER_ADDRESS: z.string().default(''),
   B20_COMPLIANCE_ADAPTER_ADDRESS: z.string().default(''),
   CHAINLINK_EQUITY_FEED_ADAPTER_ADDRESS: z.string().default(''),
+  B20_PROVIDER_CONFIGURATOR_ADDRESS: z.string().default(''),
+  ROBINHOOD_COMPLIANCE_ADAPTER_ADDRESS: z.string().default(''),
+  ROBINHOOD_PROVIDER_CONFIGURATOR_ADDRESS: z.string().default(''),
   
   // Alert Services
   SENDGRID_API_KEY: z.string().optional(),
@@ -152,6 +155,9 @@ export const config = {
     b20AssetAdapter: parseContractAddresses(env.B20_ASSET_ADAPTER_ADDRESS),
     b20ComplianceAdapter: parseContractAddresses(env.B20_COMPLIANCE_ADAPTER_ADDRESS),
     chainlinkEquityFeedAdapter: parseContractAddresses(env.CHAINLINK_EQUITY_FEED_ADAPTER_ADDRESS),
+    b20ProviderConfigurator: parseContractAddresses(env.B20_PROVIDER_CONFIGURATOR_ADDRESS),
+    robinhoodComplianceAdapter: parseContractAddresses(env.ROBINHOOD_COMPLIANCE_ADAPTER_ADDRESS),
+    robinhoodProviderConfigurator: parseContractAddresses(env.ROBINHOOD_PROVIDER_CONFIGURATOR_ADDRESS),
   },
   
   // Alert configuration with deduplication

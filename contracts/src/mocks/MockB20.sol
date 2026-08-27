@@ -13,8 +13,8 @@ contract MockB20 is ERC20 {
     bytes32 public constant TRANSFER_RECEIVER_POLICY = bytes32(uint256(0x210f521b));
     bytes32 public constant TRANSFER_EXECUTOR_POLICY = bytes32(uint256(0x724e9c53));
 
-    mapping(bytes32 => bytes32) public policyIds;
-    mapping(bytes32 => mapping(address => bool)) public authorized;
+    mapping(bytes32 => uint64) public policyIds;
+    mapping(uint64 => mapping(address => bool)) public authorized;
     bool public pausedTransfers;
 
     uint256 public mockMultiplier = 1e18;
@@ -24,19 +24,19 @@ contract MockB20 is ERC20 {
         // default: policyId == 0 (always-allow)
     }
 
-    function policyId(bytes32 scope) external view returns (bytes32) {
+    function policyId(bytes32 scope) external view returns (uint64) {
         return policyIds[scope];
     }
 
-    function setPolicyId(bytes32 scope, bytes32 pid) external {
+    function setPolicyId(bytes32 scope, uint64 pid) external {
         policyIds[scope] = pid;
     }
 
-    function setAuthorized(bytes32 pid, address account, bool ok) external {
+    function setAuthorized(uint64 pid, address account, bool ok) external {
         authorized[pid][account] = ok;
     }
 
-    function isAuthorized(bytes32 pid, address account) external view returns (bool) {
+    function isAuthorized(uint64 pid, address account) external view returns (bool) {
         // helper for registry mock compat
         return authorized[pid][account];
     }
@@ -57,4 +57,11 @@ contract MockB20 is ERC20 {
     function WAD_PRECISION() external pure returns (uint256) { return 1e18; }
 
     function mint(address to, uint256 amt) external { _mint(to, amt); }
+
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+        if (from != address(0) && to != address(0)) {
+            require(!pausedTransfers, "B20 transfers paused");
+        }
+        super._beforeTokenTransfer(from, to, amount);
+    }
 }

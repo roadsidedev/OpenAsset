@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { PrismaClient, AdapterType } from '@prisma/client';
 import { logger } from '../utils/logger';
 import { config } from '../config/unifiedConfig';
+import { getProviderAssets } from '../config/providerCatalog';
 
 const prisma = new PrismaClient();
 
@@ -23,7 +24,7 @@ export class AdapterController {
       const { type, verified, deprecated, chainId } = req.query;
       const chain = parseInt(String(chainId || DEFAULT_CHAIN_ID), 10);
 
-      const where: any = { chainId };
+      const where: any = { chainId: chain };
       if (type && typeof type === 'string') where.adapterType = type;
       if (verified !== undefined) where.verified = verified === 'true';
       if (deprecated !== undefined) where.deprecated = deprecated === 'true';
@@ -130,6 +131,7 @@ export class AdapterController {
       const chainId = parseInt(String(req.query.chainId || DEFAULT_CHAIN_ID), 10);
       const q = String(req.query.q || "").toLowerCase();
       const limit = Math.min(parseInt(String(req.query.limit || "50"), 10), 100);
+      const provider = String(req.query.provider || '').toLowerCase();
 
       // 1) Markets that use this asset adapter on this chain
       const markets = await prisma.market.findMany({
@@ -146,19 +148,20 @@ export class AdapterController {
       }
 
       // 2) Curated B20 fallback for B20AssetAdapter (hybrid A)
-      const isB20Adapter = adapterAddress.toLowerCase() === "0x9163527519461fcc6b0c2fc0d4b1cf37cfc54493".toLowerCase();
+      const configuredB20Adapter = config.contracts.b20AssetAdapter.get(chainId) || "";
+      const isB20Adapter = configuredB20Adapter !== "" && adapterAddress.toLowerCase() === configuredB20Adapter.toLowerCase();
       let curated: Array<{ address: string; symbol: string; name: string; feed?: string; decimals: number }> = [];
       if (isB20Adapter) {
         try {
           const rows = await (prisma as any).b20Token.findMany({ where: { chainId } });
           if (rows.length > 0) {
-            curated = rows.map((r: any) => ({ address: r.address, symbol: r.symbol, name: r.name, feed: r.feed || undefined, decimals: r.decimals || 18 }));
+            curated = rows.map((r: any) => ({ address: r.address, symbol: r.symbol, name: r.name, feed: r.feed || undefined, decimals: r.decimals || 8 }));
           }
         } catch {}
         if (curated.length === 0) {
           // Fallback to known 13 (mirrors web/src/lib/b20.ts + EventIndexerServiceV2 KNOWN_B20_TOKENS_BASE)
           const known: Record<string, { symbol: string; name: string; feed: string }> = {
-            "0xb200000000000000000000c2e324d24d7ee12c1fb": { symbol: "AAPLc", name: "Coinbase AAPL", feed: "0x787f13dEa48Db0897CbCDD985de77809D837F988" },
+            "0xb200000000000000000000c2e324d24d7eecd1fb": { symbol: "AAPLc", name: "Coinbase AAPL", feed: "0x787f13dEa48Db0897CbCDD985de77809D837F988" },
             "0xb200000000000000000000d9192b6b456483c2e8": { symbol: "AMZNc", name: "Coinbase AMZN", feed: "0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295" },
             "0xb200000000000000000000c85a31389d71f3ecfb": { symbol: "COINc", name: "Coinbase COIN", feed: "0x408e44f504A7371a345F03a73dDC96A4b48e8aa7" },
             "0xb20000000000000000000019f6e7c675b73c2e4d": { symbol: "CRCLc", name: "Coinbase CRCL", feed: "0x0231cF2635D1E17bB5c2462cc7504Ba1fBd61f33" },
@@ -172,13 +175,23 @@ export class AdapterController {
             "0xb2000000000000000000007b9fcbd005511acbd5": { symbol: "SPCXc", name: "Coinbase SPCX", feed: "0x6A634B235903C4ad6376892180d6fF8612e3Fa68" },
             "0xb2000000000000000000001e800a7f5189430cd0": { symbol: "TSLAc", name: "Coinbase TSLA", feed: "0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4" },
           };
-          curated = Object.entries(known).map(([address, v]) => ({ address, symbol: v.symbol, name: v.name, feed: v.feed, decimals: 18 }));
+          curated = Object.entries(known).map(([address, v]) => ({ address, symbol: v.symbol, name: v.name, feed: v.feed, decimals: 8 }));
         }
+      }
+
+      if (provider === 'robinhood') {
+        curated = getProviderAssets(chainId, 'robinhood').map((asset) => ({
+          address: asset.address,
+          symbol: asset.symbol,
+          name: asset.name,
+          feed: asset.feed,
+          decimals: asset.decimals,
+        }));
       }
 
       // 3) Build union: curated + markets distinct
       const seen = new Set<string>();
-      const assets: Array<{ address: string; symbol: string; name: string; feed?: string; decimals: number; marketCount: number; totalLiquidity: string; isB20: boolean }> = [];
+      const assets: Array<{ address: string; symbol: string; name: string; feed?: string; decimals: number; marketCount: number; totalLiquidity: string; isB20: boolean; provider?: string; requiresAllowlist?: boolean }> = [];
       const add = (addr: string, symbol: string, name: string, feed?: string, decimals = 18) => {
         const key = addr.toLowerCase();
         if (seen.has(key)) return;
@@ -192,7 +205,8 @@ export class AdapterController {
           decimals,
           marketCount: m?.marketCount || 0,
           totalLiquidity: (m?.totalLiquidity || 0n).toString(),
-          isB20: curated.some(c => c.address.toLowerCase() === key),
+          isB20: curated.some(c => c.address.toLowerCase() === key) && provider !== 'robinhood',
+          ...(provider === 'robinhood' ? { provider: 'robinhood', requiresAllowlist: true } : {}),
         });
       };
       for (const c of curated) add(c.address, c.symbol, c.name, c.feed, c.decimals);
@@ -217,15 +231,29 @@ export class AdapterController {
   }
 
   /**
-   * GET /tokens?chainId=&type=b20&q=&limit=
-   * Curated B20 token list (hybrid KNOWN + indexed) — for picker without adapter context
+   * GET /tokens?chainId=&type=b20|robinhood&q=&limit=
+   * Provider-qualified token list for picker without adapter context
    */
   async getTokens(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const chainId = parseInt(String(req.query.chainId || DEFAULT_CHAIN_ID), 10);
-      const type = String(req.query.type || "b20");
+      const type = String(req.query.type || "b20").toLowerCase();
       const q = String(req.query.q || "").toLowerCase();
       const limit = Math.min(parseInt(String(req.query.limit || "50"), 10), 100);
+      if (type === 'robinhood') {
+        const rows = getProviderAssets(chainId, 'robinhood').map((asset) => ({
+          address: asset.address,
+          symbol: asset.symbol,
+          name: asset.name,
+          feed: asset.feed,
+          decimals: asset.decimals,
+          provider: asset.provider,
+          requiresAllowlist: asset.requiresAllowlist,
+        }));
+        const filtered = q ? rows.filter((row) => row.symbol.toLowerCase().includes(q) || row.name.toLowerCase().includes(q) || row.address.toLowerCase().includes(q)) : rows;
+        res.json({ success: true, data: filtered.slice(0, limit), chainId, type });
+        return;
+      }
       if (type !== "b20") {
         res.json({ success: true, data: [], chainId });
         return;
@@ -238,7 +266,7 @@ export class AdapterController {
       if (rows.length === 0) {
         // fallback same as above
         const known: Record<string, { symbol: string; name: string; feed: string }> = {
-          "0xb200000000000000000000c2e324d24d7ee12c1fb": { symbol: "AAPLc", name: "Coinbase AAPL", feed: "0x787f13dEa48Db0897CbCDD985de77809D837F988" },
+          "0xb200000000000000000000c2e324d24d7eecd1fb": { symbol: "AAPLc", name: "Coinbase AAPL", feed: "0x787f13dEa48Db0897CbCDD985de77809D837F988" },
           "0xb200000000000000000000d9192b6b456483c2e8": { symbol: "AMZNc", name: "Coinbase AMZN", feed: "0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295" },
           "0xb200000000000000000000c85a31389d71f3ecfb": { symbol: "COINc", name: "Coinbase COIN", feed: "0x408e44f504A7371a345F03a73dDC96A4b48e8aa7" },
           "0xb20000000000000000000019f6e7c675b73c2e4d": { symbol: "CRCLc", name: "Coinbase CRCL", feed: "0x0231cF2635D1E17bB5c2462cc7504Ba1fBd61f33" },
@@ -252,7 +280,7 @@ export class AdapterController {
           "0xb2000000000000000000007b9fcbd005511acbd5": { symbol: "SPCXc", name: "Coinbase SPCX", feed: "0x6A634B235903C4ad6376892180d6fF8612e3Fa68" },
           "0xb2000000000000000000001e800a7f5189430cd0": { symbol: "TSLAc", name: "Coinbase TSLA", feed: "0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4" },
         };
-        rows = Object.entries(known).map(([address, v]) => ({ address, symbol: v.symbol, name: v.name, feed: v.feed, decimals: 18 }));
+        rows = Object.entries(known).map(([address, v]) => ({ address, symbol: v.symbol, name: v.name, feed: v.feed, decimals: 8 }));
       }
       if (q) rows = rows.filter(r => r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.address.toLowerCase().includes(q));
       rows = rows.slice(0, limit);

@@ -45,10 +45,102 @@ export const MARKET_FACTORY_ABI = [
   { name: 'MarketCreated', type: 'event', inputs: [{ name: 'marketAddress', type: 'address', indexed: true }, { name: 'lpAddress', type: 'address', indexed: true }, { name: 'collateralAsset', type: 'address', indexed: true }, { name: 'initialLiquidity', type: 'uint256', indexed: false }, { name: 'creationFee', type: 'uint256', indexed: false }] },
 ] as const;
 
+export const MARKET_FACTORY_B20_ABI = [
+  {
+    name: 'createB20Market',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'config',
+        type: 'tuple',
+        components: [
+          { name: 'lpAddress', type: 'address' },
+          { name: 'collateralAsset', type: 'address' },
+          { name: 'assetAdapter', type: 'address' },
+          { name: 'oracleAdapter', type: 'address' },
+          { name: 'complianceAdapter', type: 'address' },
+          { name: 'liquidationAdapter', type: 'address' },
+          { name: 'positionAdapter', type: 'address' },
+          { name: 'lendingAsset', type: 'address' },
+          { name: 'ltvBasisPoints', type: 'uint256' },
+          { name: 'aprBasisPoints', type: 'uint256' },
+          { name: 'durationSeconds', type: 'uint256' },
+          { name: 'gracePeriodHours', type: 'uint256' },
+          { name: 'enableHealthFactor', type: 'bool' },
+          { name: 'healthFactorThreshold', type: 'uint256' },
+          { name: 'enableCircuitBreaker', type: 'bool' },
+          { name: 'pauseThresholdBps', type: 'uint256' },
+          { name: 'lookbackPeriodSeconds', type: 'uint256' },
+          { name: 'resumeThresholdBps', type: 'uint256' },
+          { name: 'cooldownSeconds', type: 'uint256' },
+        ],
+      },
+      { name: 'initialLiquidity', type: 'uint256' },
+      {
+        name: 'b20Config',
+        type: 'tuple',
+        components: [
+          { name: 'feed', type: 'address' },
+          { name: 'maxStaleness', type: 'uint256' },
+          { name: 'l2Sequencer', type: 'address' },
+        ],
+      },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
+] as const;
+
+export const MARKET_FACTORY_PROVIDER_ABI = [
+  {
+    name: 'createProviderMarket',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'config',
+        type: 'tuple',
+        components: [
+          { name: 'lpAddress', type: 'address' },
+          { name: 'collateralAsset', type: 'address' },
+          { name: 'assetAdapter', type: 'address' },
+          { name: 'oracleAdapter', type: 'address' },
+          { name: 'complianceAdapter', type: 'address' },
+          { name: 'liquidationAdapter', type: 'address' },
+          { name: 'positionAdapter', type: 'address' },
+          { name: 'lendingAsset', type: 'address' },
+          { name: 'ltvBasisPoints', type: 'uint256' },
+          { name: 'aprBasisPoints', type: 'uint256' },
+          { name: 'durationSeconds', type: 'uint256' },
+          { name: 'gracePeriodHours', type: 'uint256' },
+          { name: 'enableHealthFactor', type: 'bool' },
+          { name: 'healthFactorThreshold', type: 'uint256' },
+          { name: 'enableCircuitBreaker', type: 'bool' },
+          { name: 'pauseThresholdBps', type: 'uint256' },
+          { name: 'lookbackPeriodSeconds', type: 'uint256' },
+          { name: 'resumeThresholdBps', type: 'uint256' },
+          { name: 'cooldownSeconds', type: 'uint256' },
+        ],
+      },
+      { name: 'initialLiquidity', type: 'uint256' },
+      {
+        name: 'providerConfig',
+        type: 'tuple',
+        components: [
+          { name: 'providerId', type: 'bytes32' },
+          { name: 'providerData', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
+] as const;
+
 export const LENDING_MARKET_ABI = [
   'function depositLiquidity(uint256 amount) external returns (uint256)',
   'function withdrawLiquidity(uint256 shares) external returns (uint256)',
   'function requestLoan(uint256 collateralAmount) external returns (uint256)',
+  'function requestLoan(uint256 collateralAmount, uint256 requestedPrincipal) external returns (uint256)',
   'function repay(uint256 loanId) external',
   'function liquidate(uint256 loanId) external',
   'function settleLiquidation(uint256 loanId) external',
@@ -61,6 +153,15 @@ export const LENDING_MARKET_ABI = [
   'function totalLiquidity() external view returns (uint256)',
   'function availableLiquidity() external view returns (uint256)',
   'function lpToken() external view returns (address)',
+  'function collateralAsset() external view returns (address)',
+  'function lendingAsset() external view returns (address)',
+  'function assetAdapter() external view returns (address)',
+  'function oracleAdapter() external view returns (address)',
+  'function liquidationAdapter() external view returns (address)',
+  'function positionAdapter() external view returns (address)',
+  'function ltvBps() external view returns (uint256)',
+  'function aprBps() external view returns (uint256)',
+  'function durationSeconds() external view returns (uint256)',
   'event LoanCreated(uint256 indexed loanId, address indexed borrower, uint256 principal, uint256 collateralAmount)',
   'event LoanRepaid(uint256 indexed loanId, address indexed repayer, uint256 principal, uint256 interest)',
   'event LoanLiquidated(uint256 indexed loanId, address indexed liquidator, uint256 recoveredForLP, uint256 returnedToHolder)',

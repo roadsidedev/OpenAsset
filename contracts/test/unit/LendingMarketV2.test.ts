@@ -132,6 +132,69 @@ describe("LendingMarketV2", function () {
       expect(stats._totalBorrowed).to.be.gt(0);
     });
 
+    it("should create a loan with a selected principal below the maximum", async function () {
+      const collateralAmount = ethers.parseEther("10");
+      const requestedPrincipal = ethers.parseEther("1234");
+      await market.connect(borrower)["requestLoan(uint256,uint256)"](collateralAmount, requestedPrincipal);
+
+      const loan = await market.loans(0);
+      expect(loan.principal).to.equal(requestedPrincipal);
+    });
+
+    it("normalizes 8-decimal B20 collateral into 6-decimal USDC units", async function () {
+      const MockERC20 = await ethers.getContractFactory("MockERC20");
+      const b20Token = await MockERC20.deploy("B20 AAPL", "AAPLc", 8);
+      const usdc = await MockERC20.deploy("USD Coin", "USDC", 6);
+      const Asset = await ethers.getContractFactory("ERC20Adapter");
+      const b20Adapter = await Asset.deploy(owner.address);
+      const Oracle = await ethers.getContractFactory("MockOracleAdapter");
+      const b20Oracle = await Oracle.deploy(ethers.parseEther("2000"), true);
+      const Liquidation = await ethers.getContractFactory("MockLiquidationAdapter");
+      const b20Liquidation = await Liquidation.deploy(false, 0);
+      const Position = await ethers.getContractFactory("MockPositionAdapter");
+      const b20Position = await Position.deploy();
+      const Market = await ethers.getContractFactory("LendingMarketV2");
+      const b20Market = await Market.deploy(
+        owner.address,
+        owner.address,
+        b20Token.target,
+        usdc.target,
+        treasury.address,
+        b20Adapter.target,
+        b20Oracle.target,
+        ethers.ZeroAddress,
+        b20Liquidation.target,
+        b20Position.target,
+        5000,
+        1200,
+        DURATION,
+        GRACE_PERIOD,
+        true,
+        12000,
+        { enabled: false, pauseThresholdBps: 0, lookbackPeriodSeconds: 0, resumeThresholdBps: 0, cooldownSeconds: 0 },
+      );
+      await b20Adapter.configure(b20Market.target, b20Token.target);
+      await usdc.mint(lp.address, ethers.parseUnits("1000", 6));
+      await usdc.connect(lp).approve(b20Market.target, ethers.parseUnits("1000", 6));
+      await b20Market.connect(lp).depositLiquidity(ethers.parseUnits("1000", 6));
+      await b20Token.mint(borrower.address, 10n ** 8n);
+      await b20Token.connect(borrower).approve(b20Adapter.target, 10n ** 8n);
+
+      await b20Market.connect(borrower)["requestLoan(uint256,uint256)"](10n ** 8n, ethers.parseUnits("500", 6));
+
+      const loan = await b20Market.loans(0);
+      expect(loan.principal).to.equal(ethers.parseUnits("500", 6));
+      expect(await b20Token.balanceOf(b20Market.target)).to.equal(10n ** 8n);
+    });
+
+    it("should reject a selected principal above the oracle-valued maximum", async function () {
+      const collateralAmount = ethers.parseEther("10");
+      const maxPrincipal = ethers.parseEther("10000");
+      await expect(
+        market.connect(borrower)["requestLoan(uint256,uint256)"](collateralAmount, maxPrincipal + 1n),
+      ).to.be.revertedWithCustomError(market, "InvalidLoanSize");
+    });
+
     it("should repay a loan", async function () {
       const collateralAmount = ethers.parseEther("10");
       await market.connect(borrower).requestLoan(collateralAmount);
@@ -171,6 +234,16 @@ describe("LendingMarketV2", function () {
 
       await expect(
         market.connect(owner).liquidate(0)
+      ).to.be.revertedWithCustomError(market, "NotLiquidatable");
+    });
+
+    it("should not liquidate an active loan when the oracle is untrusted", async function () {
+      const collateralAmount = ethers.parseEther("10");
+      await market.connect(borrower).requestLoan(collateralAmount);
+      await oracleAdapter.setTrusted(false);
+
+      await expect(
+        market.connect(owner).liquidate(0),
       ).to.be.revertedWithCustomError(market, "NotLiquidatable");
     });
   });

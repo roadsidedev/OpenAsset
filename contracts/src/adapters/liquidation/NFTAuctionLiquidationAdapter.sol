@@ -77,4 +77,8 @@ contract NFTAuctionLiquidationAdapter is ILiquidationAdapter, ERC721Holder {
     function cureWindowSeconds() external pure override returns (uint256) {
         return 0;
     }
+
+    function requiresCollateralHandoff() external pure override returns (bool) {
+        return false;
+    }
 }

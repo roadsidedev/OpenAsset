@@ -216,8 +216,8 @@ function PortfolioContent() {
                   <div className="space-y-4">
                     {activeLoans.map((loan: any) => {
                       const loanMarket = allMarkets.find((m: any) => m.marketAddress?.toLowerCase() === loan.marketAddress?.toLowerCase());
-                      const isLoanB20 = loanMarket ? isB20Token(loanMarket.collateralAsset) : false;
-                      const b20Info = isLoanB20 ? getB20Info(loanMarket.collateralAsset) : undefined;
+                      const isLoanB20 = loanMarket ? isB20Token(loanMarket.collateralAsset, loanMarket.chainId) : false;
+                      const b20Info = isLoanB20 ? getB20Info(loanMarket.collateralAsset, loanMarket.chainId) : undefined;
                       const loanSymbol = b20Info?.symbol || loan.marketAddress?.slice(0, 6) || 'LOAN';
                       return (
                       <div
@@ -310,8 +310,8 @@ function PortfolioContent() {
                 ) : (
                   <div className="space-y-4">
                     {myMarkets.map((market: any) => {
-                      const isMarketB20 = isB20Token(market.collateralAsset);
-                      const mB20 = isMarketB20 ? getB20Info(market.collateralAsset) : undefined;
+                      const isMarketB20 = isB20Token(market.collateralAsset, market.chainId);
+                      const mB20 = isMarketB20 ? getB20Info(market.collateralAsset, market.chainId) : undefined;
                       const marketSymbol = mB20?.symbol || market.collateralAsset?.slice(0, 6) || market.marketAddress.slice(0, 6);
                       return (
                       <div

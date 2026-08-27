@@ -3,6 +3,7 @@
 import { fetchFromApi } from './api';
 import { B20_TOKENS, isB20Token } from './b20';
 import { getContracts } from './contracts';
+import { getProviderAssets, type ProviderFamily, type ProviderAsset } from './providerBundles';
 
 // Re-export for convenience
 export { isB20Token } from './b20';
@@ -17,6 +18,8 @@ export interface SupportedAsset {
   marketCount: number;
   totalLiquidity: string;
   isB20: boolean;
+  provider?: ProviderFamily;
+  requiresAllowlist?: boolean;
   extraMetadata?: Record<string, string>;
 }
 
@@ -45,9 +48,10 @@ export async function fetchSupportedAssetsForAdapter(
   limit = 50
 ): Promise<SupportedAsset[]> {
   const q = query ? `&q=${encodeURIComponent(query)}` : '';
+  const providerQuery = chainId === 4663 ? '&provider=robinhood' : '';
   // 1) Try backend B (primary)
   try {
-    const res = await fetchFromApi(`/adapters/${adapterAddress}/assets?chainId=${chainId}${q}&limit=${limit}`);
+    const res = await fetchFromApi(`/adapters/${adapterAddress}/assets?chainId=${chainId}${providerQuery}${q}&limit=${limit}`);
     if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
       return enrichWithLogos(res.data, chainId);
     }
@@ -65,30 +69,41 @@ export async function fetchSupportedAssetsForAdapter(
   return enrichWithLogos(filtered.slice(0, limit), chainId);
 }
 
-export async function fetchB20Tokens(chainId: number, query?: string): Promise<SupportedAsset[]> {
+export async function fetchProviderAssets(chainId: number, query?: string): Promise<SupportedAsset[]> {
   try {
     const q = query ? `&q=${encodeURIComponent(query)}` : '';
-    const res = await fetchFromApi(`/adapters/tokens?chainId=${chainId}&type=b20${q}&limit=50`);
+    const providerType = chainId === 4663 ? 'robinhood' : 'b20';
+    const res = await fetchFromApi(`/adapters/tokens?chainId=${chainId}&type=${providerType}${q}&limit=50`);
     if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
       return enrichWithLogos(res.data.map((r: any) => ({
         address: r.address,
         symbol: r.symbol,
         name: r.name,
         feed: r.feed,
-        decimals: r.decimals || 18,
+        decimals: r.decimals || 8,
         marketCount: 0,
         totalLiquidity: '0',
         isB20: true,
       })), chainId);
     }
   } catch {}
-  // Fallback to B20_TOKENS
+  const providerAssets = getProviderAssets(chainId, chainId === 4663 ? 'robinhood' : 'b20');
+  if (providerAssets.length > 0) {
+    const all = providerAssets.map(providerAssetToSupportedAsset);
+    if (!query) return enrichWithLogos(all, chainId);
+    const lower = query.toLowerCase();
+    return enrichWithLogos(all.filter(a => a.symbol.toLowerCase().includes(lower) || a.name.toLowerCase().includes(lower)), chainId);
+  }
+
+  // Canonical B20 assets are only valid on Base mainnet. Base Sepolia uses
+  // explicitly deployed mocks and must never inherit this production catalog.
+  if (chainId !== 8453) return [];
   const all = Object.values(B20_TOKENS).map(t => ({
     address: t.address,
     symbol: t.symbol,
     name: t.name,
     feed: t.feed,
-    decimals: 18,
+    decimals: 8,
     marketCount: 0,
     totalLiquidity: '0',
     isB20: true,
@@ -105,21 +120,25 @@ function getCuratedFallback(adapterAddress: string, chainId: number): SupportedA
   const isERC20Adapter = contracts?.erc20Adapter?.toLowerCase() === lower;
   if (isB20Adapter) {
     return Object.values(B20_TOKENS).filter(t => {
-      // B20 only on 8453/84532; show anyway with badge but filter by chain
-      if (chainId !== 8453 && chainId !== 84532) return false;
+      // Canonical B20 tokens are production assets on Base mainnet only.
+      if (chainId !== 8453) return false;
       return true;
     }).map(t => ({
       address: t.address,
       symbol: t.symbol,
       name: t.name,
       feed: t.feed,
-      decimals: 18,
+      decimals: 8,
       marketCount: 0,
       totalLiquidity: '0',
       isB20: true,
     }));
   }
   if (isERC20Adapter) {
+    const providerAssets = getProviderAssets(chainId, 'robinhood');
+    if (providerAssets.length > 0) {
+      return providerAssets.map(providerAssetToSupportedAsset);
+    }
     const list = CURATED_ERC20[chainId] || CURATED_ERC20[84532];
     return list.map(t => ({
       address: t.address,
@@ -133,6 +152,21 @@ function getCuratedFallback(adapterAddress: string, chainId: number): SupportedA
   }
   // For other adapters (ERC721 etc), return empty — picker will show manual input only
   return [];
+}
+
+function providerAssetToSupportedAsset(asset: ProviderAsset): SupportedAsset {
+  return {
+    address: asset.address,
+    symbol: asset.symbol,
+    name: asset.name,
+    feed: asset.feed,
+    decimals: asset.decimals,
+    marketCount: 0,
+    totalLiquidity: '0',
+    isB20: asset.provider === 'b20',
+    provider: asset.provider,
+    requiresAllowlist: asset.requiresAllowlist,
+  };
 }
 
 // D: enrich via brand logos + token lists — resolves B20 brand logos and ERC20 known logos
@@ -164,6 +198,18 @@ export function getSuggestedAdaptersForB20(chainId: number) {
     assetAdapter: contracts.b20AssetAdapter,
     oracleAdapter: contracts.chainlinkEquityFeedAdapter,
     complianceAdapter: contracts.b20PolicyComplianceAdapter,
+    liquidationAdapter: contracts.dexSwapLiquidationAdapter,
+    positionAdapter: contracts.soulboundPositionAdapter,
+  };
+}
+
+export function getSuggestedAdaptersForRobinhood(chainId: number) {
+  const contracts = getContracts(chainId);
+  if (!contracts || !contracts.robinhoodComplianceAdapter) return null;
+  return {
+    assetAdapter: contracts.erc20Adapter,
+    oracleAdapter: contracts.chainlinkEquityFeedAdapter,
+    complianceAdapter: contracts.robinhoodComplianceAdapter,
     liquidationAdapter: contracts.dexSwapLiquidationAdapter,
     positionAdapter: contracts.soulboundPositionAdapter,
   };

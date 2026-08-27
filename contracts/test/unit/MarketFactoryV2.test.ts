@@ -125,6 +125,82 @@ describe("MarketFactoryV2", function () {
       expect(await factory.getMarketCount()).to.equal(1);
     });
 
+    it("should atomically register B20 feed and policy token, and roll back invalid sequencer setup", async function () {
+      const B20 = await ethers.getContractFactory("MockB20");
+      const b20 = await B20.deploy("Mock B20 AAPL", "AAPLc");
+      const Feed = await ethers.getContractFactory("MockChainlinkFeed");
+      const feed = await Feed.deploy(2000n * 10n ** 8n, 8, 1);
+      const B20Asset = await ethers.getContractFactory("B20AssetAdapter");
+      const b20Asset = await B20Asset.deploy(await factory.getAddress(), await registry.getAddress());
+      const Equity = await ethers.getContractFactory("ChainlinkEquityFeedAdapter");
+      const equity = await Equity.deploy(await factory.getAddress());
+      const Compliance = await ethers.getContractFactory("B20PolicyComplianceAdapter");
+      const compliance = await Compliance.deploy(await factory.getAddress(), await registry.getAddress());
+      const B20Configurator = await ethers.getContractFactory("B20ProviderConfigurator");
+      const b20Configurator = await B20Configurator.deploy(await factory.getAddress());
+      await equity.setAuthorizedConfigurator(await b20Configurator.getAddress(), true);
+      await compliance.setAuthorizedConfigurator(await b20Configurator.getAddress(), true);
+      const b20ProviderId = ethers.keccak256(ethers.toUtf8Bytes("OPENASSET_PROVIDER_B20"));
+      await factory.connect(owner).setProviderConfigurator(
+        b20ProviderId,
+        await b20Configurator.getAddress()
+      );
+      await factory.connect(owner).setProviderAsset(b20ProviderId, await b20.getAddress(), true);
+      const liquidationAdapter = (this as any).liquidationAdapter;
+      const positionAdapter = (this as any).positionAdapter;
+
+      for (const [address, type] of [
+        [await b20Asset.getAddress(), 0],
+        [await equity.getAddress(), 1],
+        [await compliance.getAddress(), 2],
+      ] as [string, number][]) {
+        await registry.connect(governance).registerAdapter(address, type);
+        await registry.connect(governance).markVerified(address, "B20 audit");
+      }
+
+      const config = {
+        lpAddress: lp.address,
+        collateralAsset: await b20.getAddress(),
+        assetAdapter: await b20Asset.getAddress(),
+        oracleAdapter: await equity.getAddress(),
+        complianceAdapter: await compliance.getAddress(),
+        liquidationAdapter: await liquidationAdapter.getAddress(),
+        positionAdapter: await positionAdapter.getAddress(),
+        lendingAsset: await lendingToken.getAddress(),
+        ltvBasisPoints: LTV,
+        aprBasisPoints: APR,
+        durationSeconds: DURATION,
+        gracePeriodHours: GRACE_PERIOD,
+        enableHealthFactor: true,
+        healthFactorThreshold: 12000,
+        enableCircuitBreaker: true,
+        pauseThresholdBps: 2000,
+        lookbackPeriodSeconds: 3600,
+        resumeThresholdBps: 1000,
+        cooldownSeconds: 7200,
+      };
+      const b20Config = { feed: await feed.getAddress(), maxStaleness: 90000, l2Sequencer: ethers.ZeroAddress };
+      await lendingToken.connect(lp).approve(await factory.getAddress(), DEPOSIT_AMOUNT * 2n);
+
+      const badConfig = { ...b20Config, l2Sequencer: owner.address };
+      await expect(factory.connect(lp).createMarket(config, DEPOSIT_AMOUNT))
+        .to.be.revertedWithCustomError(factory, "AssetReservedForProvider");
+      await expect(factory.connect(lp).createB20Market(config, DEPOSIT_AMOUNT, badConfig))
+        .to.be.revertedWith("B20 sequencer has no code");
+      expect(await factory.getMarketCount()).to.equal(0);
+
+      await factory.connect(lp).createB20Market(config, DEPOSIT_AMOUNT, b20Config);
+      expect(await factory.getMarketCount()).to.equal(1);
+      const marketAddress = (await factory.getAllMarkets())[0];
+      const assetBinding = await b20Asset.marketConfigs(marketAddress);
+      const complianceBinding = await compliance.marketConfigs(marketAddress);
+      const feedBinding = await equity.marketConfigs(marketAddress);
+      expect(assetBinding).to.equal(await b20.getAddress());
+      expect(complianceBinding).to.equal(await b20.getAddress());
+      expect(feedBinding[0]).to.equal(await feed.getAddress());
+      expect(feedBinding[1]).to.equal(90000);
+    });
+
     it("should revert with invalid LTV", async function () {
       const assetAdapter = (this as any).assetAdapter;
       const oracleAdapter = (this as any).oracleAdapter;

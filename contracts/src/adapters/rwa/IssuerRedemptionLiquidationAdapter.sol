@@ -127,6 +127,10 @@ contract IssuerRedemptionLiquidationAdapter is ILiquidationAdapter {
         return marketConfigs[msg.sender].cureWindow;
     }
 
+    function requiresCollateralHandoff() external pure override returns (bool) {
+        return false;
+    }
+
     /**
      * @notice Check if a redemption has settled (called by keepers)
      * @param loanId The loan to check

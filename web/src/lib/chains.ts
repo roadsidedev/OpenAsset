@@ -3,10 +3,25 @@
  * Discovery is chain-agnostic: aggregate across all supported chains.
  */
 // @ts-nocheck
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http, defineChain } from 'viem';
 import { base, baseSepolia, sepolia } from 'viem/chains';
 
-export const SUPPORTED_CHAINS = [base, baseSepolia, sepolia] as const;
+export const robinhoodChain = defineChain({
+  id: 4663,
+  name: 'Robinhood Chain',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: ['https://rpc.mainnet.chain.robinhood.com'] } },
+  blockExplorers: { default: { name: 'Robinhood Blockscout', url: 'https://robinhoodchain.blockscout.com' } },
+});
+
+export const robinhoodChainTestnet = defineChain({
+  id: 46630,
+  name: 'Robinhood Chain Testnet',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: [] } },
+});
+
+export const SUPPORTED_CHAINS = [base, baseSepolia, sepolia, robinhoodChain, robinhoodChainTestnet] as const;
 export const SUPPORTED_CHAIN_IDS = SUPPORTED_CHAINS.map((c) => c.id) as unknown as [number, ...number[]];
 
 export const DEFAULT_CHAIN_ID: number = Number(process.env.NEXT_PUBLIC_CHAIN_ID) || baseSepolia.id;
@@ -15,6 +30,8 @@ export function getRpcUrlForChain(chainId: number): string | undefined {
   if (chainId === base.id) return process.env.NEXT_PUBLIC_RPC_URL_8453;
   if (chainId === baseSepolia.id) return process.env.NEXT_PUBLIC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL_84532 || 'https://sepolia.base.org';
   if (chainId === sepolia.id) return process.env.NEXT_PUBLIC_RPC_URL_11155111;
+  if (chainId === robinhoodChain.id) return process.env.NEXT_PUBLIC_RPC_URL_4663 || 'https://rpc.mainnet.chain.robinhood.com';
+  if (chainId === robinhoodChainTestnet.id) return process.env.NEXT_PUBLIC_RPC_URL_46630;
   return undefined;
 }
 

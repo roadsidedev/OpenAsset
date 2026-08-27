@@ -16,7 +16,7 @@ interface IB20 is IERC20 {
     function TRANSFER_SENDER_POLICY() external view returns (bytes32);
     function TRANSFER_RECEIVER_POLICY() external view returns (bytes32);
     function TRANSFER_EXECUTOR_POLICY() external view returns (bytes32);
-    function policyId(bytes32 policyScope) external view returns (bytes32);
+    function policyId(bytes32 policyScope) external view returns (uint64);
     function isPaused(bytes32 feature) external view returns (bool);
     // Optional B20 helpers (not required for core escrow, used by indexer/UI)
     function multiplier() external view returns (uint256);
@@ -32,7 +32,7 @@ interface IB20 is IERC20 {
  * Selector 0x55a1179e verified against IPolicyRegistry spec reference.
  */
 interface IPolicyRegistry {
-    function isAuthorized(bytes32 policyId, address account) external view returns (bool);
+    function isAuthorized(uint64 policyId, address account) external view returns (bool);
 }
 
 /**
@@ -40,7 +40,7 @@ interface IPolicyRegistry {
  * @notice Multi-tenant asset adapter for Base B20 tokenized stocks
  * @dev Implements IAssetAdapter with:
  *  - Standard ERC-20 escrow/release via SafeERC20 (B20 is ERC-20 compatible)
- *  - Policy-aware isTransferable (checks sender + receiver slots via PolicyRegistry)
+ *  - Policy-aware isTransferable (checks sender + receiver + executor slots via PolicyRegistry)
  *  - Pause awareness (Transfers feature)
  *  - Multi-tenancy: factory calls configure(market, collateralToken) once per market.
  *    Per-market config keyed by market address (mirrors ERC20Adapter.sol:21 pattern).
@@ -107,9 +107,11 @@ contract B20AssetAdapter is IAssetAdapter {
         IB20 token = marketConfigs[msg.sender].token;
         if (address(token) == address(0)) return false;
 
-        // Policy checks — sender and receiver slots. policyId == 0 => always-allow sentinel, skip.
+        // Policy checks — sender, receiver, and executor slots. Policy ID 0 is the
+        // always-allow sentinel. The executor of token.transferFrom is this adapter.
         if (!_authorizedFor(token, token.TRANSFER_SENDER_POLICY(), from)) return false;
         if (!_authorizedFor(token, token.TRANSFER_RECEIVER_POLICY(), to)) return false;
+        if (!_authorizedFor(token, token.TRANSFER_EXECUTOR_POLICY(), address(this))) return false;
 
         uint256 balance = token.balanceOf(from);
         // Allowance must be from -> adapter (adapter is the spender in escrow), not -> market
@@ -120,13 +122,13 @@ contract B20AssetAdapter is IAssetAdapter {
     }
 
     function _authorizedFor(IB20 token, bytes32 scope, address account) internal view returns (bool) {
-        bytes32 pid;
-        try token.policyId(scope) returns (bytes32 p) {
+        uint64 pid;
+        try token.policyId(scope) returns (uint64 p) {
             pid = p;
         } catch {
             return false; // fail-closed if token does not expose policyId
         }
-        if (pid == bytes32(0)) return true; // always-allow builtin
+        if (pid == 0) return true; // always-allow builtin
         try policyRegistry.isAuthorized(pid, account) returns (bool ok) {
             return ok;
         } catch {

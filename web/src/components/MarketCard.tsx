@@ -7,6 +7,7 @@ import { TokenIcon } from "@/components/tokens/TokenPreview";
 import { resolveTokenLogo } from "@/lib/brandLogos";
 import type { Market } from "@/hooks/useMarkets";
 import { isB20Token, getB20Info, isWithinB20TradingWindow } from "@/lib/b20";
+import { PROVIDER_IDS } from "@/lib/providerBundles";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { useAccount } from "wagmi";
 import { isAddress } from "viem";
@@ -41,11 +42,13 @@ interface MarketCardProps {
 }
 
 export function MarketCard({ market, className }: MarketCardProps) {
-  const b20 = isB20Token(market.collateralAsset) ? getB20Info(market.collateralAsset) : undefined;
-  const isB20 = !!b20;
-  const hoursOpen = isB20 ? isWithinB20TradingWindow() : true;
   const { chain } = useAccount();
-  const chainId = chain?.id;
+  const chainId = market.chainId ?? chain?.id;
+  const b20 = isB20Token(market.collateralAsset, chainId) ? getB20Info(market.collateralAsset, chainId) : undefined;
+  const isB20 = !!b20;
+  const isRobinhood = market.providerId?.toLowerCase() === PROVIDER_IDS.ROBINHOOD.toLowerCase();
+  const providerLabel = isB20 ? 'Base B20' : isRobinhood ? 'Robinhood Stock Token' : 'ERC-20';
+  const hoursOpen = isB20 ? isWithinB20TradingWindow() : true;
   const isValidAddr = isAddress(market.collateralAsset as `0x${string}`);
   const { data: collateralMeta } = useTokenMetadata(isValidAddr && !isB20 ? market.collateralAsset : undefined, chainId);
   // Resolve brand logo for market collateral (B20 or generic)
@@ -61,7 +64,7 @@ export function MarketCard({ market, className }: MarketCardProps) {
         "group block rounded-2xl border border-border/70 bg-card p-5",
         "transition-colors hover:border-border hover:bg-card",
         "hover-lift",
-        isB20 ? "border-ice-200 dark:border-ice-500/20" : "",
+        isB20 ? "border-ice-200 dark:border-ice-500/20" : isRobinhood ? "border-violet-200 dark:border-violet-500/20" : "",
         className
       )}
     >
@@ -75,13 +78,13 @@ export function MarketCard({ market, className }: MarketCardProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="truncate text-[15px] font-semibold leading-tight tracking-tight text-foreground">
-                  {isB20 ? `${b20!.symbol} Market` : `Market ${market.marketAddress.slice(0, 8)}…`}
+                  {isB20 ? `${b20!.symbol} Market` : isRobinhood ? `${brandSymbol} Market` : `Market ${market.marketAddress.slice(0, 8)}…`}
                 </h3>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] leading-none text-muted-foreground">
                   <span className="truncate font-mono tracking-tight">{isB20 ? `${b20!.address.slice(0, 10)}…` : `${market.collateralAsset.slice(0, 10)}…`}</span>
                   <span className="shrink-0 opacity-40">·</span>
-                  <span className="shrink-0">{isB20 ? b20!.name : "ERC-20"}</span>
-                  {isB20 && <span className="shrink-0 rounded-full border border-ice-200 bg-ice-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-ice-700 dark:border-ice-400/20 dark:bg-ice-400/10 dark:text-ice-300">B20</span>}
+                  <span className="shrink-0">{isB20 ? b20!.name : providerLabel}</span>
+                  {(isB20 || isRobinhood) && <span className={cn("shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none", isB20 ? "border-ice-200 bg-ice-50 text-ice-700 dark:border-ice-400/20 dark:bg-ice-400/10 dark:text-ice-300" : "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-400/20 dark:bg-violet-400/10 dark:text-violet-300")}>{isB20 ? "B20" : "RH"}</span>}
                 </div>
                 {isB20 && (
                   <div className={cn("mt-1.5 text-[11px] font-medium leading-none", hoursOpen ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
