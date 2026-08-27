@@ -9,7 +9,7 @@ import { type Address, parseAbi } from 'viem';
 import { MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI } from '@/lib/contractAbis';
 import { getContract } from '@/lib/contracts';
 import { apiFetchJson, isBackendConfigured } from '@/lib/apiClient';
-import { createChainClient, discoveryChainIds, DEFAULT_CHAIN_ID } from '@/lib/chains';
+import { createChainClient, discoveryChainIds } from '@/lib/chains';
 
 export interface Market {
   marketAddress: string;
@@ -58,8 +58,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
 
   const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
 
-  const markets: Market[] = [];
-  for (const addr of marketAddresses) {
+  const markets = await Promise.all(marketAddresses.map(async (addr): Promise<Market | null> => {
     try {
       const [totalLiq, availLiq, totalBorrowed, activeLoanCount] = await publicClient.readContract({
         address: addr as Address,
@@ -125,7 +124,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
         }
       }
 
-      markets.push({
+      return {
         marketAddress: addr,
         owner: lpOwner,
         providerId: providerId as string,
@@ -151,12 +150,13 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
           reserved: totalBorrowed.toString(),
         },
         chainId,
-      });
+      };
     } catch {
       // Skip markets that fail to read
+      return null;
     }
-  }
-  return markets;
+  }));
+  return markets.filter((market): market is Market => market !== null);
   } catch {
     return [];
   }
@@ -212,11 +212,14 @@ export const useMarkets = (start = 0, count = 20) => {
       const sliced = all.slice(start, start + count);
       return { total: all.length, start, count, markets: sliced };
     },
-    staleTime: 15000,
+    staleTime: 30000,
     gcTime: 300000,
-    retry: 1,
-    refetchInterval: 20000,
-    refetchOnWindowFocus: true,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 4000),
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     placeholderData: (prev) => prev,
   });
 };
@@ -228,7 +231,7 @@ export const useMarket = (address: string) => {
       // backend preferred, but skip noisy fetch if not configured
       if (isBackendConfigured()) {
         const data = await apiFetchJson<Market>(`/api/v1/markets/${address}`);
-        if (data && (data as any).marketAddress) return data as Market;
+        if (data?.marketAddress) return data;
       }
 
       if (!address) throw new Error('Cannot fetch market');
@@ -354,7 +357,11 @@ export const useMarket = (address: string) => {
     enabled: !!address && address.startsWith('0x'),
     staleTime: 30000,
     gcTime: 300000,
-    retry: 1,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 4000),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    placeholderData: (prev) => prev,
   });
 };
 
@@ -364,7 +371,7 @@ export const useMarketLiquidity = (address: string) => {
     queryFn: async () => {
       if (isBackendConfigured()) {
         const data = await apiFetchJson<{ total: string; available: string; reserved: string }>(`/api/v1/markets/${address}/liquidity`);
-        if (data && (data as any).total) return data;
+        if (data?.total) return data;
       }
 
       if (!address) throw new Error('Cannot fetch liquidity');

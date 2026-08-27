@@ -1,5 +1,7 @@
 "use client";
 
+/** Signal Ledger design reminder: a multi-step market launch stays focused, but always provides a safe, explicit escape route. */
+
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
@@ -16,8 +18,8 @@ import { getContracts } from "@/lib/contracts";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { decodeContractError } from "@/lib/contractErrors";
 import { cn } from "@/lib/utils";
-import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, MagnifyingGlass } from "@phosphor-icons/react";
-import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
+import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, MagnifyingGlass, X } from "@phosphor-icons/react";
+import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
 import { adapterSupportsPicker, getSuggestedAdaptersForB20, getSuggestedAdaptersForRobinhood } from "@/lib/supportedAssets";
 import { getProviderAsset, getProviderAssetByAddress, getProviderSequencerFeed, PROVIDER_IDS } from "@/lib/providerBundles";
 import { DEFAULT_CHAIN_ID } from "@/lib/chains";
@@ -31,8 +33,6 @@ interface AdapterOption {
 }
 
 const DEFAULT_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-
-const ADAPTER_TYPE_NAMES = ["ASSET", "ORACLE", "COMPLIANCE", "LIQUIDATION", "POSITION"];
 
 const STEP_ICONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -63,8 +63,6 @@ export default function CreateMarketPage() {
   const knownProviderAsset = getProviderAssetByAddress(formData.collateralAsset);
   const isB20Selected = !!b20Info;
   const isRobinhoodSelected = providerAsset?.provider === 'robinhood';
-  const b20HoursLabel = isWithinB20TradingWindow() ? b20MarketHoursLabel() : b20MarketHoursLabel();
-
   const isRobinhoodChain = chainId === 4663 || chainId === 46630;
   const isDeployed = (addr?: string) => !!addr && addr !== "0x0000000000000000000000000000000000000000";
   const adapters = useMemo((): Record<string, AdapterOption[]> => {
@@ -100,6 +98,14 @@ export default function CreateMarketPage() {
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
+  const handleExit = () => {
+    if (isDeploying) return;
+    if (!window.confirm("Exit market creation and discard this draft?")) return;
+
+    clearError();
+    reset();
+    router.push("/markets");
+  };
 
   const findAdapterName = (category: string, addr: string): string => {
     if (!addr) return "Not selected";
@@ -295,14 +301,26 @@ export default function CreateMarketPage() {
     <div className="min-h-dvh">
       <main className="mx-auto max-w-2xl px-4 py-8 md:px-8 space-y-8">
         {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Rocket className="h-6 w-6 text-ice-500" />
-            <h1 className="text-2xl font-bold text-foreground text-balance">Launch a Market</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Rocket className="h-6 w-6 text-ice-500" />
+              <h1 className="text-2xl font-bold text-foreground text-balance">Launch a Market</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Configure flat parameters and deploy an isolated lending market
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Configure flat parameters and deploy an isolated lending market
-          </p>
+          <button
+            type="button"
+            onClick={handleExit}
+            disabled={isDeploying}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-premium hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive active-press disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Exit market creation and discard this draft"
+          >
+            <X className="h-4 w-4" />
+            Exit
+          </button>
         </div>
 
         {/* Chain indicator */}

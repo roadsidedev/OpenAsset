@@ -1,5 +1,7 @@
 "use client";
 
+/** Signal Ledger design reminder: preserve stable market content and surface failures without interrupting the operating flow. */
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
@@ -50,6 +52,10 @@ export default function MarketDetailPage() {
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
   const { data: collateralToken } = useTokenMetadata(
     market && isAddress(market.collateralAsset) ? market.collateralAsset : undefined,
+    market?.chainId,
+  );
+  const { data: loanMeta } = useTokenMetadata(
+    market && market.loanAsset && isAddress(market.loanAsset) ? market.loanAsset : undefined,
     market?.chainId,
   );
   const publicClient = usePublicClient({ chainId: market?.chainId });
@@ -171,17 +177,11 @@ export default function MarketDetailPage() {
   const isPaused = statusLabel !== "ACTIVE";
 
   // Brand-agnostic identity derived from adapter + collateral metadata (same as MarketCard)
-  const isAddr = isAddress(market.collateralAsset as `0x${string}`);
-  const { data: collateralMeta } = useTokenMetadata(isAddr ? market.collateralAsset : undefined, market.chainId);
-  const { data: loanMeta } = useTokenMetadata(
-    market.loanAsset && isAddress(market.loanAsset as `0x${string}`) ? market.loanAsset : undefined,
-    market.chainId
-  );
   const identity = resolveAssetIdentity({
     market,
-    tokenSymbol: collateralMeta?.symbol || collateralToken?.symbol || null,
-    tokenName: collateralMeta?.name || collateralToken?.name || null,
-    tokenLogoUri: collateralMeta?.logoUri || collateralToken?.logoUri || null,
+    tokenSymbol: collateralToken?.symbol || null,
+    tokenName: collateralToken?.name || null,
+    tokenLogoUri: collateralToken?.logoUri || null,
     loanAssetSymbol: loanMeta?.symbol || null,
   });
 

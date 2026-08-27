@@ -1,5 +1,7 @@
 'use client';
 
+/** Signal Ledger design reminder: cache successful live data so background refreshes feel quiet and responsive. */
+
 import * as React from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider } from '@privy-io/wagmi';
@@ -10,7 +12,19 @@ import { config, supportedChains } from '../lib/wagmi';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider, useTheme } from './ThemeProvider';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 2,
+      retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 4_000),
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      placeholderData: (previousData) => previousData,
+    },
+  },
+});
 
 function ThemedPrivyProvider({ children, appId }: { children: React.ReactNode; appId: string }) {
   const { theme } = useTheme();
@@ -34,14 +48,14 @@ function ThemedPrivyProvider({ children, appId }: { children: React.ReactNode; a
           <AuthProvider>{children}</AuthProvider>
         </WagmiProvider>
       </QueryClientProvider>
-      <Toaster position="bottom-right" richColors closeButton theme={theme as any} />
+      <Toaster position="bottom-right" richColors closeButton theme={theme} />
     </PrivyProvider>
   );
 }
 
 function ThemedToaster() {
   const { theme } = useTheme();
-  return <Toaster position="bottom-right" richColors closeButton theme={theme as any} />;
+  return <Toaster position="bottom-right" richColors closeButton theme={theme} />;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {

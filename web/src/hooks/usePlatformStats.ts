@@ -55,7 +55,7 @@ const CATEGORY_META: { id: string; name: string; identity: IdentityCategory; col
 
 export const usePlatformStats = () => {
   const { data, isLoading, error, isFetching } = useMarkets(0, 500);
-  const markets = data?.markets ?? [];
+  const markets = useMemo(() => data?.markets ?? [], [data?.markets]);
 
   const stats = useMemo<PlatformStats>(() => {
     const counts: Record<IdentityCategory, number> = {
