@@ -1,18 +1,33 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { usePublicClient, useWalletClient } from 'wagmi';
+import { usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
 import { parseAbi, type Address, type Hex } from 'viem';
-import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
+import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI, LP_TOKEN_ABI } from '@/lib/contractAbis';
 import { decodeContractError } from '@/lib/contractErrors';
+import { createChainClient } from '@/lib/chains';
 
 export const useContractInteraction = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
+  const { switchChainAsync } = useSwitchChain();
 
   const clearError = useCallback(() => setError(null), []);
+
+  const readerFor = useCallback((chainId?: number) => {
+    if (chainId) return createChainClient(chainId) || publicClient;
+    return publicClient;
+  }, [publicClient]);
+
+  const ensureChain = useCallback(async (chainId?: number) => {
+    if (!chainId || !walletClient) return;
+    const current = await walletClient.getChainId().catch(() => undefined);
+    if (current && current !== chainId && typeof switchChainAsync === 'function') {
+      await switchChainAsync({ chainId });
+    }
+  }, [walletClient, switchChainAsync]);
 
   const approveToken = useCallback(
     async (tokenAddress: string, spenderAddress: string, amount: bigint) => {
@@ -97,15 +112,16 @@ export const useContractInteraction = () => {
   );
 
   const depositLiquidity = useCallback(
-    async (marketAddress: string, lendingAsset: string, amount: bigint) => {
+    async (marketAddress: string, lendingAsset: string, amount: bigint, chainId?: number) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
-        if (!publicClient) throw new Error('Public client not available');
+        await ensureChain(chainId);
+        const reader = readerFor(chainId);
+        if (!reader) throw new Error('Public client not available');
 
-        // Approve the market to spend lendingAsset
-        const allowance = await publicClient.readContract({
+        const allowance = await reader.readContract({
           address: lendingAsset as Address,
           abi: parseAbi(ERC20_APPROVE_ABI),
           functionName: 'allowance',
@@ -119,7 +135,7 @@ export const useContractInteraction = () => {
             functionName: 'approve',
             args: [marketAddress as Address, amount],
           });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          await reader.waitForTransactionReceipt({ hash: approveHash });
         }
 
         const hash = await walletClient.writeContract({
@@ -129,7 +145,7 @@ export const useContractInteraction = () => {
           args: [amount],
         });
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await reader.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
         const error = new Error(decodeContractError(err));
@@ -139,7 +155,78 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient, clearError]
+    [walletClient, readerFor, ensureChain, clearError]
+  );
+
+  const withdrawLiquidity = useCallback(
+    async (marketAddress: string, amount: bigint, chainId?: number) => {
+      setIsLoading(true);
+      clearError();
+      try {
+        if (!walletClient) throw new Error('Wallet not connected');
+        await ensureChain(chainId);
+        const reader = readerFor(chainId);
+        if (!reader) throw new Error('Public client not available');
+
+        const account = walletClient.account.address as Address;
+        const [lpToken, totalLiq, availLiq] = await Promise.all([
+          reader.readContract({
+            address: marketAddress as Address,
+            abi: parseAbi(LENDING_MARKET_ABI),
+            functionName: 'lpToken',
+          }) as Promise<Address>,
+          reader.readContract({
+            address: marketAddress as Address,
+            abi: parseAbi(LENDING_MARKET_ABI),
+            functionName: 'totalLiquidity',
+          }) as Promise<bigint>,
+          reader.readContract({
+            address: marketAddress as Address,
+            abi: parseAbi(LENDING_MARKET_ABI),
+            functionName: 'availableLiquidity',
+          }) as Promise<bigint>,
+        ]);
+
+        const [lpBalance, lpSupply] = await Promise.all([
+          reader.readContract({
+            address: lpToken,
+            abi: parseAbi(LP_TOKEN_ABI),
+            functionName: 'balanceOf',
+            args: [account],
+          }) as Promise<bigint>,
+          reader.readContract({
+            address: lpToken,
+            abi: parseAbi(LP_TOKEN_ABI),
+            functionName: 'totalSupply',
+          }) as Promise<bigint>,
+        ]);
+
+        if (lpSupply === 0n || lpBalance === 0n) throw new Error('No LP shares to withdraw');
+        if (amount > availLiq) throw new Error('Insufficient available liquidity in this market');
+
+        const userValue = (lpBalance * totalLiq) / lpSupply;
+        let shares = amount >= userValue ? lpBalance : (amount * lpSupply) / totalLiq;
+        if (shares > lpBalance) shares = lpBalance;
+        if (shares === 0n) throw new Error('Amount too small to withdraw');
+
+        const hash = await walletClient.writeContract({
+          address: marketAddress as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'withdrawLiquidity',
+          args: [shares],
+        });
+
+        const receipt = await reader.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
+      } catch (err) {
+        const error = new Error(decodeContractError(err));
+        setError(error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [walletClient, readerFor, ensureChain, clearError]
   );
 
   const requestLoan = useCallback(
@@ -331,6 +418,7 @@ export const useContractInteraction = () => {
     approveToken,
     createMarket,
     depositLiquidity,
+    withdrawLiquidity,
     requestLoan,
     repay,
     liquidate,

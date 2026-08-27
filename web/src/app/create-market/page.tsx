@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
 import { useAccount, usePublicClient } from "wagmi";
+import { useWalletSession } from "@/hooks/useWalletSession";
 import { parseUnits, isAddress, encodeAbiParameters, type Address } from "viem";
 import { toast } from "sonner";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
@@ -37,9 +38,11 @@ const STEP_ICONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export default function CreateMarketPage() {
   const router = useRouter();
-  const { address: userAddress, chain } = useAccount();
+  const { address: sessionAddress, chain: sessionChain, ensureWallet } = useWalletSession();
+  const { address: wagmiAddress, chain: wagmiChain } = useAccount();
   const publicClient = usePublicClient();
-  const chainId = chain?.id ?? DEFAULT_CHAIN_ID;
+  const userAddress = sessionAddress || wagmiAddress;
+  const chainId = sessionChain?.id ?? wagmiChain?.id ?? DEFAULT_CHAIN_ID;
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
   const { createMarket, clearError } = useContractInteraction();
   const [isDeploying, setIsDeploying] = useState(false);
@@ -196,7 +199,11 @@ export default function CreateMarketPage() {
   };
 
   const handleDeploy = async () => {
-    if (!userAddress) { toast.error("Please connect your wallet."); return; }
+    if (!userAddress) {
+      await ensureWallet();
+      toast.error("Please connect your wallet.");
+      return;
+    }
     if (!contracts?.marketFactory) { toast.error("Factory address not configured for this chain."); return; }
 
     const validationError = await validateConfig();

@@ -9,6 +9,7 @@ export const DEFAULT_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID) || base
 
 export const config = createConfig({
   chains: supportedChains,
+  ssr: true,
   transports: {
     [base.id]: http(getRpcUrlForChain(base.id)),
     [baseSepolia.id]: http(getRpcUrlForChain(baseSepolia.id)),

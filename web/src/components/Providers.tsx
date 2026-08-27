@@ -19,6 +19,9 @@ function ThemedPrivyProvider({ children, appId }: { children: React.ReactNode; a
       appId={appId}
       config={{
         supportedChains: [...supportedChains],
+        embeddedWallets: {
+          createOnLogin: 'users-without-wallets',
+        },
         appearance: {
           theme: theme === 'dark' ? 'dark' : 'light',
           accentColor: '#A8D8FF',
