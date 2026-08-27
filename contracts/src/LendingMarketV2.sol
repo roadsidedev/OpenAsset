@@ -5,7 +5,9 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/adapters/IAssetAdapter.sol";
 import "./interfaces/adapters/IOracleAdapter.sol";
 import "./interfaces/adapters/IComplianceAdapter.sol";
@@ -110,6 +112,8 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     address public immutable collateralAsset;
     IERC20 public immutable lendingAsset; // stablecoin only
     address public immutable protocolTreasury;
+    uint8 public immutable collateralDecimals;
+    uint8 public immutable lendingDecimals;
     LPTokenV2 public immutable lpToken;
 
     // The five adapters — the core of the V2 architecture
@@ -239,6 +243,8 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         collateralAsset = _collateralAsset;
         lendingAsset = IERC20(_lendingAsset);
         protocolTreasury = _protocolTreasury;
+        collateralDecimals = _readDecimals(_collateralAsset, 18);
+        lendingDecimals = _readDecimals(_lendingAsset, 18);
 
         assetAdapter = IAssetAdapter(_assetAdapter);
         oracleAdapter = IOracleAdapter(_oracleAdapter);
@@ -345,14 +351,35 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     // ============ Loan Lifecycle ============
 
     /**
-     * @notice Request a new loan against collateral
-     * @param collateralAmount Amount of collateral to deposit
-     * @return loanId The ID of the newly created loan
+     * @notice Request the maximum available loan against collateral.
+     * @dev Kept for backwards compatibility. New clients should use the
+     *      selected-principal overload.
      */
     function requestLoan(uint256 collateralAmount)
         external
         marketActive
         nonReentrant
+        returns (uint256 loanId)
+    {
+        return _requestLoan(collateralAmount, 0);
+    }
+
+    /**
+     * @notice Request a loan against collateral with a bounded USDC principal.
+     * @param collateralAmount Amount of collateral to deposit
+     * @param requestedPrincipal Desired lending-asset principal; zero means max
+     */
+    function requestLoan(uint256 collateralAmount, uint256 requestedPrincipal)
+        external
+        marketActive
+        nonReentrant
+        returns (uint256 loanId)
+    {
+        return _requestLoan(collateralAmount, requestedPrincipal);
+    }
+
+    function _requestLoan(uint256 collateralAmount, uint256 requestedPrincipal)
+        internal
         returns (uint256 loanId)
     {
         // 1. Compliance check (fail-closed)
@@ -374,10 +401,13 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         if (!trusted) revert OracleUntrusted();
         if (price == 0 || price > MAX_SANE_PRICE) revert OraclePriceOutOfBounds();
 
-        // 4. Calculate max loan
-        uint256 collateralValue = (collateralAmount * price) / 1e18;
+        // 4. Calculate and bound the requested principal
+        uint256 collateralValue = _collateralValueInLendingUnits(collateralAmount, price);
         uint256 maxLoan = (collateralValue * ltvBps) / BPS_DENOMINATOR;
-        if (maxLoan == 0 || maxLoan > availableLiquidity) revert InsufficientLiquidity();
+        if (maxLoan == 0) revert InvalidLoanSize();
+        uint256 principal = requestedPrincipal == 0 ? maxLoan : requestedPrincipal;
+        if (principal == 0 || principal > maxLoan) revert InvalidLoanSize();
+        if (principal > availableLiquidity) revert InsufficientLiquidity();
 
         // 5. Escrow collateral via asset adapter
         uint256 balanceBefore = IERC20(collateralAsset).balanceOf(address(this));
@@ -391,7 +421,7 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         loanId = nextLoanId++;
         loans[loanId] = Loan({
             collateralAmount: collateralAmount,
-            principal: maxLoan,
+            principal: principal,
             startTime: block.timestamp,
             expiryTime: block.timestamp + durationSeconds,
             frozenInterestAt: 0,
@@ -401,12 +431,12 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         // 7. Mint position token
         positionAdapter.mint(msg.sender, loanId);
 
-        // 8. Transfer funds to borrower
-        availableLiquidity -= maxLoan;
-        totalBorrowed += maxLoan;
-        lendingAsset.safeTransfer(msg.sender, maxLoan);
+        // 8. Transfer selected funds to borrower
+        availableLiquidity -= principal;
+        totalBorrowed += principal;
+        lendingAsset.safeTransfer(msg.sender, principal);
 
-        emit LoanCreated(loanId, msg.sender, maxLoan, collateralAmount);
+        emit LoanCreated(loanId, msg.sender, principal, collateralAmount);
     }
 
     /**
@@ -477,7 +507,11 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         }
         if (loan.status == LoanStatus.ACTIVE || loan.status == LoanStatus.GRACE_PERIOD) {
             bool expired = block.timestamp > loan.expiryTime;
-            bool healthFactorBreached = enableHealthFactor && _getHealthFactor(loan) < healthFactorThreshold;
+            (uint256 healthFactor, bool oracleTrusted) = _getHealthFactorWithTrust(loan);
+            // An unavailable oracle must not turn the health factor into zero. It may
+            // pause origination, but only an explicit expiry or a trusted price breach
+            // can start liquidation.
+            bool healthFactorBreached = enableHealthFactor && oracleTrusted && healthFactor < healthFactorThreshold;
             if (!expired && !healthFactorBreached) revert NotLiquidatable();
         }
 
@@ -499,7 +533,11 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
             return;
         }
 
-        // Synchronous liquidation
+        // Synchronous liquidation. Only adapters that explicitly consume collateral
+        // receive it here; failed swaps revert the entire transaction atomically.
+        if (liquidationAdapter.requiresCollateralHandoff()) {
+            assetAdapter.release(address(liquidationAdapter), loan.collateralAmount);
+        }
         uint256 balanceBefore = lendingAsset.balanceOf(address(this));
         (uint256 recoveredForLP, uint256 returnedToHolder) = liquidationAdapter.liquidate(loanId, debtOwed);
         uint256 balanceAfter = lendingAsset.balanceOf(address(this));
@@ -545,6 +583,9 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         uint256 penalty = (loan.principal * 500) / BPS_DENOMINATOR;
         uint256 debtOwed = totalDebt + penalty;
 
+        if (liquidationAdapter.requiresCollateralHandoff()) {
+            assetAdapter.release(address(liquidationAdapter), loan.collateralAmount);
+        }
         uint256 balanceBefore = lendingAsset.balanceOf(address(this));
         (uint256 recoveredForLP, uint256 returnedToHolder) = liquidationAdapter.liquidate(loanId, debtOwed);
         uint256 balanceAfter = lendingAsset.balanceOf(address(this));
@@ -642,6 +683,24 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         return _getHealthFactor(loans[loanId]);
     }
 
+    /**
+     * @notice Return the minimum lending-asset output accepted for collateral liquidation.
+     * @dev The quote is fail-closed when the oracle is untrusted or token decimals cannot
+     *      be read. The debt floor prevents a swap from paying less than the loan balance.
+     */
+    function getLiquidationMinOutput(uint256 collateralAmount, uint256 debtOwed, uint16 slippageBps)
+        external view returns (uint256 minOutput, bool oracleTrusted)
+    {
+        if (debtOwed == 0 || slippageBps > 5000) return (0, false);
+        (uint256 price, bool trusted, ) = oracleAdapter.getPrice();
+        if (!trusted || price == 0) return (0, false);
+
+        uint256 oracleValueInLoan = _collateralValueInLendingUnits(collateralAmount, price);
+        uint256 slippageFloor = Math.mulDiv(oracleValueInLoan, BPS_DENOMINATOR - slippageBps, BPS_DENOMINATOR);
+        minOutput = slippageFloor > debtOwed ? slippageFloor : debtOwed;
+        oracleTrusted = minOutput > 0;
+    }
+
     function getLoanDetails(uint256 loanId) external view returns (
         uint256 collateralAmount,
         uint256 principal,
@@ -683,6 +742,19 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
 
     // ============ Internal Functions ============
 
+    function _readDecimals(address token, uint8 fallbackDecimals) internal view returns (uint8) {
+        try IERC20Metadata(token).decimals() returns (uint8 value) {
+            return value <= 36 ? value : fallbackDecimals;
+        } catch {
+            return fallbackDecimals;
+        }
+    }
+
+    function _collateralValueInLendingUnits(uint256 amount, uint256 price18) internal view returns (uint256) {
+        uint256 usdValue18 = Math.mulDiv(amount, price18, 10 ** collateralDecimals);
+        return Math.mulDiv(usdValue18, 10 ** lendingDecimals, 1e18);
+    }
+
     function _calculateShares(uint256 amount) internal view returns (uint256) {
         if (totalLiquidity == 0) {
             return amount * INITIAL_SHARES_PER_TOKEN;
@@ -702,15 +774,20 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     }
 
     function _getHealthFactor(Loan storage loan) internal view returns (uint256) {
-        if (!enableHealthFactor) return type(uint256).max;
+        (uint256 healthFactor, ) = _getHealthFactorWithTrust(loan);
+        return healthFactor;
+    }
+
+    function _getHealthFactorWithTrust(Loan storage loan) internal view returns (uint256 healthFactor, bool oracleTrusted) {
+        if (!enableHealthFactor) return (type(uint256).max, true);
 
         (uint256 price, bool trusted, ) = oracleAdapter.getPrice();
-        if (!trusted || price == 0) return 0;
+        if (!trusted || price == 0) return (0, false);
 
-        uint256 collateralValue = (loan.collateralAmount * price) / 1e18;
+        uint256 collateralValue = _collateralValueInLendingUnits(loan.collateralAmount, price);
         uint256 totalDebt = loan.principal + _calculateInterest(loan);
 
-        if (totalDebt == 0) return type(uint256).max;
-        return (collateralValue * BPS_DENOMINATOR) / totalDebt;
+        if (totalDebt == 0) return (type(uint256).max, true);
+        return ((collateralValue * BPS_DENOMINATOR) / totalDebt, true);
     }
 }

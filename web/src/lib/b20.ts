@@ -8,9 +8,9 @@ export const B20_POLICY_REGISTRY_BASE = "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5
 export const BASE_SEQUENCER_FEED = "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433";
 
 export const B20_TOKENS: Record<string, { symbol: string; name: string; feed: string; address: string }> = {
-  "0xb200000000000000000000C2e324d24d7eEcd1fb": { symbol: "AAPLc", name: "Coinbase AAPL", feed: "0x787f13dEa48Db0897CbCDD985de77809D837F988", address: "0xb200000000000000000000C2e324d24d7eEcd1fb" },
-  "0xb200000000000000000000d9192b6B456483C2E8": { symbol: "AMZNc", name: "Coinbase AMZN", feed: "0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295", address: "0xb200000000000000000000d9192b6B456483C2E8" },
-  "0xb200000000000000000000c85a31389D71F3ecfb": { symbol: "COINc", name: "Coinbase COIN", feed: "0x408e44f504A7371a345F03a73dDC96A4b48e8aa7", address: "0xb200000000000000000000c85a31389D71F3ecfb" },
+  "0xb200000000000000000000c2e324d24d7eecd1fb": { symbol: "AAPLc", name: "Coinbase AAPL", feed: "0x787f13dEa48Db0897CbCDD985de77809D837F988", address: "0xb200000000000000000000C2e324d24d7eEcd1fb" },
+  "0xb200000000000000000000d9192b6b456483c2e8": { symbol: "AMZNc", name: "Coinbase AMZN", feed: "0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295", address: "0xb200000000000000000000d9192b6B456483C2E8" },
+  "0xb200000000000000000000c85a31389d71f3ecfb": { symbol: "COINc", name: "Coinbase COIN", feed: "0x408e44f504A7371a345F03a73dDC96A4b48e8aa7", address: "0xb200000000000000000000c85a31389D71F3ecfb" },
   "0xb20000000000000000000019f6e7c675b73c2e4d": { symbol: "CRCLc", name: "Coinbase CRCL", feed: "0x0231cF2635D1E17bB5c2462cc7504Ba1fBd61f33", address: "0xB20000000000000000000019f6E7C675b73C2e4D" },
   "0xb2000000000000000000002d0ba3164cc74f58b7": { symbol: "GOOGLc", name: "Coinbase GOOGL", feed: "0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2", address: "0xb2000000000000000000002D0BA3164cc74f58B7" },
   "0xb2000000000000000000004aff16039ba04bdfbc": { symbol: "INTCc", name: "Coinbase INTC", feed: "0xAB657C39bac0D5886250D70849e2E3E008F2EECB", address: "0xB2000000000000000000004AFF16039bA04bdFBc" },
@@ -20,23 +20,24 @@ export const B20_TOKENS: Record<string, { symbol: string; name: string; feed: st
   "0xb20000000000000000000078ee7ce2fe4908108c": { symbol: "NVDAc", name: "Coinbase NVDA", feed: "0x04689a41629776563E6822F76f2e57D148d28513", address: "0xb20000000000000000000078ee7ce2fE4908108C" },
   "0xb200000000000000000000397293cb8cda9a10c5": { symbol: "SNDKc", name: "Coinbase SNDK", feed: "0x388b0dC46C0Fb05A74BeE0994fa5b02c6Fcca2eA", address: "0xb200000000000000000000397293Cb8cda9a10c5" },
   "0xb2000000000000000000007b9fcbd005511acbd5": { symbol: "SPCXc", name: "Coinbase SPCX", feed: "0x6A634B235903C4ad6376892180d6fF8612e3Fa68", address: "0xb2000000000000000000007b9fcbd005511aCBd5" },
-  "0xb2000000000000000000001e800a7f5189430cD0": { symbol: "TSLAc", name: "Coinbase TSLA", feed: "0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4", address: "0xb2000000000000000000001e800a7f5189430cD0" },
+  "0xb2000000000000000000001e800a7f5189430cd0": { symbol: "TSLAc", name: "Coinbase TSLA", feed: "0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4", address: "0xb2000000000000000000001e800a7f5189430cD0" },
 };
 
-export const B20_CHAIN_IDS = [8453, 84532];
+export const B20_CHAIN_IDS = [8453] as const;
+export const B20_MOCK_CHAIN_IDS = [84532] as const;
 
-export function isB20Token(address: string | undefined): boolean {
-  if (!address) return false;
+export function isB20Token(address: string | undefined, chainId: number | undefined): boolean {
+  if (!address || chainId !== 8453) return false;
   return B20_TOKENS[address.toLowerCase()] !== undefined;
 }
 
-export function getB20Info(address: string | undefined) {
-  if (!address) return undefined;
+export function getB20Info(address: string | undefined, chainId: number | undefined) {
+  if (!address || chainId !== 8453) return undefined;
   return B20_TOKENS[address.toLowerCase()];
 }
 
-export function isB20Market(collateralAsset: string | undefined): boolean {
-  return isB20Token(collateralAsset);
+export function isB20Market(collateralAsset: string | undefined, chainId: number | undefined): boolean {
+  return isB20Token(collateralAsset, chainId);
 }
 
 // Trading window: Monday-Friday (UTC) — matches fixed ChainlinkEquityFeedAdapter (0=Sunday)

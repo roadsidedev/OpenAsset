@@ -25,16 +25,24 @@ interface DeploymentConfig {
   sepoliaChainlinkFeeds?: Record<string, string>;
   baseChainlinkFeeds?: Record<string, string>;
   chainlinkFeeds?: Record<string, { feed: string; staleness?: number }>; // collateral asset => feed
-  l2Sequencer?: string; // L2 Sequencer Uptime Feed (empty string disables the check)
+  l2Sequencer?: string; // L2 Sequencer Uptime Feed; required for provider L2 deployments
   uniswapV3QuoteToken?: string; // Address of quote token for TWAP
   b20PolicyRegistry?: string;
   equityFeeds?: Record<string, string>; // B20 token => Chainlink TRV feed (for ChainlinkEquityFeedAdapter)
+  uniswapV3Router?: string; // router used by DEXSwapLiquidationAdapter
+  robinhoodProviderEnabled?: boolean;
+  providerAssets?: Record<string, string[]>; // provider identifier => approved collateral token addresses
 }
 
 const B20_POLICY_REGISTRY_BASE = "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD";
 const BASE_SEQUENCER_FEED = "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433";
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const ROBINHOOD_AAPL_TOKEN = "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9";
+
+function parseAddressList(value: string | undefined): string[] {
+  return (value || "").split(",").map((address) => address.trim()).filter(Boolean);
+}
 
 // Base mainnet B20 token addresses (precompiles)
 const B20_TOKENS_BASE: Record<string, string> = {
@@ -117,6 +125,7 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     l2Sequencer: "",
     uniswapV3QuoteToken: USDC_BASE_SEPOLIA,
     b20PolicyRegistry: B20_POLICY_REGISTRY_BASE,
+    uniswapV3Router: process.env.BASE_SEPOLIA_UNISWAP_V3_ROUTER || "",
   },
   base: {
     auditGovernance: "",
@@ -127,6 +136,27 @@ const CONFIGS: Record<string, DeploymentConfig> = {
     uniswapV3QuoteToken: USDC_BASE,
     b20PolicyRegistry: B20_POLICY_REGISTRY_BASE,
     equityFeeds: B20_FEEDS_BASE,
+    uniswapV3Router: process.env.BASE_UNISWAP_V3_ROUTER || "",
+    robinhoodProviderEnabled: process.env.ENABLE_ROBINHOOD_PROVIDER_BASE === "true",
+    providerAssets: {
+      OPENASSET_PROVIDER_B20: Object.values(B20_TOKENS_BASE),
+      ...(process.env.ENABLE_ROBINHOOD_PROVIDER_BASE === "true" ? {
+        OPENASSET_PROVIDER_ROBINHOOD: parseAddressList(process.env.ROBINHOOD_STOCK_TOKEN_ADDRESSES || ROBINHOOD_AAPL_TOKEN),
+      } : {}),
+    },
+  },
+  robinhood: {
+    auditGovernance: "",
+    owner: "",
+    protocolTreasury: "",
+    lendingAssets: process.env.ROBINHOOD_USDC_ADDRESS ? [process.env.ROBINHOOD_USDC_ADDRESS] : [],
+    l2Sequencer: process.env.ROBINHOOD_SEQUENCER_FEED || "",
+    uniswapV3QuoteToken: process.env.ROBINHOOD_USDC_ADDRESS || "",
+    robinhoodProviderEnabled: true,
+    providerAssets: {
+      OPENASSET_PROVIDER_ROBINHOOD: parseAddressList(process.env.ROBINHOOD_STOCK_TOKEN_ADDRESSES || ROBINHOOD_AAPL_TOKEN),
+    },
+    uniswapV3Router: process.env.ROBINHOOD_UNISWAP_V3_ROUTER || "",
   },
   mainnet: {
     auditGovernance: "",
@@ -136,6 +166,7 @@ const CONFIGS: Record<string, DeploymentConfig> = {
       "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
       "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
     ],
+    robinhoodProviderEnabled: process.env.ENABLE_ROBINHOOD_PROVIDER_MAINNET === "true",
     baseChainlinkFeeds: {
       "ETH/USD": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
       "WBTC/USD": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
@@ -145,6 +176,23 @@ const CONFIGS: Record<string, DeploymentConfig> = {
 
 const deploymentPathFor = (networkName: string) =>
   path.join(__dirname, "..", "deployments", `${networkName}-v2.json`);
+
+function validateDeploymentConfig(networkName: string, config: DeploymentConfig): void {
+  if (!config.robinhoodProviderEnabled) return;
+
+  const missing: string[] = [];
+  if (config.lendingAssets.length === 0) missing.push("ROBINHOOD_USDC_ADDRESS");
+  if (!config.l2Sequencer) missing.push("ROBINHOOD_SEQUENCER_FEED");
+  if (!config.uniswapV3Router) missing.push("ROBINHOOD_UNISWAP_V3_ROUTER");
+  if ((config.providerAssets?.OPENASSET_PROVIDER_ROBINHOOD || []).length === 0) {
+    missing.push("ROBINHOOD_STOCK_TOKEN_ADDRESSES");
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Robinhood provider deployment on ${networkName} is blocked; missing verified configuration: ${missing.join(", ")}`,
+    );
+  }
+}
 
 function loadExistingDeployment(networkName: string): Record<string, string> | null {
   const p = deploymentPathFor(networkName);
@@ -206,7 +254,19 @@ async function deployMarketDeployer(existing?: Record<string, string>) {
 }
 
 async function deployMarketFactory(config: DeploymentConfig, registryAddress: string, deployerAddress: string, existing?: Record<string, string>) {
-  if (existing?.marketFactory) {
+  const forceRedeploy = (process.env.FORCE_REDEPLOY_KEYS || "")
+    .split(",")
+    .map((key) => key.trim())
+    .includes("marketFactory");
+  if (existing?.marketFactory && !forceRedeploy) {
+    const currentFactory = await ethers.getContractAt("MarketFactoryV2", existing.marketFactory);
+    try {
+      await currentFactory.providerConfigurators(ethers.ZeroHash);
+    } catch {
+      throw new Error(
+        `Existing MarketFactoryV2 at ${existing.marketFactory} predates provider bundles; redeploy with FORCE_REDEPLOY_KEYS=marketFactory`
+      );
+    }
     console.log(`  MarketFactoryV2 (reuse): ${existing.marketFactory}`);
     return { address: existing.marketFactory };
   }
@@ -228,8 +288,15 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
   console.log("\n=== Deploying Multi-Tenant Reference Adapters ===");
   const deployed: Record<string, string> = { ...existing };
 
+  const forceRedeployKeys = new Set(
+    (process.env.FORCE_REDEPLOY_KEYS || "")
+      .split(",")
+      .map((key) => key.trim())
+      .filter(Boolean),
+  );
+
   const deployIfMissing = async (label: string, factoryX: any, args: any[], key: string) => {
-    if (deployed[key]) {
+    if (deployed[key] && !forceRedeployKeys.has(key)) {
       console.log(`  ${label} (reuse): ${deployed[key]}`);
       return;
     }
@@ -246,7 +313,7 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
   const ERC721Factory = await ethers.getContractFactory("ERC721Adapter");
   await deployIfMissing("ERC721Adapter", ERC721Factory, [factoryAddress], "erc721Adapter");
 
-  // --- B20 Asset Adapter (Base tokenized stocks) — deploy if registry configured ---
+  // --- Provider-specific asset/compliance/oracle modules ---
   if (config.b20PolicyRegistry) {
     const B20AssetFactory = await ethers.getContractFactory("B20AssetAdapter");
     await deployIfMissing("B20AssetAdapter", B20AssetFactory, [factoryAddress, config.b20PolicyRegistry], "b20AssetAdapter");
@@ -254,13 +321,59 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
     const B20ComplianceFactory = await ethers.getContractFactory("B20PolicyComplianceAdapter");
     await deployIfMissing("B20PolicyComplianceAdapter", B20ComplianceFactory, [factoryAddress, config.b20PolicyRegistry], "b20PolicyComplianceAdapter");
 
+  }
+
+  if (config.b20PolicyRegistry || config.robinhoodProviderEnabled) {
     const EquityFactory = await ethers.getContractFactory("ChainlinkEquityFeedAdapter");
     await deployIfMissing("ChainlinkEquityFeedAdapter", EquityFactory, [factoryAddress], "chainlinkEquityFeedAdapter");
+  }
 
-    if (deployed.chainlinkEquityFeedAdapter) {
-      console.log(`  ChainlinkEquityFeedAdapter deployed for B20 TRV feeds (per-market registerFeed uses maxStaleness 90000, sequencer ${config.l2Sequencer || "none"})`);
-      // Note: equity feeds are per-market, not global. No global registration here.
-      // Feed table is B20_FEEDS_BASE; per-market registration happens at market creation time via registerFeed(market, feed, 90000, sequencer).
+  if (config.b20PolicyRegistry) {
+    const B20ConfiguratorFactory = await ethers.getContractFactory("B20ProviderConfigurator");
+    await deployIfMissing("B20ProviderConfigurator", B20ConfiguratorFactory, [factoryAddress], "b20ProviderConfigurator");
+  }
+
+  if (config.robinhoodProviderEnabled) {
+    const RobinhoodComplianceFactory = await ethers.getContractFactory("ManagedAllowlistComplianceAdapter");
+    await deployIfMissing("ManagedAllowlistComplianceAdapter", RobinhoodComplianceFactory, [factoryAddress], "robinhoodComplianceAdapter");
+    const RobinhoodConfiguratorFactory = await ethers.getContractFactory("RobinhoodProviderConfigurator");
+    await deployIfMissing("RobinhoodProviderConfigurator", RobinhoodConfiguratorFactory, [factoryAddress], "robinhoodProviderConfigurator");
+  }
+
+  if (deployed.chainlinkEquityFeedAdapter) {
+    const equity = await ethers.getContractAt("ChainlinkEquityFeedAdapter", deployed.chainlinkEquityFeedAdapter);
+    for (const configuratorKey of ["b20ProviderConfigurator", "robinhoodProviderConfigurator"] as const) {
+      const configurator = deployed[configuratorKey];
+      if (!configurator) continue;
+      let authorized: boolean;
+      try {
+        authorized = await retry(() => equity.authorizedConfigurators(configurator), `authorizedConfigurators(${configuratorKey})`);
+      } catch {
+        throw new Error(`Existing ChainlinkEquityFeedAdapter at ${deployed.chainlinkEquityFeedAdapter} predates provider configurator authorization; redeploy with FORCE_REDEPLOY_KEYS=chainlinkEquityFeedAdapter`);
+      }
+      if (!authorized) {
+        await waitTx(await equity.setAuthorizedConfigurator(configurator, true), `authorize ${configuratorKey} on equity adapter`);
+      }
+    }
+    console.log(`  ChainlinkEquityFeedAdapter ready for provider-specific per-market feed registration`);
+  }
+
+  if (deployed.b20PolicyComplianceAdapter && deployed.b20ProviderConfigurator) {
+    const compliance = await ethers.getContractAt("B20PolicyComplianceAdapter", deployed.b20PolicyComplianceAdapter);
+    let authorized: boolean;
+    try {
+      authorized = await retry(
+        () => compliance.authorizedConfigurators(deployed.b20ProviderConfigurator),
+        "authorizedConfigurators(b20ProviderConfigurator)"
+      );
+    } catch {
+      throw new Error(`Existing B20PolicyComplianceAdapter at ${deployed.b20PolicyComplianceAdapter} predates provider configurator authorization; redeploy with FORCE_REDEPLOY_KEYS=b20PolicyComplianceAdapter`);
+    }
+    if (!authorized) {
+      await waitTx(
+        await compliance.setAuthorizedConfigurator(deployed.b20ProviderConfigurator, true),
+        "authorize b20ProviderConfigurator on B20 compliance adapter"
+      );
     }
   }
 
@@ -315,6 +428,21 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
   // --- Liquidation Adapters ---
   const DEXSwap = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
   await deployIfMissing("DEXSwapLiquidationAdapter", DEXSwap, [factoryAddress], "dexSwapLiquidation");
+  if (config.uniswapV3Router && deployed.dexSwapLiquidation) {
+    const dex = await ethers.getContractAt("DEXSwapLiquidationAdapter", deployed.dexSwapLiquidation);
+    let currentRouter: string;
+    try {
+      currentRouter = await dex.router();
+    } catch {
+      console.log("  Existing DEX adapter is the pre-router stub; redeploy with FORCE_REDEPLOY_KEYS=dexSwapLiquidation");
+      currentRouter = ethers.ZeroAddress;
+    }
+    if (currentRouter !== ethers.ZeroAddress && currentRouter.toLowerCase() !== config.uniswapV3Router.toLowerCase()) {
+      await waitTx(await dex.setRouter(config.uniswapV3Router), "DEXSwapLiquidationAdapter.setRouter");
+    }
+  } else {
+    console.log(`  WARNING: no Uniswap V3 router configured for ${network.name}; DEX liquidation remains disabled`);
+  }
   const NFTAuction = await ethers.getContractFactory("NFTAuctionLiquidationAdapter");
   await deployIfMissing("NFTAuctionLiquidationAdapter", NFTAuction, [factoryAddress], "nftAuctionLiquidation");
 
@@ -344,6 +472,9 @@ async function registerAdapters(registryAddress: string, deployed: Record<string
   }
   if (deployed.b20PolicyComplianceAdapter) {
     adapterMap.push({ address: deployed.b20PolicyComplianceAdapter, type: 2, name: "B20PolicyComplianceAdapter" });
+  }
+  if (deployed.robinhoodComplianceAdapter) {
+    adapterMap.push({ address: deployed.robinhoodComplianceAdapter, type: 2, name: "ManagedAllowlistComplianceAdapter" });
   }
   if (deployed.chainlinkEquityFeedAdapter) {
     adapterMap.push({ address: deployed.chainlinkEquityFeedAdapter, type: 1, name: "ChainlinkEquityFeedAdapter" });
@@ -375,6 +506,40 @@ async function registerAdapters(registryAddress: string, deployed: Record<string
   }
 
   console.log(`  Total adapters registered and verified: ${adapterMap.length}`);
+}
+
+async function configureProviderBundles(
+  factoryAddress: string,
+  deployed: Record<string, string>,
+  config: DeploymentConfig,
+) {
+  const factory = await ethers.getContractAt("MarketFactoryV2", factoryAddress);
+  const providerIds: Array<[string, string]> = [
+    ["OPENASSET_PROVIDER_B20", "b20ProviderConfigurator"],
+    ["OPENASSET_PROVIDER_ROBINHOOD", "robinhoodProviderConfigurator"],
+  ];
+  for (const [name, key] of providerIds) {
+    const configurator = deployed[key];
+    if (!configurator) continue;
+    const providerId = ethers.keccak256(ethers.toUtf8Bytes(name));
+    const current = await retry(() => factory.providerConfigurators(providerId), `providerConfigurators(${name})`);
+    if (current.toLowerCase() !== configurator.toLowerCase()) {
+      await waitTx(await factory.setProviderConfigurator(providerId, configurator), `setProviderConfigurator(${name})`);
+    }
+
+    for (const collateralAsset of config.providerAssets?.[name] || []) {
+      const approved = await retry(
+        () => factory.isProviderAsset(providerId, collateralAsset),
+        `isProviderAsset(${name},${collateralAsset})`,
+      );
+      if (!approved) {
+        await waitTx(
+          await factory.setProviderAsset(providerId, collateralAsset, true),
+          `setProviderAsset(${name},${collateralAsset})`,
+        );
+      }
+    }
+  }
 }
 
 async function configureLendingAssets(factoryAddress: string, lendingAssets: string[]) {
@@ -409,6 +574,7 @@ async function main() {
     };
   }
 
+  validateDeploymentConfig(networkName, config);
   const existing = loadExistingDeployment(networkName);
 
   console.log(`\n========================================`);
@@ -435,7 +601,8 @@ async function main() {
   // 4. Register and verify adapters
   await registerAdapters(registryAddress, deployedAdapters);
 
-  // 5. Configure lending assets
+  // 5. Configure provider bundles and lending assets
+  await configureProviderBundles(factoryAddress, deployedAdapters, config);
   await configureLendingAssets(factoryAddress, config.lendingAssets);
 
   // 6. Save deployment output

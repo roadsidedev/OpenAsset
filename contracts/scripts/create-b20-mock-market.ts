@@ -40,6 +40,15 @@ async function main(){
   console.log("USDC bal", bal.toString());
 
   const factory=await ethers.getContractAt("MarketFactoryV2", factoryAddr);
+  const b20ProviderId = ethers.keccak256(ethers.toUtf8Bytes("OPENASSET_PROVIDER_B20"));
+  const b20Configurator = await factory.providerConfigurators(b20ProviderId);
+  if (b20Configurator === ethers.ZeroAddress) {
+    throw new Error("Target factory has no B20 provider configurator; redeploy the V2 factory before running this mock flow");
+  }
+  const providerAssetApproved = await factory.isProviderAsset(b20ProviderId, mockB20Addr);
+  if (!providerAssetApproved) {
+    await (await factory.setProviderAsset(b20ProviderId, mockB20Addr, true)).wait();
+  }
   // check allowed
   const allowed=await factory.isAllowedLendingAsset(usdc);
   console.log("USDC allowed", allowed);
@@ -78,8 +87,13 @@ async function main(){
     cooldownSeconds: 4*3600
   };
 
-  console.log("creating market...");
-  const tx=await factory.createMarket(config, initialLiquidity, { value: 0 });
+  console.log("creating atomically initialized B20 market...");
+  const tx=await factory.createB20Market(
+    config,
+    initialLiquidity,
+    { feed: feedAddr, maxStaleness: 90000, l2Sequencer: ethers.ZeroAddress },
+    { value: 0 },
+  );
   const receipt=await tx.wait();
   console.log("tx", receipt?.hash);
   let marketAddr: string | undefined;
@@ -94,17 +108,7 @@ async function main(){
   }
   if(!marketAddr){ console.log("no MarketCreated event"); return; }
 
-  // register equity feed per market (90000, no sequencer) — now onlyFactoryOrOwner, deployer is owner
-  const equity=await ethers.getContractAt("ChainlinkEquityFeedAdapter", equityAdapter);
-  console.log("registering equity feed 90000, sequencer 0 as owner...");
-  await (await equity.registerFeed(marketAddr, feedAddr, 90000, ethers.ZeroAddress)).wait();
-  console.log("feed registered");
-
-  // register token for compliance — also onlyFactoryOrOwner
-  const compliance=await ethers.getContractAt("B20PolicyComplianceAdapter", b20Policy);
-  console.log("registering compliance token as owner...");
-  await (await compliance.registerToken(marketAddr, mockB20Addr)).wait();
-  console.log("compliance token registered");
+  console.log("B20 feed and compliance token were initialized atomically by the factory");
 
   // verify market count
   const count=await factory.getMarketCount();

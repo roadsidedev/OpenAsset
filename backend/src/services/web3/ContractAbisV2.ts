@@ -41,6 +41,13 @@ export const MARKET_FACTORY_V2_ABI = [
   },
   {
     type: 'function',
+    name: 'marketProvider',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'bytes32' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getMarketCount',
     inputs: [],
     outputs: [{ name: '', type: 'uint256' }],
@@ -83,6 +90,15 @@ export const MARKET_FACTORY_V2_ABI = [
   },
   {
     type: 'event',
+    name: 'ProviderMarketInitialized',
+    inputs: [
+      { name: 'providerId', type: 'bytes32', indexed: true },
+      { name: 'marketAddress', type: 'address', indexed: true },
+      { name: 'configurator', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
     name: 'MarketCreated',
     inputs: [
       { name: 'marketAddress', type: 'address', indexed: true },
@@ -101,6 +117,16 @@ export const LENDING_MARKET_V2_ABI = [
     type: 'function',
     name: 'requestLoan',
     inputs: [{ name: 'collateralAmount', type: 'uint256' }],
+    outputs: [{ name: 'loanId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'requestLoan',
+    inputs: [
+      { name: 'collateralAmount', type: 'uint256' },
+      { name: 'requestedPrincipal', type: 'uint256' },
+    ],
     outputs: [{ name: 'loanId', type: 'uint256' }],
     stateMutability: 'nonpayable',
   },
@@ -224,6 +250,27 @@ export const LENDING_MARKET_V2_ABI = [
     outputs: [{ name: '', type: 'address' }],
     stateMutability: 'view',
   },
+  ...[
+    ['collateralAsset', 'address'],
+    ['lendingAsset', 'address'],
+    ['assetAdapter', 'address'],
+    ['oracleAdapter', 'address'],
+    ['complianceAdapter', 'address'],
+    ['liquidationAdapter', 'address'],
+    ['positionAdapter', 'address'],
+    ['ltvBps', 'uint256'],
+    ['aprBps', 'uint256'],
+    ['durationSeconds', 'uint256'],
+    ['gracePeriodHours', 'uint256'],
+    ['enableHealthFactor', 'bool'],
+    ['healthFactorThreshold', 'uint256'],
+  ].map(([name, type]) => ({
+    type: 'function',
+    name,
+    inputs: [],
+    outputs: [{ name: '', type }],
+    stateMutability: 'view',
+  })),
   {
     type: 'event',
     name: 'LoanCreated',

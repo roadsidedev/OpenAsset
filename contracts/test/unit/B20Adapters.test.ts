@@ -1,14 +1,13 @@
-import { expect } from "chai";
 import { ethers } from "hardhat";
+import { expect } from "chai";
 
 describe("B20 Adapters", function () {
   let factory: any, market: any, borrower: any, other: any;
   let b20: any, registry: any, assetAdapter: any, complianceAdapter: any;
 
-  const POLICY_SENDER = ethers.zeroPadValue("0xd116fc21", 32);
-  const POLICY_RECEIVER = ethers.zeroPadValue("0x210f521b", 32);
-  const PID_SENDER = ethers.keccak256(ethers.toUtf8Bytes("pid-sender"));
-  const PID_RECEIVER = ethers.keccak256(ethers.toUtf8Bytes("pid-receiver"));
+  const PID_SENDER = 101n;
+  const PID_RECEIVER = 202n;
+  const PID_EXECUTOR = 303n;
 
   beforeEach(async function () {
     [factory, market, borrower, other] = await ethers.getSigners();
@@ -24,101 +23,115 @@ describe("B20 Adapters", function () {
     const B20Compliance = await ethers.getContractFactory("B20PolicyComplianceAdapter");
     complianceAdapter = await B20Compliance.deploy(await factory.getAddress(), await registry.getAddress());
 
-    // configure adapters for market
     await assetAdapter.connect(factory).configure(await market.getAddress(), await b20.getAddress());
     await complianceAdapter.connect(factory).configure(await market.getAddress());
     await complianceAdapter.connect(factory).registerToken(await market.getAddress(), await b20.getAddress());
 
-    // setup B20 policies: map scope -> pid
-    // MockB20 uses helper setPolicyId(scope, pid)
     await b20.setPolicyId(await b20.TRANSFER_SENDER_POLICY(), PID_SENDER);
     await b20.setPolicyId(await b20.TRANSFER_RECEIVER_POLICY(), PID_RECEIVER);
-    // registry authorizes borrower for both pids
+    await b20.setPolicyId(await b20.TRANSFER_EXECUTOR_POLICY(), PID_EXECUTOR);
+
     await registry.setAuthorized(PID_SENDER, await borrower.getAddress(), true);
     await registry.setAuthorized(PID_RECEIVER, await borrower.getAddress(), true);
-    await registry.setAuthorized(PID_SENDER, await market.getAddress(), true);
     await registry.setAuthorized(PID_RECEIVER, await market.getAddress(), true);
+    await registry.setAuthorized(PID_EXECUTOR, await assetAdapter.getAddress(), true);
 
-    // mint and approve
     await b20.mint(await borrower.getAddress(), ethers.parseEther("1000"));
-    await b20.connect(borrower).approve(await market.getAddress(), ethers.parseEther("1000"));
-    // market approves adapter for release (simulate LendingMarketV2 constructor approval)
-    // Mock: market is EOA, not contract, so we simulate by having market approve adapter directly via b20 as market signer
-    // But market is a signer (Wallet), so we can have market approve assetAdapter to spend market's balance for release test
-    // For isTransferable check, allowance is borrower -> market, already set above
-    // For escrow, assetAdapter will call b20.transferFrom(borrower, market, amount) using borrower's allowance to market? Actually allowance to market, but transferFrom spender is assetAdapter (msg.sender inside escrow is market? No, inside escrow, msg.sender is market, but adapter calls b20.transferFrom(from, msg.sender, amount) where msg.sender==market address, but spender is assetAdapter contract address, not market. So allowance must be borrower -> assetAdapter, not borrower -> market.
-    // However B20AssetAdapter's isTransferable checks allowance(from, msg.sender) where msg.sender is market. So allowance should be to market, but escrow uses adapter as spender, so would fail.
-    // To make test work, we need to approve both market and adapter, and also have adapter call via market context — in real LendingMarketV2, the market contract is the caller, and the adapter is a separate contract, so transferFrom's msg.sender inside ERC20 is the adapter, not the market. So allowance must be borrower -> adapter.
-    // Our isTransferable checks allowance to market (msg.sender), which is market address, but escrow checks adapter as spender — mismatch reveals second bug. For test we set both approvals.
     await b20.connect(borrower).approve(await assetAdapter.getAddress(), ethers.parseEther("1000"));
   });
 
-  it("isTransferable true when policies allow and balance/allowance ok", async function () {
-    // call as market
-    const addr = await assetAdapter.getAddress();
+  async function asMarket() {
     const marketAddr = await market.getAddress();
-    const borrowerAddr = await borrower.getAddress();
-    // need to call via market account impersonation
     await ethers.provider.send("hardhat_impersonateAccount", [marketAddr]);
     const marketSigner = await ethers.getSigner(marketAddr);
-    // fund market for gas
     await factory.sendTransaction({ to: marketAddr, value: ethers.parseEther("1") });
-    const ok = await assetAdapter.connect(marketSigner).isTransferable(borrowerAddr, marketAddr, ethers.parseEther("100"));
+    return { marketAddr, marketSigner };
+  }
+
+  async function stopMarket(marketAddr: string) {
+    await ethers.provider.send("hardhat_stopImpersonatingAccount", [marketAddr]);
+  }
+
+  it("uses the official uint64 policy registry selector", async function () {
+    expect(ethers.id("isAuthorized(uint64,address)").slice(0, 10)).to.equal("0x55a1179e");
+    expect(ethers.id("isAuthorized(bytes32,address)").slice(0, 10)).not.to.equal("0x55a1179e");
+  });
+
+  it("isTransferable true when all policies allow and balance/allowance are sufficient", async function () {
+    const { marketAddr, marketSigner } = await asMarket();
+    const ok = await assetAdapter.connect(marketSigner).isTransferable(
+      await borrower.getAddress(),
+      marketAddr,
+      ethers.parseEther("100"),
+    );
     expect(ok).to.equal(true);
-    await ethers.provider.send("hardhat_stopImpersonatingAccount", [marketAddr]);
+    await stopMarket(marketAddr);
   });
 
-  it("isTransferable false when policy blocks", async function () {
+  it("isTransferable false when sender policy blocks", async function () {
     await registry.setAuthorized(PID_SENDER, await borrower.getAddress(), false);
-    const marketAddr = await market.getAddress();
-    const borrowerAddr = await borrower.getAddress();
-    await ethers.provider.send("hardhat_impersonateAccount", [marketAddr]);
-    const marketSigner = await ethers.getSigner(marketAddr);
-    await factory.sendTransaction({ to: marketAddr, value: ethers.parseEther("1") });
-    const ok = await assetAdapter.connect(marketSigner).isTransferable(borrowerAddr, marketAddr, ethers.parseEther("10"));
+    const { marketAddr, marketSigner } = await asMarket();
+    const ok = await assetAdapter.connect(marketSigner).isTransferable(
+      await borrower.getAddress(),
+      marketAddr,
+      ethers.parseEther("10"),
+    );
     expect(ok).to.equal(false);
-    await ethers.provider.send("hardhat_stopImpersonatingAccount", [marketAddr]);
-    // restore
-    await registry.setAuthorized(PID_SENDER, await borrower.getAddress(), true);
+    await stopMarket(marketAddr);
   });
 
-  it("isTransferable fail-closed when token not configured", async function () {
+  it("isTransferable false when executor policy blocks the asset adapter", async function () {
+    await registry.setAuthorized(PID_EXECUTOR, await assetAdapter.getAddress(), false);
+    const { marketAddr, marketSigner } = await asMarket();
+    const ok = await assetAdapter.connect(marketSigner).isTransferable(
+      await borrower.getAddress(),
+      marketAddr,
+      ethers.parseEther("10"),
+    );
+    expect(ok).to.equal(false);
+    await stopMarket(marketAddr);
+  });
+
+  it("isTransferable fail-closed when token is not configured", async function () {
     const fakeMarket = other;
-    const ok = await assetAdapter.connect(fakeMarket).isTransferable(await borrower.getAddress(), await fakeMarket.getAddress(), 1);
+    const ok = await assetAdapter.connect(fakeMarket).isTransferable(
+      await borrower.getAddress(),
+      await fakeMarket.getAddress(),
+      1,
+    );
     expect(ok).to.equal(false);
   });
 
-  it("compliance isEligible true when both policies allow", async function () {
-    const marketAddr = await market.getAddress();
-    await ethers.provider.send("hardhat_impersonateAccount", [marketAddr]);
-    const marketSigner = await ethers.getSigner(marketAddr);
-    await factory.sendTransaction({ to: marketAddr, value: ethers.parseEther("1") });
+  it("compliance isEligible true when sender and receiver policies allow", async function () {
+    const { marketAddr, marketSigner } = await asMarket();
     const eligible = await complianceAdapter.connect(marketSigner).isEligible(await borrower.getAddress());
     expect(eligible).to.equal(true);
-    await ethers.provider.send("hardhat_stopImpersonatingAccount", [marketAddr]);
+    await stopMarket(marketAddr);
   });
 
-  it("compliance fail-closed when blocked", async function () {
+  it("compliance fail-closed when a policy blocks", async function () {
     await registry.setAuthorized(PID_RECEIVER, await borrower.getAddress(), false);
-    const marketAddr = await market.getAddress();
-    await ethers.provider.send("hardhat_impersonateAccount", [marketAddr]);
-    const marketSigner = await ethers.getSigner(marketAddr);
-    await factory.sendTransaction({ to: marketAddr, value: ethers.parseEther("1") });
+    const { marketAddr, marketSigner } = await asMarket();
     const eligible = await complianceAdapter.connect(marketSigner).isEligible(await borrower.getAddress());
     expect(eligible).to.equal(false);
-    await ethers.provider.send("hardhat_stopImpersonatingAccount", [marketAddr]);
+    await stopMarket(marketAddr);
   });
 
-  it("escrow pulls correctly when configured (balance delta proof)", async function () {
-    const marketAddr = await market.getAddress();
-    await ethers.provider.send("hardhat_impersonateAccount", [marketAddr]);
-    const marketSigner = await ethers.getSigner(marketAddr);
-    await factory.sendTransaction({ to: marketAddr, value: ethers.parseEther("1") });
+  it("rejects escrow while the B20 transfer feature is paused", async function () {
+    const { marketAddr, marketSigner } = await asMarket();
+    await b20.setPaused(true);
+    await expect(
+      assetAdapter.connect(marketSigner).escrow(await borrower.getAddress(), ethers.parseEther("10")),
+    ).to.be.revertedWith("B20 transfers paused");
+    await stopMarket(marketAddr);
+  });
+
+  it("escrow pulls correctly when configured", async function () {
+    const { marketAddr, marketSigner } = await asMarket();
     const before = await b20.balanceOf(marketAddr);
-    // Ensure borrower allowance to adapter is set (from beforeEach)
     await assetAdapter.connect(marketSigner).escrow(await borrower.getAddress(), ethers.parseEther("100"));
     const after = await b20.balanceOf(marketAddr);
     expect(after - before).to.equal(ethers.parseEther("100"));
-    await ethers.provider.send("hardhat_stopImpersonatingAccount", [marketAddr]);
+    await stopMarket(marketAddr);
   });
 });

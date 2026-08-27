@@ -61,4 +61,11 @@ interface ILiquidationAdapter {
      * @return seconds Duration of the cure window in seconds
      */
     function cureWindowSeconds() external view returns (uint256);
+
+    /**
+     * @notice Whether the market must hand collateral to this adapter before liquidation.
+     * @dev Synchronous DEX adapters consume collateral in their own contract. Async
+     *      issuer adapters generally submit a redemption request without a handoff.
+     */
+    function requiresCollateralHandoff() external view returns (bool);
 }

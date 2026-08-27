@@ -8,11 +8,14 @@ declare module 'viem' {
   export function parseEther(value: string): bigint;
   export function formatEther(value: bigint): string;
   export function toHex(value: string | number | bigint): `0x${string}`;
+  export function keccak256(value: `0x${string}`): `0x${string}`;
+  export function encodeAbiParameters(parameters: readonly any[], values: readonly any[]): `0x${string}`;
   export function isAddress(value: string): boolean;
   export function getAddress(value: string): string;
   export function parseAbi(abis: readonly string[]): any;
   export type Address = `0x${string}`;
   export type Hash = `0x${string}`;
+  export type Hex = `0x${string}`;
   export const zeroAddress: Address;
   export const zeroHash: Hash;
   const _default: any;

@@ -12,11 +12,11 @@ interface IB20Policy {
     function TRANSFER_SENDER_POLICY() external view returns (bytes32);
     function TRANSFER_RECEIVER_POLICY() external view returns (bytes32);
     function TRANSFER_EXECUTOR_POLICY() external view returns (bytes32);
-    function policyId(bytes32 policyScope) external view returns (bytes32);
+    function policyId(bytes32 policyScope) external view returns (uint64);
 }
 
 interface IPolicyRegistryView {
-    function isAuthorized(bytes32 policyId, address account) external view returns (bool);
+    function isAuthorized(uint64 policyId, address account) external view returns (bool);
 }
 
 /**
@@ -40,6 +40,7 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
     address public immutable factory;
     IPolicyRegistryView public immutable policyRegistry;
     address public owner;
+    mapping(address => bool) public authorizedConfigurators;
 
     struct MarketConfig {
         IB20Policy token;
@@ -54,6 +55,14 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
 
     modifier onlyFactoryOrOwner() {
         require(msg.sender == factory || msg.sender == owner, "Only factory/owner");
+        _;
+    }
+
+    modifier onlyFactoryOwnerOrConfigurator() {
+        require(
+            msg.sender == factory || msg.sender == owner || authorizedConfigurators[msg.sender],
+            "Only factory/owner/configurator"
+        );
         _;
     }
 
@@ -81,10 +90,15 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
      * @param market LendingMarketV2 address
      * @param token B20 collateral token address
      */
-    function registerToken(address market, address token) external onlyFactoryOrOwner {
+    function registerToken(address market, address token) external onlyFactoryOwnerOrConfigurator {
         require(market != address(0), "Invalid market");
         require(token != address(0), "Invalid token");
         marketConfigs[market] = MarketConfig({ token: IB20Policy(token) });
+    }
+
+    function setAuthorizedConfigurator(address configurator, bool authorized) external onlyFactoryOrOwner {
+        require(configurator != address(0), "Invalid configurator");
+        authorizedConfigurators[configurator] = authorized;
     }
 
     /// @inheritdoc IComplianceAdapter
@@ -103,13 +117,13 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
     }
 
     function _authorized(IB20Policy token, bytes32 scope, address account) internal view returns (bool) {
-        bytes32 pid;
-        try token.policyId(scope) returns (bytes32 p) {
+        uint64 pid;
+        try token.policyId(scope) returns (uint64 p) {
             pid = p;
         } catch {
             return false;
         }
-        if (pid == bytes32(0)) return true; // always-allow builtin
+        if (pid == 0) return true; // always-allow builtin sentinel → skip check
         try policyRegistry.isAuthorized(pid, account) returns (bool ok) {
             return ok;
         } catch {
@@ -121,7 +135,7 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
     function getMarketPolicies(address market) external view returns (bytes32 senderPid, bytes32 receiverPid) {
         IB20Policy token = marketConfigs[market].token;
         if (address(token) == address(0)) return (bytes32(0), bytes32(0));
-        try token.policyId(token.TRANSFER_SENDER_POLICY()) returns (bytes32 p) { senderPid = p; } catch { senderPid = bytes32(0); }
-        try token.policyId(token.TRANSFER_RECEIVER_POLICY()) returns (bytes32 p) { receiverPid = p; } catch { receiverPid = bytes32(0); }
+        try token.policyId(token.TRANSFER_SENDER_POLICY()) returns (uint64 p) { senderPid = bytes32(uint256(p)); } catch { senderPid = bytes32(0); }
+        try token.policyId(token.TRANSFER_RECEIVER_POLICY()) returns (uint64 p) { receiverPid = bytes32(uint256(p)); } catch { receiverPid = bytes32(0); }
     }
 }

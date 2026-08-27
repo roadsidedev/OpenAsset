@@ -330,32 +330,68 @@ export class EventIndexerServiceV2 {
 
     try {
       const marketContract = new ethers.Contract(marketAddress, LENDING_MARKET_V2_ABI, this.provider);
+      const factoryContract = this.factoryAddress
+        ? new ethers.Contract(this.factoryAddress, MARKET_FACTORY_V2_ABI, this.provider)
+        : null;
+      const [
+        providerId,
+        lendingAsset,
+        assetAdapter,
+        oracleAdapter,
+        complianceAdapter,
+        liquidationAdapter,
+        positionAdapter,
+        ltvBasisPoints,
+        aprBasisPoints,
+        durationSeconds,
+        gracePeriodHours,
+        enableHealthFactor,
+        healthFactorThreshold,
+      ] = await Promise.all([
+        factoryContract
+          ? factoryContract.marketProvider(marketAddress).catch(() => ethers.ZeroHash)
+          : Promise.resolve(ethers.ZeroHash),
+        marketContract.lendingAsset(),
+        marketContract.assetAdapter(),
+        marketContract.oracleAdapter(),
+        marketContract.complianceAdapter(),
+        marketContract.liquidationAdapter(),
+        marketContract.positionAdapter(),
+        marketContract.ltvBps(),
+        marketContract.aprBps(),
+        marketContract.durationSeconds(),
+        marketContract.gracePeriodHours(),
+        marketContract.enableHealthFactor(),
+        marketContract.healthFactorThreshold(),
+      ]);
+
+      const hydrated = {
+        lpAddress,
+        collateralAsset,
+        providerId: providerId && providerId !== ethers.ZeroHash ? providerId.toLowerCase() : null,
+        lendingAsset,
+        assetAdapter,
+        oracleAdapter,
+        complianceAdapter,
+        liquidationAdapter,
+        positionAdapter,
+        ltvBasisPoints: Number(ltvBasisPoints),
+        aprBasisPoints: Number(aprBasisPoints),
+        durationSeconds: Number(durationSeconds),
+        gracePeriodHours: Number(gracePeriodHours),
+        enableHealthFactor,
+        healthFactorThreshold: Number(healthFactorThreshold),
+        totalLiquidity: initialLiquidity,
+      };
 
       await this.prisma.market.upsert({
         where: { address: marketAddress },
-        update: {
-          lpAddress,
-          collateralAsset,
-          totalLiquidity: initialLiquidity,
-        },
+        update: hydrated,
         create: {
           address: marketAddress,
           chainId: this.chainId,
-          lpAddress,
-          collateralAsset,
-          lendingAsset: ethers.ZeroAddress,
-          assetAdapter: ethers.ZeroAddress,
-          oracleAdapter: ethers.ZeroAddress,
-          liquidationAdapter: ethers.ZeroAddress,
-          positionAdapter: ethers.ZeroAddress,
-          ltvBasisPoints: 0,
-          aprBasisPoints: 0,
-          durationSeconds: 0,
-          gracePeriodHours: 1,
-          enableHealthFactor: true,
-          healthFactorThreshold: 12000,
+          ...hydrated,
           circuitBreakerEnabled: true,
-          totalLiquidity: initialLiquidity,
         },
       });
 

@@ -13,6 +13,8 @@ import "./interfaces/adapters/IOracleAdapter.sol";
 import "./interfaces/adapters/IComplianceAdapter.sol";
 import "./interfaces/adapters/ILiquidationAdapter.sol";
 import "./interfaces/adapters/IPositionAdapter.sol";
+import "./interfaces/IProviderConfigurator.sol";
+import "./ProviderIds.sol";
 
 /**
  * @title MarketFactoryV2
@@ -62,20 +64,15 @@ contract MarketFactoryV2 is ReentrancyGuard {
         uint256 cooldownSeconds;
     }
 
-    struct MarketInfo {
-        address marketAddress;
-        address lpAddress;
-        address collateralAsset;
-        address lendingAsset;
-        address assetAdapter;
-        address oracleAdapter;
-        address complianceAdapter;
-        address liquidationAdapter;
-        address positionAdapter;
-        uint256 ltvBasisPoints;
-        uint256 aprBasisPoints;
-        uint256 durationSeconds;
-        uint256 createdAt;
+    struct B20MarketConfig {
+        address feed;
+        uint256 maxStaleness;
+        address l2Sequencer;
+    }
+
+    struct ProviderMarketConfig {
+        bytes32 providerId;
+        bytes providerData;
     }
 
     // ============ Storage ============
@@ -95,6 +92,10 @@ contract MarketFactoryV2 is ReentrancyGuard {
 
     // Market config hash → address (duplicate prevention)
     mapping(bytes32 => address) public configHashToMarket;
+    mapping(bytes32 => address) public providerConfigurators;
+    mapping(bytes32 => mapping(address => bool)) public isProviderAsset;
+    mapping(address => bytes32) public canonicalProviderForAsset;
+    mapping(address => bytes32) public marketProvider;
 
     // ============ Events ============
 
@@ -107,7 +108,11 @@ contract MarketFactoryV2 is ReentrancyGuard {
     );
 
     event LendingAssetAdded(address indexed asset);
-    event LendingAssetRemoved(address indexed asset);
+    event LendingAssetRemoved(address asset);
+    event B20MarketInitialized(address indexed marketAddress, address indexed collateralAsset, address indexed feed);
+    event ProviderConfiguratorUpdated(bytes32 indexed providerId, address indexed configurator);
+    event ProviderAssetUpdated(bytes32 indexed providerId, address indexed collateralAsset, bool approved);
+    event ProviderMarketInitialized(bytes32 indexed providerId, address indexed marketAddress, address indexed configurator);
 
     // ============ Errors ============
 
@@ -118,6 +123,10 @@ contract MarketFactoryV2 is ReentrancyGuard {
     error MarketAlreadyExists();
     error TransferablePositionRequiresComplianceHook();
     error Unauthorized();
+    error ProviderNotConfigured();
+    error ProviderIdMismatch();
+    error ProviderAssetNotApproved();
+    error AssetReservedForProvider();
 
     // ============ Constructor ============
 
@@ -149,18 +158,76 @@ contract MarketFactoryV2 is ReentrancyGuard {
     function createMarket(
         MarketConfig memory config,
         uint256 initialLiquidity
-    )
-        external
-        nonReentrant
-        returns (address marketAddress)
-    {
+    ) external nonReentrant returns (address marketAddress) {
+        return _createMarket(
+            config,
+            initialLiquidity,
+            ProviderMarketConfig({ providerId: bytes32(0), providerData: bytes("") })
+        );
+    }
+
+    /**
+     * @notice Create and fully initialize a B20 tokenized-stock lending market.
+     * @dev B20 setup is delegated to the registered B20 provider configurator.
+     */
+    function createB20Market(
+        MarketConfig memory config,
+        uint256 initialLiquidity,
+        B20MarketConfig memory b20Config
+    ) external nonReentrant returns (address marketAddress) {
+        require(b20Config.feed != address(0), "B20 feed required");
+        require(b20Config.maxStaleness > 0, "B20 staleness required");
+        require(config.complianceAdapter != address(0), "B20 compliance required");
+        marketAddress = _createMarket(
+            config,
+            initialLiquidity,
+            ProviderMarketConfig({
+                providerId: ProviderIds.B20,
+                providerData: abi.encode(b20Config.feed, b20Config.maxStaleness, b20Config.l2Sequencer)
+            })
+        );
+    }
+
+    /**
+     * @notice Create and atomically initialize a market for a registered provider bundle.
+     * @dev Any provider setup failure reverts the market deployment and liquidity flow.
+     */
+    function createProviderMarket(
+        MarketConfig memory config,
+        uint256 initialLiquidity,
+        ProviderMarketConfig memory providerConfig
+    ) external nonReentrant returns (address marketAddress) {
+        require(providerConfig.providerId != bytes32(0), "Provider required");
+        require(providerConfig.providerData.length > 0, "Provider data required");
+        marketAddress = _createMarket(config, initialLiquidity, providerConfig);
+    }
+
+    function _createMarket(
+        MarketConfig memory config,
+        uint256 initialLiquidity,
+        ProviderMarketConfig memory providerConfig
+    ) internal returns (address marketAddress) {
+        address configurator = providerConfigurators[providerConfig.providerId];
+        if (providerConfig.providerId != bytes32(0)) {
+            if (configurator == address(0)) revert ProviderNotConfigured();
+            if (IProviderConfigurator(configurator).providerId() != providerConfig.providerId) {
+                revert ProviderIdMismatch();
+            }
+            if (!isProviderAsset[providerConfig.providerId][config.collateralAsset]) {
+                revert ProviderAssetNotApproved();
+            }
+        } else if (canonicalProviderForAsset[config.collateralAsset] != bytes32(0)) {
+            revert AssetReservedForProvider();
+        }
         if (initialLiquidity == 0) revert InvalidAmount();
 
-        // Validate configuration
         _validateMarketConfig(config);
-        _validateAdapterCompatibility(config);
+        _validateAdapterCompatibility(
+            config,
+            providerConfig.providerId,
+            keccak256(providerConfig.providerData)
+        );
 
-        // Deploy new market via dedicated deployer (avoids embedding market bytecode in factory)
         marketAddress = marketDeployer.deploy(
             address(this),
             config.lpAddress,
@@ -187,29 +254,36 @@ contract MarketFactoryV2 is ReentrancyGuard {
             })
         );
 
-        // Register position adapter for this market before transferring liquidity
         _configureAdapters(marketAddress, config);
+        if (providerConfig.providerId != bytes32(0)) {
+            IProviderConfigurator(configurator).configureMarket(
+                marketAddress,
+                config.collateralAsset,
+                config.assetAdapter,
+                config.oracleAdapter,
+                config.complianceAdapter,
+                config.liquidationAdapter,
+                providerConfig.providerData
+            );
+        }
 
-        // Calculate creation fee in lending asset terms
         uint256 creationFee = (initialLiquidity * CREATION_FEE_BPS) / BPS_DENOMINATOR;
         uint256 netLiquidity = initialLiquidity - creationFee;
-
-        // Transfer net liquidity to market and creation fee to treasury
         IERC20(config.lendingAsset).safeTransferFrom(msg.sender, marketAddress, netLiquidity);
         if (creationFee > 0) {
             IERC20(config.lendingAsset).safeTransferFrom(msg.sender, protocolTreasury, creationFee);
         }
 
-        // Initialize market liquidity
         LendingMarketV2(marketAddress).initializeLiquidity(netLiquidity, config.lpAddress);
 
-        // Register market
         allMarkets.push(marketAddress);
         isMarket[marketAddress] = true;
         lpToMarkets[config.lpAddress].push(marketAddress);
         assetToMarkets[config.collateralAsset].push(marketAddress);
+        if (providerConfig.providerId != bytes32(0)) {
+            marketProvider[marketAddress] = providerConfig.providerId;
+        }
 
-        // Store config hash for duplicate prevention
         bytes32 configHash = keccak256(abi.encodePacked(
             config.collateralAsset,
             config.lendingAsset,
@@ -220,11 +294,16 @@ contract MarketFactoryV2 is ReentrancyGuard {
             config.positionAdapter,
             config.ltvBasisPoints,
             config.aprBasisPoints,
-            config.durationSeconds
+            config.durationSeconds,
+            providerConfig.providerId,
+            keccak256(providerConfig.providerData)
         ));
         configHashToMarket[configHash] = marketAddress;
 
         emit MarketCreated(marketAddress, config.lpAddress, config.collateralAsset, netLiquidity, creationFee);
+        if (providerConfig.providerId != bytes32(0)) {
+            emit ProviderMarketInitialized(providerConfig.providerId, marketAddress, configurator);
+        }
     }
 
     /**
@@ -251,6 +330,12 @@ contract MarketFactoryV2 is ReentrancyGuard {
         // Configure Liquidation Adapter (reference to market's Asset Adapter + market address)
         if (config.liquidationAdapter != address(0)) {
             ILiquidationAdapter(config.liquidationAdapter).configure(marketAddress, config.assetAdapter);
+            if (ILiquidationAdapter(config.liquidationAdapter).requiresCollateralHandoff()) {
+                (bool success, ) = config.liquidationAdapter.call(
+                    abi.encodeWithSignature("configureRisk(address,address,uint16)", marketAddress, config.oracleAdapter, 500)
+                );
+                require(success, "Liquidation risk configuration failed");
+            }
         }
 
         // Configure Position Adapter (authorize market on cloned template)
@@ -288,7 +373,11 @@ contract MarketFactoryV2 is ReentrancyGuard {
      * @notice Validate adapter compatibility against the Validation Matrix
      * @dev Enforces 5 explicit rules. Deployment reverts with human-readable reason on any failure.
      */
-    function _validateAdapterCompatibility(MarketConfig memory config) internal view {
+    function _validateAdapterCompatibility(
+        MarketConfig memory config,
+        bytes32 providerId,
+        bytes32 providerDataHash
+    ) internal view {
         // Rule 1: lendingAsset must be in the stablecoin allowlist
         if (!isAllowedLendingAsset[config.lendingAsset]) {
             revert LendingAssetNotAllowed();
@@ -321,7 +410,9 @@ contract MarketFactoryV2 is ReentrancyGuard {
             config.positionAdapter,
             config.ltvBasisPoints,
             config.aprBasisPoints,
-            config.durationSeconds
+            config.durationSeconds,
+            providerId,
+            providerDataHash
         ));
         if (configHashToMarket[configHash] != address(0)) {
             revert MarketAlreadyExists();
@@ -337,6 +428,35 @@ contract MarketFactoryV2 is ReentrancyGuard {
             // enforced by the adapter registry's verification process.
             // On-chain, we trust that verified adapters implement this correctly.
         }
+    }
+
+    function setProviderAsset(bytes32 providerId, address collateralAsset, bool approved) external onlyOwner {
+        require(providerId != bytes32(0), "Provider required");
+        require(providerConfigurators[providerId] != address(0), "Provider not configured");
+        require(collateralAsset != address(0) && collateralAsset.code.length > 0, "Invalid collateral asset");
+
+        if (approved) {
+            bytes32 currentProvider = canonicalProviderForAsset[collateralAsset];
+            if (currentProvider != bytes32(0) && currentProvider != providerId) revert AssetReservedForProvider();
+            isProviderAsset[providerId][collateralAsset] = true;
+            canonicalProviderForAsset[collateralAsset] = providerId;
+        } else if (canonicalProviderForAsset[collateralAsset] == providerId) {
+            delete isProviderAsset[providerId][collateralAsset];
+            delete canonicalProviderForAsset[collateralAsset];
+        } else {
+            delete isProviderAsset[providerId][collateralAsset];
+        }
+        emit ProviderAssetUpdated(providerId, collateralAsset, approved);
+    }
+
+    function setProviderConfigurator(bytes32 providerId, address configurator) external onlyOwner {
+        require(providerId != bytes32(0), "Provider required");
+        require(configurator != address(0) && configurator.code.length > 0, "Invalid configurator");
+        if (IProviderConfigurator(configurator).providerId() != providerId) {
+            revert ProviderIdMismatch();
+        }
+        providerConfigurators[providerId] = configurator;
+        emit ProviderConfiguratorUpdated(providerId, configurator);
     }
 
     // ============ Lending Asset Management ============

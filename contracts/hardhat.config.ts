@@ -13,6 +13,7 @@ dotenv.config();
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000001";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || "";
+const ROBINHOOD_RPC_URL = process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -81,6 +82,16 @@ const config: HardhatUserConfig = {
       url: process.env.BASE_RPC_URL || "https://mainnet.base.org",
       chainId: 8453,
       accounts: [PRIVATE_KEY],
+    },
+
+    // Robinhood Chain Mainnet. Deployment remains blocked until all provider
+    // manifest values (USDC, sequencer health, router, feeds, and legal controls)
+    // are independently verified and supplied to deployV2.ts.
+    robinhood: {
+      url: ROBINHOOD_RPC_URL,
+      chainId: 4663,
+      accounts: [PRIVATE_KEY],
+      gasPrice: "auto",
     },
   },
 

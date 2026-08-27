@@ -25,11 +25,10 @@ describe("ChainlinkEquityFeedAdapter - B20 24/5 fix", function () {
     adapter = await Adapter.deploy(await factory.getAddress());
     const MockFeed = await ethers.getContractFactory("MockChainlinkFeed");
     feed = await MockFeed.deploy(2000n * 10n ** 8n, 8, 0);
-    sequencer = await MockFeed.deploy(0, 0, 0);
-    // sequencer up (answer 0 = up per MockChainlinkFeed logic? Actually adapter checks answer==1 for up? Check _isSequencerUp)
-    // In ChainlinkEquityFeedAdapter.sol _isSequencerUp checks answer==1 for up, but MockChainlinkFeed deployed with 0 => will be considered down?
-    // Let's set sequencer to answer 1 = up, with fresh updatedAt
-    await sequencer.setAnswer(1);
+    sequencer = await MockFeed.deploy(0, 0, 1);
+    // Chainlink L2 uptime feeds encode 0 = up and 1 = down.
+    // The nonzero start time also lets the grace-period check pass.
+    await sequencer.setAnswer(0);
     market = await ethers.Wallet.createRandom();
     // configure market
     await adapter.connect(factory).configure(market.address, ethers.ZeroAddress);
@@ -62,7 +61,7 @@ describe("ChainlinkEquityFeedAdapter - B20 24/5 fix", function () {
       const ts = monday + offset * 86400;
       const dayName = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][offset];
       await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, ts);
-      await sequencer.setAnswerAndTimestamp(1, ts);
+      await sequencer.setAnswerAndTimestamp(0, ts);
       await ethers.provider.send("evm_setNextBlockTimestamp", [ts]);
       await ethers.provider.send("evm_mine", []);
       const [, isTrusted] = await callGetPrice(adapter, market.address);
@@ -81,7 +80,7 @@ describe("ChainlinkEquityFeedAdapter - B20 24/5 fix", function () {
 
     // Monday
     await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, monday);
-    await sequencer.setAnswerAndTimestamp(1, monday);
+    await sequencer.setAnswerAndTimestamp(0, monday);
     await ethers.provider.send("evm_setNextBlockTimestamp", [monday]);
     await ethers.provider.send("evm_mine", []);
     let [, trustedMon] = await callGetPrice(adapter, market.address);
@@ -107,18 +106,37 @@ describe("ChainlinkEquityFeedAdapter - B20 24/5 fix", function () {
   it("should be untrusted when sequencer down regardless of weekday", async function () {
     const monday = await nextMondayNoonUTC();
     await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, monday);
-    await sequencer.setAnswerAndTimestamp(0, monday); // 0 = down
+    await sequencer.setAnswerAndTimestamp(1, monday); // 1 = down
     await ethers.provider.send("evm_setNextBlockTimestamp", [monday]);
     await ethers.provider.send("evm_mine", []);
     const [, trusted] = await callGetPrice(adapter, market.address);
     expect(trusted).to.equal(false);
   });
 
+  it("should enforce a one-hour grace period after sequencer recovery", async function () {
+    const monday = await nextMondayNoonUTC();
+    await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, monday);
+    await sequencer.setStartedAt(monday);
+    await sequencer.setAnswerAndTimestamp(0, monday);
+    await ethers.provider.send("evm_setNextBlockTimestamp", [monday]);
+    await ethers.provider.send("evm_mine", []);
+    let [, trustedDuringGrace] = await callGetPrice(adapter, market.address);
+    expect(trustedDuringGrace).to.equal(false);
+
+    const recoveredAt = monday + 3601;
+    await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, recoveredAt);
+    await sequencer.setAnswerAndTimestamp(0, recoveredAt);
+    await ethers.provider.send("evm_setNextBlockTimestamp", [recoveredAt]);
+    await ethers.provider.send("evm_mine", []);
+    let [, trustedAfterGrace] = await callGetPrice(adapter, market.address);
+    expect(trustedAfterGrace).to.equal(true);
+  });
+
   it("should respect maxStaleness 90000 (25h) not 86700", async function () {
     const monday = await nextMondayNoonUTC();
     // within 90000
     await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, monday - 89999);
-    await sequencer.setAnswerAndTimestamp(1, monday);
+    await sequencer.setAnswerAndTimestamp(0, monday);
     await ethers.provider.send("evm_setNextBlockTimestamp", [monday]);
     await ethers.provider.send("evm_mine", []);
     let [, trusted1] = await callGetPrice(adapter, market.address);
@@ -127,7 +145,7 @@ describe("ChainlinkEquityFeedAdapter - B20 24/5 fix", function () {
     // stale >90000
     const later = monday + 10;
     await feed.setAnswerAndTimestamp(2000n * 10n ** 8n, later - 90001);
-    await sequencer.setAnswerAndTimestamp(1, later);
+    await sequencer.setAnswerAndTimestamp(0, later);
     await ethers.provider.send("evm_setNextBlockTimestamp", [later]);
     await ethers.provider.send("evm_mine", []);
     let [, trusted2] = await callGetPrice(adapter, market.address);

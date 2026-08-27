@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { useMarket } from "@/hooks/useMarkets";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
-import { MARKET_STATUS } from "@/lib/contractAbis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
 import { isB20Token, getB20Info } from "@/lib/b20";
+import { formatUnits, isAddress, parseUnits } from "viem";
+import { IORACLE_ADAPTER_ABI, MARKET_STATUS } from "@/lib/contractAbis";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
-import { isAddress } from "viem";
 import { ArrowLeft, Warning, CheckCircle } from "@phosphor-icons/react";
 
 function formatLtv(ltvBps: number) {
@@ -30,8 +30,10 @@ function formatDuration(seconds: number) {
 
 function formatLiquidity(val: string) {
   try {
-    const num = parseFloat(val);
-    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Number(formatUnits(BigInt(val || "0"), 6)).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   } catch {
     return "0";
   }
@@ -45,36 +47,76 @@ export default function MarketDetailPage() {
 
   const { data: market, isLoading, error } = useMarket(marketId);
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
+  const { data: collateralToken } = useTokenMetadata(
+    market && isAddress(market.collateralAsset) ? market.collateralAsset : undefined,
+    market?.chainId,
+  );
+  const publicClient = usePublicClient({ chainId: market?.chainId });
+  const [oracleData, setOracleData] = useState<readonly [bigint, boolean, bigint] | undefined>();
+
+  useEffect(() => {
+    let active = true;
+    if (!publicClient || !market?.oracleAdapter || !isAddress(market.oracleAdapter) || !market.marketAddress) {
+      setOracleData(undefined);
+      return () => { active = false; };
+    }
+    publicClient.readContract({
+      address: market.oracleAdapter as `0x${string}`,
+      account: market.marketAddress as `0x${string}`,
+      abi: IORACLE_ADAPTER_ABI,
+      functionName: "getPrice",
+    }).then((result) => {
+      if (active) setOracleData(result as readonly [bigint, boolean, bigint]);
+    }).catch(() => {
+      if (active) setOracleData(undefined);
+    });
+    return () => { active = false; };
+  }, [publicClient, market?.oracleAdapter, market?.marketAddress]);
 
   const [collateralAmount, setCollateralAmount] = useState("");
+  const [requestedBorrow, setRequestedBorrow] = useState("");
   const [txHash, setTxHash] = useState<string | null>(null);
 
+  const collateralDecimals = collateralToken?.isValid ? collateralToken.decimals : 18;
+  const oraclePrice = oracleData?.[0] as bigint | undefined;
+  const oracleTrusted = Boolean(oracleData?.[1]);
+
+  const calculateMaxBorrowRaw = () => {
+    if (!market || !collateralAmount || !oraclePrice || !oracleTrusted) return 0n;
+    const collateralRaw = parseUnits(collateralAmount, collateralDecimals);
+    const collateralValue18 = (collateralRaw * oraclePrice) / 10n ** BigInt(collateralDecimals);
+    const maxBorrow18 = (collateralValue18 * BigInt(market.ltvBps)) / 10000n;
+    return (maxBorrow18 * 10n ** 6n) / 10n ** 18n;
+  };
+
   const calculateMaxBorrow = () => {
-    if (!market || !collateralAmount) return "0";
-    const collateral = parseFloat(collateralAmount);
-    const ltv = market.ltvBps / 10000;
-    return (collateral * ltv).toFixed(6);
+    const maxBorrowRaw = calculateMaxBorrowRaw();
+    return formatUnits(maxBorrowRaw, 6);
   };
 
   const calculateInterest = () => {
     if (!market || !collateralAmount) return "0";
-    const maxBorrow = parseFloat(calculateMaxBorrow());
+    const principal = requestedBorrow ? Number(requestedBorrow) : Number(calculateMaxBorrow());
     const apr = market.aprBps / 10000;
     const days = Math.floor(market.durationSeconds / 86400);
-    return ((maxBorrow * apr * days) / 365).toFixed(6);
+    return ((principal * apr * days) / 365).toFixed(6);
   };
 
   const handleRequestLoan = async () => {
-    if (!userAddress) return;
-    if (!market) return;
+    if (!userAddress || !market || !collateralAmount) return;
     try {
-      // Approve collateral for asset adapter, then request loan
-      const amount = BigInt(parseFloat(collateralAmount) * 1e18);
+      const amount = parseUnits(collateralAmount, collateralDecimals);
+      const maxBorrowRaw = calculateMaxBorrowRaw();
+      const requestedPrincipal = requestedBorrow ? parseUnits(requestedBorrow, 6) : undefined;
+      if (requestedPrincipal !== undefined && (requestedPrincipal === 0n || requestedPrincipal > maxBorrowRaw)) {
+        throw new Error("Requested USDC exceeds the oracle-valued maximum.");
+      }
       const result = await requestLoan(
         market.marketAddress,
         market.collateralAsset,
         amount.toString(),
-        market.assetAdapter || ""
+        market.assetAdapter || "",
+        requestedPrincipal,
       );
       setTxHash(result.txHash);
       setTimeout(() => router.push("/dashboard"), 2000);
@@ -119,7 +161,8 @@ export default function MarketDetailPage() {
     );
   }
 
-  const statusLabel = MARKET_STATUS[market.status as keyof typeof MARKET_STATUS] || "Unknown";
+  const marketStatus = market.status ?? (market.active ? 0 : 3);
+  const statusLabel = MARKET_STATUS[marketStatus as keyof typeof MARKET_STATUS] || "Unknown";
   const isPaused = statusLabel !== "ACTIVE";
 
   return (
@@ -139,8 +182,8 @@ export default function MarketDetailPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-3 flex-wrap">
               {(() => {
-                const isB20 = isB20Token(market.collateralAsset);
-                const b20 = isB20 ? getB20Info(market.collateralAsset) : undefined;
+                const isB20 = isB20Token(market.collateralAsset, market.chainId);
+                const b20 = isB20 ? getB20Info(market.collateralAsset, market.chainId) : undefined;
                 return (
                   <>
                     {isB20 && b20 ? (
@@ -344,17 +387,24 @@ export default function MarketDetailPage() {
               {/* Receive Amount */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground">
-                  Receive Borrowed USDC
+                  Borrow USDC (optional; blank uses maximum)
                 </label>
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-muted/50 border border-border">
-                  <span className={cn(
-                    "text-lg font-bold w-1/2",
-                    collateralAmount ? "text-ice-600 dark:text-ice-300" : "text-muted-foreground"
-                  )}>
-                    {collateralAmount ? calculateMaxBorrow() : "0"}
-                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    placeholder={collateralAmount ? calculateMaxBorrow() : "0"}
+                    value={requestedBorrow}
+                    onChange={(e) => setRequestedBorrow(e.target.value)}
+                    disabled={isPaused || !oracleTrusted}
+                    className="bg-transparent text-lg font-bold w-1/2 focus:outline-none placeholder:text-muted-foreground disabled:opacity-50"
+                  />
                   <span className="text-xs font-bold text-muted-foreground">USDC</span>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Maximum available: <span className="font-bold text-ice-600 dark:text-ice-300">{collateralAmount && oracleTrusted ? calculateMaxBorrow() : "Unavailable"} USDC</span>
+                </p>
               </div>
 
               {/* Interest Preview */}
@@ -367,7 +417,7 @@ export default function MarketDetailPage() {
                   <div className="flex justify-between font-bold border-t border-border pt-1">
                     <span className="text-muted-foreground">Total Repayment:</span>
                     <span>
-                      {(parseFloat(calculateMaxBorrow()) + parseFloat(calculateInterest())).toFixed(6)} USDC
+                      {((requestedBorrow ? Number(requestedBorrow) : Number(calculateMaxBorrow())) + Number(calculateInterest())).toFixed(6)} USDC
                     </span>
                   </div>
                 </div>
@@ -376,10 +426,10 @@ export default function MarketDetailPage() {
               {/* CTA */}
               <button
                 onClick={handleRequestLoan}
-                disabled={isTxLoading || !collateralAmount || !userAddress || isPaused}
+                disabled={isTxLoading || !collateralAmount || !userAddress || isPaused || !oracleTrusted}
                 className={cn(
                   "w-full py-3.5 rounded-2xl font-bold text-sm transition-premium active-press",
-                  isTxLoading || !collateralAmount || !userAddress || isPaused
+                  isTxLoading || !collateralAmount || !userAddress || isPaused || !oracleTrusted
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-ice-300 dark:bg-ice-400 text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 shadow-glow"
                 )}
@@ -390,6 +440,8 @@ export default function MarketDetailPage() {
                   ? "Connect Wallet"
                   : isPaused
                   ? "Market Paused"
+                  : !oracleTrusted
+                  ? "Oracle Unavailable"
                   : "Confirm & Borrow"}
               </button>
             </div>
