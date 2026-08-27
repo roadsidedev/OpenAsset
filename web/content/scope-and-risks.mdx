@@ -1,0 +1,85 @@
+---
+title: Scope and risks
+description: Review OpenAsset’s v1 scope, responsibility boundaries, and decision-relevant risks.
+---
+
+# Scope and risks
+
+OpenAsset is permissionless lending infrastructure, not an underwriting service. Anyone can create a market, but market creators choose the parameters and LPs carry the market’s economic risk. Read these boundaries before you deploy a market or deposit collateral.
+
+## v1 scope
+
+| Boundary | Current scope |
+|---|---|
+| Lending asset | Stablecoins only. The Factory enforces the allowlist. |
+| Chains | EVM deployments, including Ethereum, Base, Arbitrum, Optimism, Polygon, and EVM-compatible RWA-specific chains. Each chain has its own Factory and Registry. |
+| Collateral | Tokenized assets supported by the selected Asset, Oracle, Compliance, Liquidation, and Position adapters. |
+| Cross-chain behavior | No unified cross-chain liquidity, position portability, or shared cross-chain reputation layer in v1. |
+| Non-EVM chains | Solana and other non-EVM deployments require separate architecture and are deferred. |
+
+See [Lending asset scope](/docs/protocol/lending-assets), [Multi-chain architecture](/docs/protocol/multi-chain), and [Deferred / out of scope](/docs/reference/deferred) for details.
+
+## Permissionless does not mean risk-free
+
+Permissionless creation removes an asset-listing committee and governance approval step. It does not remove the need to inspect the market’s configuration, adapters, oracle, liquidation path, or legal obligations.
+
+Before using a market, review its:
+
+- Collateral asset and transfer restrictions.
+- LTV, APR, duration, grace period, and health-factor settings.
+- Oracle type, trust status, staleness behavior, and price coverage.
+- Liquidation mechanism and whether settlement is synchronous or asynchronous.
+- Position representation and current holder rules.
+- Adapter verification and deprecation status.
+
+## Adapter trust boundary
+
+Anyone can register an adapter. The registry attaches trust metadata, but the engine calls Verified and Unverified adapters through the same external-call boundary and verifies their outputs in both cases.
+
+A Verified status is a process control: it records that OpenAsset’s review process or audit sign-off has been completed. It is not a guarantee that the adapter is free of bugs. Unverified adapters require explicit risk acknowledgment, and Deprecated adapters cannot be selected for new markets.
+
+Read the [adapter trust model](/docs/protocol/trust-model) and [adapter registry](/docs/protocol/adapter-registry).
+
+## Compliance boundary
+
+A Compliance Adapter performs point-in-time checks at defined protocol actions:
+
+- Loan origination.
+- Position transfer when the position is transferable.
+
+It does not continuously monitor real-world eligibility during a loan. It does not define the issuer’s KYC, AML, jurisdiction, or eligible-investor rules. If a participant’s status changes mid-loan, ongoing enforcement depends on the underlying token issuer’s own controls.
+
+Read [Compliance responsibility boundary](/docs/protocol/compliance) before launching a permissioned market.
+
+## RWA and tokenized-equity risk
+
+A tokenized equity or RWA token is a claim on an issuer. If the issuer becomes insolvent, halts redemptions, or is shut down by a regulator, the token can freeze or go to zero independently of the underlying asset’s price and independently of OpenAsset’s liquidation mechanics.
+
+This is an uninsured, total-loss-possible risk category. It is not something a smart contract, adapter, or circuit breaker can remove. RWA markets also require issuer-specific oracle and compliance decisions, an asynchronous redemption path where applicable, and securities or RWA counsel review before real-user launch.
+
+Read [RWA and tokenized equity support](/docs/protocol/rwa) and [Launch an RWA market](/docs/guides/rwa-market).
+
+## Liquidation boundaries
+
+All liquidation adapters must account for both sides of the result: value recovered for the LP and surplus returned to the current position holder.
+
+For synchronous liquidations, such as a DEX swap or NFT auction, resolution usually completes in one transaction. For issuer redemption, the holder can repay during `LIQUIDATION_CURE`. Once the cure window expires and the loan enters `LIQUIDATION_SETTLING`, the redemption is in flight and repayment is no longer possible.
+
+Read [Liquidations](/docs/protocol/liquidations) and [Async liquidation flow](/docs/guides/liquidation).
+
+## What is deferred
+
+The v1 architecture deliberately leaves several capabilities out of scope:
+
+- Reputation-based lending tiers.
+- Agentic borrowers.
+- Non-stablecoin lending assets such as ETH or BTC.
+- Solana or other non-EVM deployments.
+- Unified cross-chain liquidity and position portability.
+- Autonomous adapter verification.
+
+Read [Deferred / out of scope](/docs/reference/deferred) for the reasons behind each decision.
+
+## Next step
+
+If these boundaries fit your use case, choose a workflow from [Choose your path](/docs/choose-your-path). If you are reviewing protocol risk, continue to the [security model](/docs/protocol/security).

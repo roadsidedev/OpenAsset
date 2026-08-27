@@ -1,0 +1,109 @@
+---
+title: How a market works
+description: Follow an OpenAsset market from configuration to loan repayment or liquidation.
+---
+
+# How a market works
+
+An OpenAsset market is an isolated `LendingMarket` contract with its own liquidity, collateral asset, risk parameters, and adapter stack. The Factory creates the market after validating that its configuration is compatible.
+
+## 1. A market creator configures the market
+
+The liquidity provider chooses the collateral asset, lending asset, adapter set, and risk terms. The lending asset must be on the protocol’s stablecoin allowlist.
+
+The configuration includes:
+
+- LTV, APR, duration, and grace period.
+- Whether health-factor checks are enabled.
+- Circuit-breaker thresholds and cooldown settings.
+- Asset, oracle, compliance, liquidation, and position adapters.
+
+The Factory rejects incompatible combinations before deployment. For example, an oracle must cover the selected asset type, a permissioned asset requires a Compliance Adapter, and an asynchronous liquidation adapter requires compliance checks.
+
+Read the [validation matrix](/docs/protocol/validation-matrix) for the complete rules.
+
+## 2. The Factory deploys an isolated market
+
+After validation, the Factory deploys a new `LendingMarket`, wires the selected adapters, registers the market metadata, and collects the creation fee. The market creator then seeds it with stablecoin liquidity.
+
+A failure in one isolated market does not create shared-pool contagion in another market. Each market has its own liquidity accounting and liquidation path.
+
+## 3. A borrower reviews the market
+
+Before depositing collateral, the borrower should review the market’s:
+
+| Item | Why it matters |
+|---|---|
+| Collateral asset | Determines what is held and how it can be released. |
+| LTV | Determines the maximum principal relative to collateral value. |
+| APR, duration, and grace period | Determine the cost and repayment deadline. |
+| Oracle | Determines how collateral is priced and when a price is considered trusted. |
+| Liquidation path | Determines how a default is resolved. |
+| Position type | Determines who controls the loan position and whether it can transfer. |
+| Adapter status | Shows whether adapters are Verified, Unverified, or Deprecated. |
+
+If a Compliance Adapter is configured, the application checks eligibility before asking for wallet approval.
+
+## 4. The engine originates the loan
+
+The engine follows the same sequence regardless of collateral type:
+
+```text
+Check compliance, if configured
+        ↓
+Check asset transferability
+        ↓
+Read a trusted oracle
+        ↓
+Compute the maximum loan from LTV
+        ↓
+Escrow collateral and verify the balance change
+        ↓
+Create the position
+        ↓
+Transfer stablecoins to the borrower
+```
+
+The engine delegates asset-specific behavior to adapters, but it independently verifies adapter outputs. Verified and unverified adapters are both external, semi-trusted code from the engine’s point of view.
+
+## 5. The borrower repays or the market resolves a default
+
+A borrower can repay while the loan is active or during its grace period. When the loan closes as repaid, the Asset Adapter releases the collateral and the position is closed.
+
+If the loan defaults, the configured Liquidation Adapter resolves it. All liquidation adapters must return both the amount recovered for the LP and the amount returned to the current position holder. The protocol takes the debt plus the configured penalty and returns the surplus.
+
+### Synchronous liquidation
+
+DEX swaps and NFT auctions usually settle in one transaction:
+
+```text
+ACTIVE → GRACE_PERIOD → LIQUIDATED
+   │                        │
+   └─ repay → REPAID        └─ debt recovered; surplus returned
+```
+
+### Asynchronous issuer redemption
+
+Issuer-backed assets can require an external redemption process:
+
+```text
+ACTIVE → GRACE_PERIOD → LIQUIDATION_CURE → LIQUIDATION_SETTLING → LIQUIDATED
+                              │                         │
+                              └─ repay                  └─ settlement confirms
+```
+
+During `LIQUIDATION_CURE`, interest freezes and repayment is still possible. When the cure window expires, the adapter submits redemption and the loan enters `LIQUIDATION_SETTLING`. That transition is irreversible. If settlement does not arrive within the outer timeout, the loan is flagged for manual LP intervention.
+
+Read the [loan lifecycle](/docs/protocol/loan-lifecycle) and [async liquidation flow](/docs/guides/liquidation) for the complete state transitions.
+
+## What the engine protects
+
+The core engine keeps several rules independent of the chosen adapters:
+
+- Adapter outputs are checked defensively.
+- External calls use reentrancy protection and CEI ordering.
+- The circuit breaker can pause new originations when volatility or oracle trust conditions fail.
+- The loan state machine prevents invalid transitions.
+- Liquidation accounting reconciles recovered debt and returned surplus.
+
+Read the [protocol overview](/docs/protocol/overview) for the architecture and the [security model](/docs/protocol/security) for the implementation baseline.
