@@ -7,13 +7,13 @@ import { useAccount, usePublicClient } from "wagmi";
 import { useMarket } from "@/hooks/useMarkets";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, Warning, CheckCircle, ArrowsClockwise } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
 import { formatUnits, isAddress, parseUnits } from "viem";
 import { IORACLE_ADAPTER_ABI, MARKET_STATUS } from "@/lib/contractAbis";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { resolveAssetIdentity } from "@/lib/assetIdentity";
-import { ArrowLeft, Warning, CheckCircle } from "@phosphor-icons/react";
 
 function formatLtv(ltvBps: number) {
   return `${(ltvBps / 100).toFixed(1)}%`;
@@ -42,10 +42,11 @@ function formatLiquidity(val: string) {
 export default function MarketDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const marketId = params.marketId as string;
+  const rawId = (params as { marketId?: string | string[] })?.marketId;
+  const marketId = Array.isArray(rawId) ? rawId[0] : (rawId as string) || "";
   const { address: userAddress } = useAccount();
 
-  const { data: market, isLoading, error } = useMarket(marketId);
+  const { data: market, isLoading, isFetching, error, refetch } = useMarket(marketId);
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
   const { data: collateralToken } = useTokenMetadata(
     market && isAddress(market.collateralAsset) ? market.collateralAsset : undefined,
@@ -76,6 +77,7 @@ export default function MarketDetailPage() {
   const [collateralAmount, setCollateralAmount] = useState("");
   const [requestedBorrow, setRequestedBorrow] = useState("");
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const collateralDecimals = collateralToken?.isValid ? collateralToken.decimals : 18;
   const oraclePrice = oracleData?.[0] as bigint | undefined;
@@ -125,7 +127,9 @@ export default function MarketDetailPage() {
     }
   };
 
-  if (isLoading) {
+  const isInitialLoading = (!marketId || isLoading || (isFetching && !market)) && !error;
+
+  if (isInitialLoading) {
     return (
       <div className="min-h-dvh">
         <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 space-y-6">
@@ -148,14 +152,31 @@ export default function MarketDetailPage() {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Warning className="h-12 w-12 text-destructive mx-auto" />
+          <Warning className="h-12 w-12 text-muted-foreground mx-auto" />
           <h2 className="text-xl font-bold text-foreground text-balance">Market Not Found</h2>
           <p className="text-muted-foreground text-sm">
             The market you&apos;re looking for doesn&apos;t exist or isn&apos;t available.
           </p>
-          <Link href="/markets" className="inline-block text-ice-500 hover:text-ice-600 text-sm font-medium">
-            ← Back to Markets
-          </Link>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={async () => {
+                setLocalError(null);
+                try {
+                  await refetch();
+                } catch {
+                  setLocalError('Retry failed');
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-ice-300 dark:bg-ice-400 px-5 py-2 text-sm font-bold text-slate-900 transition-premium hover:bg-ice-400 dark:hover:bg-ice-300 active-press"
+            >
+              <ArrowsClockwise className="h-4 w-4" />
+              Try again
+            </button>
+            <Link href="/markets" className="inline-flex items-center rounded-full border border-border bg-card px-5 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors">
+              ← Back to Markets
+            </Link>
+          </div>
+          {localError && <p className="text-xs text-destructive">{localError}</p>}
         </div>
       </div>
     );

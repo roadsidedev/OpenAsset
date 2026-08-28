@@ -10,9 +10,23 @@ import { config, supportedChains } from '../lib/wagmi';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider, useTheme } from './ThemeProvider';
 
-const queryClient = new QueryClient();
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 20_000,
+        gcTime: 5 * 60 * 1000,
+        retry: 2,
+        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+      },
+      mutations: { retry: 1 },
+    },
+  });
+}
 
-function ThemedPrivyProvider({ children, appId }: { children: React.ReactNode; appId: string }) {
+function ThemedPrivyProvider({ children, appId, queryClient }: { children: React.ReactNode; appId: string; queryClient: InstanceType<typeof QueryClient> }) {
   const { theme } = useTheme();
   return (
     <PrivyProvider
@@ -43,6 +57,7 @@ function ThemedToaster() {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  const [queryClient] = React.useState(() => makeQueryClient());
 
   if (!appId || appId === 'test-app-id' || appId.startsWith('clp000')) {
   return (
@@ -59,7 +74,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeProvider>
-      <ThemedPrivyProvider appId={appId}>{children}</ThemedPrivyProvider>
+      <ThemedPrivyProvider appId={appId} queryClient={queryClient}>{children}</ThemedPrivyProvider>
     </ThemeProvider>
   );
 }

@@ -33,51 +33,41 @@ function buildArcs(data: AssetCategory[], radius: number) {
   return { total, arcs, circumference };
 }
 
-/* ──────────────────────── Inline Mini Donut ──────────────────────── */
+/* ──────────────────────── Mini Donut ──────────────────────── */
 
 function MiniDonut({ data }: { data: AssetCategory[] }) {
-  const radius = 20;
-  const cx = 30;
-  const cy = 30;
-  const strokeWidth = 8;
+  const radius = 26;
+  const cx = 36;
+  const cy = 36;
+  const strokeWidth = 10;
   const { total, arcs, circumference } = buildArcs(data, radius);
-  const activeCount = data.filter((d) => d.count > 0).length;
 
   if (total === 0) {
     return (
-      <div className="flex items-center gap-3">
-        <svg viewBox="0 0 60 60" className="h-[52px] w-[52px] shrink-0">
-          <circle cx={cx} cy={cy} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-muted/20" />
-        </svg>
-        <span className="text-xs text-muted-foreground">No data</span>
-      </div>
+      <svg viewBox="0 0 72 72" className="h-16 w-16">
+        <circle cx={cx} cy={cy} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-muted/20" />
+      </svg>
     );
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <svg viewBox="0 0 60 60" className="h-[52px] w-[52px] shrink-0 -rotate-90">
-        <circle cx={cx} cy={cy} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-muted/15" />
-        {arcs.map((arc) => (
-          <circle
-            key={arc.id}
-            cx={cx}
-            cy={cy}
-            r={radius}
-            fill="none"
-            stroke={arc.color}
-            strokeWidth={strokeWidth}
-            strokeDasharray={`${arc.dashLength} ${circumference - arc.dashLength}`}
-            strokeDashoffset={arc.offset}
-            strokeLinecap="butt"
-          />
-        ))}
-      </svg>
-      <div className="flex flex-col gap-1">
-        <span className="text-lg font-bold text-foreground leading-none">{activeCount}</span>
-        <span className="text-xs text-muted-foreground">Assets</span>
-      </div>
-    </div>
+    <svg viewBox="0 0 72 72" className="h-16 w-16 -rotate-90">
+      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-muted/15" />
+      {arcs.map((arc) => (
+        <circle
+          key={arc.id}
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill="none"
+          stroke={arc.color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${arc.dashLength} ${circumference - arc.dashLength}`}
+          strokeDashoffset={arc.offset}
+          strokeLinecap="butt"
+        />
+      ))}
+    </svg>
   );
 }
 
@@ -96,7 +86,7 @@ function InteractiveDonut({
   onSelect: (id: string | null) => void;
   selectedId: string | null;
 }) {
-  const radius = 36;
+  const radius = 38;
   const cx = 50;
   const cy = 50;
   const strokeWidth = 14;
@@ -170,7 +160,7 @@ function InteractiveDonut({
             </>
           ) : (
             <>
-              <p className="text-2xl font-bold text-foreground leading-tight">{data.length}</p>
+              <p className="text-2xl font-bold text-foreground leading-tight">{data.filter((d) => d.count > 0).length}</p>
               <p className="text-xs text-muted-foreground leading-tight">asset types</p>
             </>
           )}
@@ -340,45 +330,22 @@ function ExpandedModal({
 export function AssetDistributionCard({ data, isLoading, error }: AssetDistributionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const topCategory = [...data].sort((a, b) => b.count - a.count).find((d) => d.count > 0);
   const totalPositions = data.reduce((s, d) => s + d.count, 0);
   const hasData = totalPositions > 0;
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-border/70 bg-card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="h-3.5 w-3.5 rounded bg-muted animate-pulse" />
-          <div className="h-3 w-24 rounded bg-muted animate-pulse" />
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
-          <div className="space-y-2">
-            <div className="h-3 w-20 rounded bg-muted animate-pulse" />
-            <div className="h-2.5 w-14 rounded bg-muted animate-pulse" />
-          </div>
-        </div>
+      <div className="rounded-2xl border border-border/70 bg-card p-4 flex items-center justify-center">
+        <div className="h-16 w-16 rounded-full bg-muted animate-pulse" />
       </div>
     );
   }
 
   if (error || !hasData) {
     return (
-      <div className="rounded-2xl border border-border/70 bg-card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted">
-            <ChartPieSlice className="h-3.5 w-3.5 text-muted-foreground" />
-          </span>
-          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distribution</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-border bg-muted/40">
-            <ChartPieSlice className="h-4 w-4 text-muted-foreground/50" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">No positions yet</p>
-            <p className="text-xs text-muted-foreground">Distribution will appear here</p>
-          </div>
+      <div className="rounded-2xl border border-border/70 bg-card p-4 flex items-center justify-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-border bg-muted/40">
+          <ChartPieSlice className="h-6 w-6 text-muted-foreground/50" />
         </div>
       </div>
     );
@@ -390,35 +357,15 @@ export function AssetDistributionCard({ data, isLoading, error }: AssetDistribut
         onClick={() => setIsModalOpen(true)}
         className="group rounded-2xl border border-border/70 bg-card p-4 text-left transition-colors hover:border-border hover:bg-muted/20"
       >
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted">
-              <ChartPieSlice className="h-3.5 w-3.5 text-muted-foreground" />
-            </span>
-            <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distribution</span>
-          </div>
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center justify-center">
+          <MiniDonut data={data} />
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Distribution</span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
             <ArrowsOutSimple className="h-3 w-3" />
             Details
           </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <MiniDonut data={data} />
-
-          <div className="flex flex-col gap-1 min-w-0">
-            {topCategory && (
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: topCategory.color }} />
-                <span className="text-xs font-medium text-foreground truncate">
-                  {topCategory.name} · {topCategory.percentage}%
-                </span>
-              </div>
-            )}
-            <span className="text-xs text-muted-foreground">
-              {totalPositions} position{totalPositions !== 1 ? "s" : ""} · {data.length} types
-            </span>
-          </div>
         </div>
       </button>
 

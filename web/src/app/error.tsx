@@ -13,11 +13,14 @@ export default function Error({
     console.error(error);
   }, [error]);
 
+  const isTransportError = error.message?.includes('Transport') || error.message?.includes('URL was provided');
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-background text-foreground">
-      <h2 className="text-2xl font-bold">Connection failed</h2>
-      <p className="mt-2 text-muted-foreground">
-        Please try again. If the problem persists, check your network connection.
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 text-center text-foreground">
+      <h2 className="text-2xl font-bold">{isTransportError ? 'Network hiccup' : 'Connection failed'}</h2>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        {isTransportError
+          ? 'A temporary RPC issue prevented loading. This usually resolves on retry.'
+          : 'Please try again. If the problem persists, check your network connection.'}
       </p>
       <button
         onClick={() => reset()}
