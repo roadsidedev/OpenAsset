@@ -57,8 +57,11 @@ describe("Robinhood provider bundle", function () {
 
     const Registry = await ethers.getContractFactory("AdapterRegistry");
     registry = await Registry.deploy(governance.address);
+    const MarketImpl = await ethers.getContractFactory("LendingMarketV2");
+    const marketTemplate = await MarketImpl.deploy();
+    await marketTemplate.waitForDeployment();
     const Deployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await Deployer.deploy();
+    const deployer = await Deployer.deploy(await marketTemplate.getAddress());
     const Factory = await ethers.getContractFactory("MarketFactoryV2");
     factory = await Factory.deploy(owner.address, treasury.address, registry.target, deployer.target);
 
@@ -135,6 +138,8 @@ describe("Robinhood provider bundle", function () {
     );
 
     const market = (await factory.getAllMarkets())[0];
+    // Disable 24/5 window for unit test (hardhat block timestamp may be weekend)
+    await oracle.setTradingWindowEnforcement(market, false);
     await compliance.setEligibility(market, owner.address, true);
     await token.mint(owner.address, ethers.parseEther("1"));
     await token.connect(owner).approve(assetAdapter.target, ethers.parseEther("1"));

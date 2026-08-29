@@ -1,24 +1,25 @@
 {
   "network": "baseSepolia",
   "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
-  "timestamp": "2026-08-27T16:15:35.000Z",
+  "timestamp": "2026-08-29T10:15:00.000Z",
   "contracts": {
     "adapterRegistry": "0x80f70Da0e0e7A2b9D3A1eE4956309b295329A7D7",
-    "marketDeployer": "0xCB8BD22F1aa8bABa2E759DE49Abee40Afb60D5B1",
-    "marketFactory": "0x9531081E31BC0B6b3Db4E64e47878D261F0F5De4",
-    "erc20Adapter": "0x707901FACDEB84db2830f70Ac0e5e0D0Eeb5C664",
+    "marketDeployer": "0x41e337478439896f394976EDd4F92FD30a589D1c",
+    "lendingMarketV2Template": "0xd0141D03f62Bf0D02bbb915e5613a7B3f3C9400a",
+    "marketFactory": "0xA5EE0c0A2e264B807628a3A3F9057c03D51E233C",
+    "erc20Adapter": "0x1CA59fa7f591a545B11C9aeD553B8E78fB1cc76e",
     "erc721Adapter": "0x46D51374D1C0b4056d7E018734D6f181C4970e87",
     "chainlinkAdapter": "0xFf3E92A3539bAce12DD1901a3D7b8a2bF1d72e46",
-    "uniswapV3TWAPAdapter": "0xC563fd6C2f3D33035aB42e56f15F9f0A7404310E",
-    "standardPosition": "0xb3035966cdf6f595cDB6f43fdA933AEDCE3c443A",
-    "soulboundPosition": "0x9c4e5AB78DF11d8273Dfa5eB232768765a3394cC",
-    "transferablePosition": "0xd66C8f9016f12c2A520A3078BC95BC74993CA433",
-    "dexSwapLiquidation": "0x569F318CFfd60C3b305aa082050c59f192d4c5F0",
+    "uniswapV3TWAPAdapter": "0x0cA4682cB23De44ed95D2171BDC4FCF38dF45fd5",
+    "standardPosition": "0xbD04d11da6340eC3363Af76ed8D10B720D65ec24",
+    "soulboundPosition": "0x668724231F71B17ae4eb16fD10BF9CEaDfE8fE10",
+    "transferablePosition": "0x7d63B0606a285E80CD07D969a5cCF40eD89AE26F",
+    "dexSwapLiquidation": "0x24f572E196DE8971BF3d2D91dF76A80dC92ca927",
     "nftAuctionLiquidation": "0x1746cB9aF9F39125cD8f17Eda680Eb8a1161c020",
-    "b20AssetAdapter": "0x9163527519461FCc6b0c2fC0d4b1CF37Cfc54493",
+    "b20AssetAdapter": "0xC6F5d51304518Fd1C7df8e7E23B16242400aB953",
     "b20PolicyComplianceAdapter": "0xA133495C0b94bD888740C4eA6883D1e6c7E12A40",
-    "chainlinkEquityFeedAdapter": "0xe235167a3A5264b6e55692cCFDDBAA800CD54AC0",
+    "chainlinkEquityFeedAdapter": "0xd4f44f663c9B01CC44583B11eB0cCf164D31753b",
     "b20ProviderConfigurator": "0xf8915Bd2397f69E9e92f053a92a1D3D7b016DaA9"
   },
-  "note": "Multi-tenant adapter architecture: one instance per adapter type serves all markets. All adapters (including position adapters) are multi-tenant — the factory calls registerMarket()/configure() per market. Fixed LendingMarketV2 interest accrual 2026-08-27."
+  "note": "A1 fixes 2026-08-29: clone deployer, ERC20 isTransferable, DEX deadline +900, TWAP fallback, position clone, Chainlink window, repayPartial, MarketDeployer clone pattern"
 }

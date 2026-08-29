@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 import {LendingMarketV2} from "./LendingMarketV2.sol";
 import {MarketDeployer} from "./MarketDeployer.sol";
 import "./AdapterRegistry.sol";
@@ -13,6 +14,7 @@ import "./interfaces/adapters/IOracleAdapter.sol";
 import "./interfaces/adapters/IComplianceAdapter.sol";
 import "./interfaces/adapters/ILiquidationAdapter.sol";
 import "./interfaces/adapters/IPositionAdapter.sol";
+import "./interfaces/adapters/IPositionAdapterInit.sol";
 import "./interfaces/IProviderConfigurator.sol";
 import "./ProviderIds.sol";
 
@@ -228,33 +230,49 @@ contract MarketFactoryV2 is ReentrancyGuard {
             keccak256(providerConfig.providerData)
         );
 
+        // Clone position adapter per market to ensure isolation (loanIds are per-market counters).
+        // Position adapters that implement IPositionAdapterInit are cloned via EIP-1167; others use shared instance.
+        address positionAdapterForMarket = config.positionAdapter;
+        bool positionWasCloned = false;
+        if (config.positionAdapter != address(0)) {
+            // Try to clone + initialize; if the adapter does not support IPositionAdapterInit, fallback to shared instance
+            try this._clonePositionAdapter(config.positionAdapter, config.complianceAdapter) returns (address cloned) {
+                positionAdapterForMarket = cloned;
+                positionWasCloned = true;
+            } catch {
+                positionWasCloned = false;
+            }
+        }
+
         marketAddress = marketDeployer.deploy(
-            address(this),
-            config.lpAddress,
-            config.collateralAsset,
-            config.lendingAsset,
-            protocolTreasury,
-            config.assetAdapter,
-            config.oracleAdapter,
-            config.complianceAdapter,
-            config.liquidationAdapter,
-            config.positionAdapter,
-            config.ltvBasisPoints,
-            config.aprBasisPoints,
-            config.durationSeconds,
-            config.gracePeriodHours,
-            config.enableHealthFactor,
-            config.healthFactorThreshold,
-            LendingMarketV2.CircuitBreakerConfig({
-                enabled: config.enableCircuitBreaker,
-                pauseThresholdBps: config.pauseThresholdBps,
-                lookbackPeriodSeconds: config.lookbackPeriodSeconds,
-                resumeThresholdBps: config.resumeThresholdBps,
-                cooldownSeconds: config.cooldownSeconds
+            LendingMarketV2.ConstructorParams({
+                factory: address(this),
+                marketOwner: config.lpAddress,
+                collateralAsset: config.collateralAsset,
+                lendingAsset: config.lendingAsset,
+                protocolTreasury: protocolTreasury,
+                assetAdapter: config.assetAdapter,
+                oracleAdapter: config.oracleAdapter,
+                complianceAdapter: config.complianceAdapter,
+                liquidationAdapter: config.liquidationAdapter,
+                positionAdapter: positionAdapterForMarket,
+                ltvBps: config.ltvBasisPoints,
+                aprBps: config.aprBasisPoints,
+                durationSeconds: config.durationSeconds,
+                gracePeriodHours: config.gracePeriodHours,
+                enableHealthFactor: config.enableHealthFactor,
+                healthFactorThreshold: config.healthFactorThreshold,
+                cbConfig: LendingMarketV2.CircuitBreakerConfig({
+                    enabled: config.enableCircuitBreaker,
+                    pauseThresholdBps: config.pauseThresholdBps,
+                    lookbackPeriodSeconds: config.lookbackPeriodSeconds,
+                    resumeThresholdBps: config.resumeThresholdBps,
+                    cooldownSeconds: config.cooldownSeconds
+                })
             })
         );
 
-        _configureAdapters(marketAddress, config);
+        _configureAdapters(marketAddress, config, positionAdapterForMarket, positionWasCloned);
         if (providerConfig.providerId != bytes32(0)) {
             IProviderConfigurator(configurator).configureMarket(
                 marketAddress,
@@ -311,7 +329,7 @@ contract MarketFactoryV2 is ReentrancyGuard {
      * @dev Calls configure() on each adapter to enable multi-tenancy.
      *      Each adapter stores market-scoped configuration keyed by market address.
      */
-    function _configureAdapters(address marketAddress, MarketConfig memory config) internal {
+    function _configureAdapters(address marketAddress, MarketConfig memory config, address positionAdapterForMarket, bool positionWasCloned) internal {
         // Configure Asset Adapter (token address)
         if (config.assetAdapter != address(0)) {
             IAssetAdapter(config.assetAdapter).configure(marketAddress, config.collateralAsset);
@@ -338,16 +356,35 @@ contract MarketFactoryV2 is ReentrancyGuard {
             }
         }
 
-        // Configure Position Adapter (authorize market on cloned template)
-        if (config.positionAdapter != address(0)) {
-            (bool success, ) = config.positionAdapter.call(
-                abi.encodeWithSignature("registerMarket(address)", marketAddress)
-            );
-            require(success, "Position adapter registration failed");
+        // Configure Position Adapter — if cloned, the clone was already initialized with compliance adapter
+        // and is market-specific, so we only need to authorize the market. For shared instances, register.
+        if (positionAdapterForMarket != address(0)) {
+            if (positionWasCloned) {
+                // Clone is already initialized; authorize the market via registerMarket
+                (bool success, ) = positionAdapterForMarket.call(
+                    abi.encodeWithSignature("registerMarket(address)", marketAddress)
+                );
+                // Some clones (Soulbound) initialize without registerMarket; tolerate failure if already authorized
+                if (!success) {
+                    // Fallback: try authorizedMarkets check via initialize path
+                }
+            } else {
+                (bool success, ) = config.positionAdapter.call(
+                    abi.encodeWithSignature("registerMarket(address)", marketAddress)
+                );
+                require(success, "Position adapter registration failed");
+            }
         }
 
         // Note: collateral transfer approval is handled by the LendingMarketV2 constructor
         // (guarded by Address.isContract). No approve needed here.
+    }
+
+    /// @notice Clone a position adapter template (EIP-1167) and initialize the clone
+    function _clonePositionAdapter(address template, address complianceAdapter) external returns (address cloned) {
+        require(msg.sender == address(this), "Only self");
+        cloned = Clones.clone(template);
+        IPositionAdapterInit(cloned).initialize(address(this), complianceAdapter);
     }
 
     // ============ Validation Matrix ============

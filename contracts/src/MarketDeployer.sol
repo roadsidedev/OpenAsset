@@ -2,51 +2,23 @@
 pragma solidity ^0.8.20;
 
 import {LendingMarketV2} from "./LendingMarketV2.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 
-/// @notice Standalone deployer for LendingMarketV2.
-/// @dev Extracted from MarketFactoryV2 so the factory does not embed the market's full bytecode.
-///      Follows the same pattern as Uniswap V3's Deployer contract.
+/// @notice Standalone deployer for LendingMarketV2 — now clone-based to avoid 24KB limit.
+/// @dev Holds a template LendingMarketV2 deployed once; each market is a minimal proxy clone.
 contract MarketDeployer {
-    /// @notice Deploy a new LendingMarketV2
+    address public immutable template;
+
+    constructor(address _template) {
+        require(_template != address(0), "Invalid template");
+        template = _template;
+    }
+
+    /// @notice Deploy a new LendingMarketV2 clone and initialize it
     /// @return The address of the newly created market
-    function deploy(
-        address factory,
-        address lpAddress,
-        address collateralAsset,
-        address lendingAsset,
-        address protocolTreasury,
-        address assetAdapter,
-        address oracleAdapter,
-        address complianceAdapter,
-        address liquidationAdapter,
-        address positionAdapter,
-        uint256 ltvBps,
-        uint256 aprBps,
-        uint256 durationSeconds,
-        uint256 gracePeriodHours,
-        bool enableHealthFactor,
-        uint256 healthFactorThreshold,
-        LendingMarketV2.CircuitBreakerConfig memory cbConfig
-    ) external returns (address) {
-        LendingMarketV2 market = new LendingMarketV2(
-            factory,
-            lpAddress,
-            collateralAsset,
-            lendingAsset,
-            protocolTreasury,
-            assetAdapter,
-            oracleAdapter,
-            complianceAdapter,
-            liquidationAdapter,
-            positionAdapter,
-            ltvBps,
-            aprBps,
-            durationSeconds,
-            gracePeriodHours,
-            enableHealthFactor,
-            healthFactorThreshold,
-            cbConfig
-        );
-        return address(market);
+    function deploy(LendingMarketV2.ConstructorParams memory params) external returns (address) {
+        address clone = Clones.clone(template);
+        LendingMarketV2(clone).initialize(params);
+        return clone;
     }
 }

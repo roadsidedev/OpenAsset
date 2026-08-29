@@ -31,12 +31,9 @@ contract StandardPositionAdapter is IPositionAdapterInit, Initializable {
         _;
     }
 
-    /// @notice Multi-tenant instance constructor — sets the factory so the MarketFactory can
-    ///         call registerMarket() directly. The clone-template initialize() path is preserved
-    ///         for backwards compatibility but is not required for the standard flow.
-    constructor(address _factory) {
-        require(_factory != address(0), "Invalid factory");
-        factory = _factory;
+    /// @notice Template constructor — sets sentinel so clone detection works; real factory set via initialize()
+    constructor() {
+        factory = address(0xdead);
     }
 
     /**

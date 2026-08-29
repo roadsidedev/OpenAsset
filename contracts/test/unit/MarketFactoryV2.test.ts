@@ -27,9 +27,12 @@ describe("MarketFactoryV2", function () {
     const Registry = await ethers.getContractFactory("AdapterRegistry");
     registry = await Registry.deploy(governance.address);
 
-    // Deploy MarketDeployer (standalone deployer contract)
+    // Deploy MarketDeployer (clone pattern: template + deployer)
+    const MarketImpl = await ethers.getContractFactory("LendingMarketV2");
+    const marketTemplate = await MarketImpl.deploy();
+    await marketTemplate.waitForDeployment();
     const Deployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await Deployer.deploy();
+    const deployer = await Deployer.deploy(await marketTemplate.getAddress());
 
     // Deploy factory with the deployer
     const Factory = await ethers.getContractFactory("MarketFactoryV2");

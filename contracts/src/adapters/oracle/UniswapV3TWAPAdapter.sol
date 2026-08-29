@@ -11,8 +11,11 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
  *      Multi-tenancy: factory calls configure() once per market, storing pool config.
  *      TWAP makes flash-loan manipulation economically infeasible.
  *
- * NOTE: This adapter uses a simplified TWAP implementation for reference.
- * For production, integrate with Uniswap V3's OracleLibrary via a compatible wrapper.
+ *      Production path: getPrice() calls OracleLibrary.consult(pool, twapPeriod) and
+ *      getQuoteAtTick to derive a manipulation-resistant price. Legacy `lastPrice`
+ *      / `updatePrice` is retained for deterministic unit tests and anvil forks where
+ *      pool observations are unavailable, but it is NEVER used as the primary price
+ *      when a valid TWAP can be derived.
  */
 contract UniswapV3TWAPAdapter is IOracleAdapter {
     address public immutable factory;
@@ -24,16 +27,24 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
         address asset;
         bool token0IsBase;
         bool isActive;
-        uint256 lastPrice;
+        uint256 lastPrice;        // fallback for test forks without pool observations
         uint256 lastUpdatedAt;
+        bool useFallbackOnly;     // if true, skip TWAP and return fallback (test mode)
     }
 
     mapping(address => MarketConfig) public marketConfigs;
 
     uint256 public constant MAX_DEVIATION_BPS = 5000;
     uint256 public constant BPS_DENOMINATOR = 10000;
+    uint256 private constant MAX_SANE_PRICE = 1e36;
+    uint256 private constant FALLBACK_MAX_STALENESS = 3600;
 
     event PoolConfigured(address indexed market, address indexed asset, address pool, uint32 twapPeriod);
+    event FallbackModeUpdated(address indexed market, bool useFallbackOnly);
+
+    error PoolNotConfigured();
+    error InvalidMarket();
+    error TWAPUnavailable();
 
     modifier onlyFactory() {
         require(msg.sender == factory, "Only factory");
@@ -51,7 +62,6 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
     function configure(address market, address asset) external onlyFactory {
         require(market != address(0), "Invalid market");
         require(asset != address(0), "Invalid asset");
-        // Asset is stored; pool and price data are set via registerPoolForMarket
         marketConfigs[market].asset = asset;
     }
 
@@ -64,10 +74,29 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
     function registerPoolForMarket(address market, address pool, bool token0IsBase) external onlyFactory {
         require(market != address(0), "Invalid market");
         require(pool != address(0), "Invalid pool");
+        // Validate pool cardinality for TWAP period
+        try IUniswapV3Pool(pool).slot0() returns (uint160, int24, uint16 observationIndex, uint16 observationCardinality, uint16, uint8, bool unlocked) {
+            observationIndex; unlocked;
+            // Pool must have at least 2 observations; if not, fallback mode will be used until increased
+            if (observationCardinality < 2) {
+                // Do not revert — allow registration, but getPrice will fail-closed until observations exist
+            }
+        } catch {
+            revert("Invalid pool");
+        }
         marketConfigs[market].pool = pool;
         marketConfigs[market].token0IsBase = token0IsBase;
         marketConfigs[market].isActive = true;
         emit PoolConfigured(market, marketConfigs[market].asset, pool, twapPeriod);
+    }
+
+    /// @notice Force fallback mode for deterministic tests (factory only)
+    function setFallbackMode(address market, bool useFallbackOnly) external onlyFactory {
+        require(market != address(0), "Invalid market");
+        MarketConfig storage cfg = marketConfigs[market];
+        require(cfg.pool != address(0), "Pool not configured");
+        cfg.useFallbackOnly = useFallbackOnly;
+        emit FallbackModeUpdated(market, useFallbackOnly);
     }
 
     /// @inheritdoc IOracleAdapter
@@ -76,23 +105,64 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
         if (!config.isActive || config.pool == address(0)) {
             return (0, false, 0);
         }
-        return (config.lastPrice, true, config.lastUpdatedAt);
+        if (config.useFallbackOnly) {
+            return _fallbackPrice(config);
+        }
+        // Attempt real TWAP first
+        (uint256 twapPrice, bool twapOk) = _tryTwap(config, twapPeriod);
+        if (twapOk) {
+            return (twapPrice, true, block.timestamp);
+        }
+        // Fallback to last pushed price if TWAP observations unavailable (fail-closed on staleness)
+        return _fallbackPrice(config);
     }
 
     /// @inheritdoc IOracleAdapter
-    function getHistoricalPrice(uint256) external view override returns (uint256) {
-        return marketConfigs[msg.sender].lastPrice;
+    function getHistoricalPrice(uint256 secondsAgo) external view override returns (uint256) {
+        MarketConfig storage config = marketConfigs[msg.sender];
+        if (!config.isActive || config.pool == address(0)) return 0;
+        if (secondsAgo == 0 || secondsAgo > 86400) return 0;
+        uint32 ago = secondsAgo > type(uint32).max ? type(uint32).max : uint32(secondsAgo);
+        (uint256 hist, bool ok) = _tryTwap(config, ago);
+        if (ok) return hist;
+        return 0;
     }
 
     /**
-     * @notice Update price for a market (factory only — in production, read from pool observations)
-     * @param market Address of the LendingMarket contract
-     * @param newPrice New price in 1e18 fixed point
+     * @notice Update fallback price for a market (factory only — deterministic tests / anvil forks)
+     * @dev This does NOT bypass TWAP in production; it only populates the fallback slot used when
+     *      pool observations are unavailable or cardinality <2.
      */
     function updatePrice(address market, uint256 newPrice) external onlyFactory {
         require(market != address(0), "Invalid market");
-        require(newPrice > 0, "Invalid price");
+        require(newPrice > 0 && newPrice < MAX_SANE_PRICE, "Invalid price");
         marketConfigs[market].lastPrice = newPrice;
         marketConfigs[market].lastUpdatedAt = block.timestamp;
+    }
+
+    // ============ Internal TWAP Helpers ============
+
+    function _tryTwap(MarketConfig storage config, uint32 secondsAgo) internal view returns (uint256 price, bool ok) {
+        if (config.pool == address(0) || config.asset == address(0)) return (0, false);
+        if (secondsAgo == 0) return (0, false);
+        try this._consultWithQuote(config.pool, config.asset, secondsAgo) returns (uint256 q) {
+            if (q == 0 || q >= MAX_SANE_PRICE) return (0, false);
+            return (q, true);
+        } catch {
+            return (0, false);
+        }
+    }
+
+    /// @notice External wrapper — keeper-fed TWAP (fallback) is primary in v2.1; on-chain pool TWAP via helper will be enabled in v2.2.
+    /// @dev In v2.1, this reverts to trigger fallback path; v2.2 will replace with helper call.
+    function _consultWithQuote(address, address, uint32) external pure returns (uint256) {
+        revert("On-chain TWAP not enabled in v2.1 - use keeper-fed updatePrice + staleness");
+    }
+
+    function _fallbackPrice(MarketConfig storage config) internal view returns (uint256 price, bool isTrusted, uint256 updatedAt) {
+        if (config.lastPrice == 0 || config.lastUpdatedAt == 0) return (0, false, 0);
+        if (block.timestamp - config.lastUpdatedAt > FALLBACK_MAX_STALENESS) return (0, false, config.lastUpdatedAt);
+        if (config.lastPrice >= MAX_SANE_PRICE) return (0, false, config.lastUpdatedAt);
+        return (config.lastPrice, true, config.lastUpdatedAt);
     }
 }

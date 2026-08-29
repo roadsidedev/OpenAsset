@@ -170,12 +170,12 @@ library CircuitBreaker {
     /**
      * @notice Check if circuit breaker is currently triggered
      * @param state Circuit breaker state
-     * @return isTriggered True if paused
+     * @return triggered True if paused
      */
     function isTriggered(CircuitBreakerState storage state) 
         internal 
         view 
-        returns (bool isTriggered) 
+        returns (bool triggered) 
     {
         return state.isPaused;
     }

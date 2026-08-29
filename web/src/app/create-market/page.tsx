@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
 import { useAccount, usePublicClient } from "wagmi";
-import { parseUnits, isAddress, encodeAbiParameters, type Address } from "viem";
+import { parseUnits, formatUnits, isAddress, encodeAbiParameters, type Address } from "viem";
 import { toast } from "sonner";
 import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
@@ -63,37 +63,85 @@ export default function CreateMarketPage() {
 
   const isB20Chain = chainId === 8453;
   const isRobinhoodChain = chainId === 4663;
-  // All adapters from hardcoded contract addresses — always available, no on-chain reads
+
+  // Registry verification map — queried on-chain, fallback to hardcoded if registry not deployed
+  const [registryVerification, setRegistryVerification] = useState<Record<string, { verified: boolean; deprecated: boolean }>>({});
+
+  useEffect(() => {
+    if (!contracts?.adapterRegistry || !publicClient || contracts.adapterRegistry === "0x0000000000000000000000000000000000000000") return;
+    const registry = contracts.adapterRegistry as Address;
+    const allAddrs = [
+      contracts.erc20Adapter, contracts.erc721Adapter, contracts.b20AssetAdapter,
+      contracts.chainlinkAdapter, contracts.uniswapV3TWAPAdapter, contracts.chainlinkEquityFeedAdapter,
+      contracts.dexSwapLiquidationAdapter, contracts.nftAuctionLiquidationAdapter,
+      contracts.standardPositionAdapter, contracts.soulboundPositionAdapter, contracts.transferablePositionAdapter,
+      contracts.b20PolicyComplianceAdapter, contracts.robinhoodComplianceAdapter,
+    ].filter((a): a is string => !!a && a !== "0x0000000000000000000000000000000000000000");
+    if (allAddrs.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.allSettled(allAddrs.map(async (addr) => {
+        try {
+          const info: any = await publicClient.readContract({
+            address: registry,
+            abi: [{ name: 'getAdapterInfo', type: 'function', stateMutability: 'view', inputs: [{ name: 'adapter', type: 'address' }], outputs: [{ name: 'adapterAddress', type: 'address' }, { name: 'adapterType', type: 'uint8' }, { name: 'registeredBy', type: 'address' }, { name: 'verified', type: 'bool' }, { name: 'deprecated', type: 'bool' }, { name: 'auditReference', type: 'string' }, { name: 'registeredAt', type: 'uint256' }, { name: 'totalValueSecured', type: 'uint256' }] }],
+            functionName: 'getAdapterInfo',
+            args: [addr as Address],
+          });
+          return { addr: addr.toLowerCase(), verified: Boolean(info.verified), deprecated: Boolean(info.deprecated) };
+        } catch {
+          // Not registered — treat as unverified but selectable if hardcoded; surface warning via deprecated=false
+          return { addr: addr.toLowerCase(), verified: false, deprecated: false };
+        }
+      }));
+      if (cancelled) return;
+      const next: Record<string, { verified: boolean; deprecated: boolean }> = {};
+      for (const r of results) if (r.status === 'fulfilled') next[r.value.addr] = { verified: r.value.verified, deprecated: r.value.deprecated };
+      setRegistryVerification(next);
+    })();
+    return () => { cancelled = true; };
+  }, [contracts?.adapterRegistry, publicClient, contracts]);
+
+  const getVerification = (addr: string): { verified: boolean; deprecated: boolean } => {
+    const key = addr.toLowerCase();
+    return registryVerification[key] ?? { verified: false, deprecated: false };
+  };
+
+  // All adapters from contract addresses — verification/deprecation now from on-chain registry
   const adapters = useMemo((): Record<string, AdapterOption[]> => {
     if (!contracts) return {};
     const isB20 = isB20Chain && contracts.b20AssetAdapter && contracts.b20AssetAdapter !== "0x0000000000000000000000000000000000000000";
     const isRobinhood = isRobinhoodChain && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000";
+    const mk = (address: string, name: string, type: number): AdapterOption => {
+      const v = getVerification(address);
+      return { address, name, type, verified: v.verified, deprecated: v.deprecated };
+    };
     return {
       ASSET: [
-        { address: contracts.erc20Adapter || "", name: "ERC20Adapter", type: 0, verified: true, deprecated: false },
-        { address: contracts.erc721Adapter || "", name: "ERC721Adapter", type: 0, verified: true, deprecated: false },
-        ...(isB20 ? [{ address: contracts.b20AssetAdapter, name: "B20AssetAdapter (Base Tokenized Stocks)", type: 0, verified: true, deprecated: false }] : []),
+        mk(contracts.erc20Adapter || "", "ERC20Adapter", 0),
+        mk(contracts.erc721Adapter || "", "ERC721Adapter", 0),
+        ...(isB20 ? [mk(contracts.b20AssetAdapter, "B20AssetAdapter (Base Tokenized Stocks)", 0)] : []),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
       ORACLE: [
-        { address: contracts.chainlinkAdapter || "", name: "ChainlinkAdapter", type: 1, verified: true, deprecated: false },
-        ...(contracts.uniswapV3TWAPAdapter && contracts.uniswapV3TWAPAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.uniswapV3TWAPAdapter, name: "UniswapV3TWAPAdapter", type: 1, verified: true, deprecated: false }] : []),
-        ...((isB20 || isRobinhood) && contracts.chainlinkEquityFeedAdapter && contracts.chainlinkEquityFeedAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.chainlinkEquityFeedAdapter, name: isRobinhood ? "ChainlinkEquityFeedAdapter (Robinhood Stock Token)": "ChainlinkEquityFeedAdapter (B20 TRV 24/5, 90000s)", type: 1, verified: true, deprecated: false }] : []),
+        mk(contracts.chainlinkAdapter || "", "ChainlinkAdapter", 1),
+        ...(contracts.uniswapV3TWAPAdapter && contracts.uniswapV3TWAPAdapter !== "0x0000000000000000000000000000000000000000" ? [mk(contracts.uniswapV3TWAPAdapter, "UniswapV3TWAPAdapter", 1)] : []),
+        ...((isB20 || isRobinhood) && contracts.chainlinkEquityFeedAdapter && contracts.chainlinkEquityFeedAdapter !== "0x0000000000000000000000000000000000000000" ? [mk(contracts.chainlinkEquityFeedAdapter, isRobinhood ? "ChainlinkEquityFeedAdapter (Robinhood Stock Token)": "ChainlinkEquityFeedAdapter (B20 TRV 24/5, 90000s)", 1)] : []),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
       LIQUIDATION: [
-        { address: contracts.dexSwapLiquidationAdapter || "", name: "DEXSwapLiquidationAdapter (default for B20 — 24/7 DEX)", type: 3, verified: true, deprecated: false },
-        { address: contracts.nftAuctionLiquidationAdapter || "", name: "NFTAuctionLiquidationAdapter", type: 3, verified: true, deprecated: false },
+        mk(contracts.dexSwapLiquidationAdapter || "", "DEXSwapLiquidationAdapter (default for B20 — 24/7 DEX)", 3),
+        mk(contracts.nftAuctionLiquidationAdapter || "", "NFTAuctionLiquidationAdapter", 3),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
       POSITION: [
-        { address: contracts.standardPositionAdapter || "", name: "StandardPositionAdapter", type: 4, verified: true, deprecated: false },
-        { address: contracts.soulboundPositionAdapter || "", name: "SoulboundPositionAdapter (recommended for B20 compliance)", type: 4, verified: true, deprecated: false },
-        { address: contracts.transferablePositionAdapter || "", name: "TransferablePositionAdapter", type: 4, verified: true, deprecated: false },
+        mk(contracts.standardPositionAdapter || "", "StandardPositionAdapter", 4),
+        mk(contracts.soulboundPositionAdapter || "", "SoulboundPositionAdapter (recommended for B20 compliance)", 4),
+        mk(contracts.transferablePositionAdapter || "", "TransferablePositionAdapter", 4),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
       COMPLIANCE: [
-        ...(isB20 && contracts.b20PolicyComplianceAdapter && contracts.b20PolicyComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.b20PolicyComplianceAdapter, name: "B20PolicyComplianceAdapter", type: 2, verified: true, deprecated: false }] : []),
-        ...(isRobinhood && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [{ address: contracts.robinhoodComplianceAdapter, name: "ManagedAllowlistComplianceAdapter (Robinhood)", type: 2, verified: true, deprecated: false }] : []),
+        ...(isB20 && contracts.b20PolicyComplianceAdapter && contracts.b20PolicyComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [mk(contracts.b20PolicyComplianceAdapter, "B20PolicyComplianceAdapter", 2)] : []),
+        ...(isRobinhood && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000" ? [mk(contracts.robinhoodComplianceAdapter, "ManagedAllowlistComplianceAdapter (Robinhood)", 2)] : []),
       ].filter(a => a.address && a.address !== "0x0000000000000000000000000000000000000000"),
     };
-  }, [contracts, isB20Chain, isRobinhoodChain]);
+  }, [contracts, isB20Chain, isRobinhoodChain, registryVerification]);
 
   const handleNext = () => setStep(Math.min(step + 1, 8));
   const handleBack = () => setStep(Math.max(step - 1, 1));
@@ -457,11 +505,35 @@ export default function CreateMarketPage() {
                 </button>
                 <span className="text-sm text-foreground">Enable Compliance Adapter</span>
               </div>
-              {formData.enableCompliance && (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400">
-                  <Warning className="h-4 w-4 mt-0.5 shrink-0" />
-                  No compliance adapter deployed yet. Disable compliance or deploy one first.
-                </div>
+              {formData.enableCompliance ? (
+                adapters["COMPLIANCE"] && adapters["COMPLIANCE"].length > 0 ? (
+                  <AdapterSelect
+                    label="Compliance Adapter"
+                    description="Fail-closed eligibility. Verified = audited; unverified = permissionless but not audited."
+                    adapters={adapters["COMPLIANCE"] || []}
+                    selected={formData.complianceAdapter}
+                    onSelect={(addr) => setFormData({ complianceAdapter: addr })}
+                    required
+                    chainId={chainId}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400">
+                      <Warning className="h-4 w-4 mt-0.5 shrink-0" />
+                      No verified compliance adapter for this chain/provider. You can paste a custom adapter address or disable compliance for permissionless markets.
+                    </div>
+                    <TokenAddressInput
+                      label="Custom Compliance Adapter (advanced)"
+                      placeholder="0x... (must implement IComplianceAdapter)"
+                      value={formData.complianceAdapter}
+                      onChange={(addr) => setFormData({ complianceAdapter: addr })}
+                      chainId={chainId}
+                      required
+                    />
+                  </div>
+                )
+              ) : (
+                <p className="text-xs text-muted-foreground">Disabled — any address can borrow. Recommended for long-tail tokens. For B20/Robinhood equities, compliance is <strong>required</strong> (enable above).</p>
               )}
             </div>
           )}
@@ -503,65 +575,194 @@ export default function CreateMarketPage() {
           )}
 
           {step === 6 && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold text-foreground">Risk Parameters</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground">LTV (%)</label>
-                  <input
-                    type="number"
-                    value={formData.ltv}
-                    onChange={(e) => setFormData({ ltv: Number(e.target.value) })}
-                    className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
-                  />
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Risk Parameters</h2>
+                <p className="text-sm text-muted-foreground">Set the core lending terms. Each setting affects borrower demand and your risk.</p>
+              </div>
+
+              {/* LTV with risk level and explanation */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-foreground">Loan-to-Value (LTV) — {formData.ltv}%</label>
+                  <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border",
+                    formData.ltv <= 50 ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400" :
+                    formData.ltv <= 75 ? "bg-ice-500/10 text-ice-600 border-ice-500/20 dark:text-ice-300" :
+                    formData.ltv <= 85 ? "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400" :
+                    "bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400"
+                  )}>
+                    {formData.ltv <= 50 ? "Conservative" : formData.ltv <= 75 ? "Balanced" : formData.ltv <= 85 ? "Aggressive" : "High Risk"}
+                  </span>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground">APR (%)</label>
+                <p className="text-xs text-muted-foreground">Max loan as % of collateral value. <strong>50% = 2x over-collateralized</strong> (safe for volatile assets), <strong>95% = 1.05x</strong> (only for stable collateral). Higher LTV = more borrowers but less liquidation buffer.</p>
+                <input
+                  type="range"
+                  min="1"
+                  max="95"
+                  value={formData.ltv}
+                  onChange={(e) => setFormData({ ltv: Number(e.target.value) })}
+                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
+                />
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>1% (ultra-safe)</span>
+                  <span>50% (recommended for long-tail)</span>
+                  <span>95% (max)</span>
+                </div>
+                {formData.ltv > 85 && (
+                  <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-600 dark:text-red-400">
+                    <Warning className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span><strong>High LTV warning:</strong> {formData.ltv}% leaves only {100 - formData.ltv}% buffer. A {100 - formData.ltv}% price drop triggers liquidation. Recommended for stable collateral only (e.g., USDC, B20 with TRV). For volatile ERC20, use ≤75%.</span>
+                  </div>
+                )}
+                {formData.ltv <= 50 && (
+                  <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span><strong>Conservative:</strong> Strong 2x buffer. Safer for volatile or low-liquidity collateral. Fewer borrowers but much lower bad-debt risk.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* APR with explanation */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Annual Percentage Rate (APR) — {formData.apr}%</label>
+                <p className="text-xs text-muted-foreground">Yearly interest borrowers pay. <strong>5-15% is typical</strong> for over-collateralized lending. Higher APR = more yield but fewer borrowers. Billed pro-rata for loan duration.</p>
+                <div className="grid grid-cols-2 gap-4">
                   <input
                     type="number"
                     value={formData.apr}
                     onChange={(e) => setFormData({ apr: Number(e.target.value) })}
                     className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
+                    placeholder="8"
                   />
+                  <div className="rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs">
+                    <div className="text-muted-foreground">Preview: {formData.duration}-day loan</div>
+                    <div className="font-medium text-foreground">{((formData.apr / 100) * (formData.duration / 365) * 100).toFixed(2)}% total interest</div>
+                    <div className="text-[11px] text-muted-foreground">e.g., 1000 USDC → {(1000 * (formData.apr / 100) * (formData.duration / 365)).toFixed(2)} USDC interest</div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground">Duration (days)</label>
-                  <input
-                    type="number"
-                    value={formData.duration}
-                    onChange={(e) => setFormData({ duration: Number(e.target.value) })}
-                    className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground">Grace Period (hours)</label>
-                  <input
-                    type="number"
-                    value={formData.gracePeriod}
-                    onChange={(e) => setFormData({ gracePeriod: Number(e.target.value) })}
-                    className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
-                  />
-                </div>
+                {formData.apr > 50 && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+                    <Warning className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span><strong>High APR:</strong> {formData.apr}% APR may deter borrowers. For B20/large-cap, 5-12% is competitive. High APR is only attractive for niche, short-duration, or under-collateralized markets.</span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  onClick={() => setFormData({ enableHealthFactor: !formData.enableHealthFactor })}
-                  className={cn(
-                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                    formData.enableHealthFactor ? "bg-ice-400" : "bg-muted"
+
+              {/* Duration and Grace */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Duration</label>
+                  <p className="text-xs text-muted-foreground">Loan lifetime before expiry. Short = faster capital rotation.</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={formData.duration}
+                      onChange={(e) => setFormData({ duration: Number(e.target.value) })}
+                      className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
+                    />
+                    <span className="text-sm text-muted-foreground shrink-0">days</span>
+                  </div>
+                  {formData.duration > 90 && (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
+                      <strong>Long duration:</strong> {formData.duration} days locks liquidity longer. Consider ≤30 days for volatile collateral.
+                    </div>
                   )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                      formData.enableHealthFactor ? "translate-x-6" : "translate-x-1"
-                    )}
-                  />
-                </button>
-                <span className="text-sm text-foreground">
-                  Enable Health Factor ({formData.healthFactorThreshold}%)
-                </span>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Grace Period</label>
+                  <p className="text-xs text-muted-foreground">Extra hours after expiry before liquidation.</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={formData.gracePeriod}
+                      onChange={(e) => setFormData({ gracePeriod: Number(e.target.value) })}
+                      className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
+                    />
+                    <span className="text-sm text-muted-foreground shrink-0">hours</span>
+                  </div>
+                  {formData.gracePeriod < 24 && (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
+                      Short grace ({formData.gracePeriod}h) — borrowers have little time to repay.
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Health Factor */}
+              <div className="rounded-2xl border border-border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Health Factor Liquidation</div>
+                    <p className="text-xs text-muted-foreground">Liquidate before expiry if collateral price drops. Disable for expiry-only markets.</p>
+                  </div>
+                  <button
+                    onClick={() => setFormData({ enableHealthFactor: !formData.enableHealthFactor })}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0",
+                      formData.enableHealthFactor ? "bg-ice-400" : "bg-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                        formData.enableHealthFactor ? "translate-x-6" : "translate-x-1"
+                      )}
+                    />
+                  </button>
+                </div>
+                {formData.enableHealthFactor ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-muted-foreground">Threshold:</label>
+                      <span className="text-sm font-bold text-foreground">{formData.healthFactorThreshold}%</span>
+                      <span className="text-xs text-muted-foreground">(collateral value / debt)</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="110"
+                      max="200"
+                      value={formData.healthFactorThreshold}
+                      onChange={(e) => setFormData({ healthFactorThreshold: Number(e.target.value) })}
+                      className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Liquidates when <code className="bg-muted px-1 py-0.5 rounded">health = collateralValue / debt &lt; {formData.healthFactorThreshold / 100}x</code>.
+                      {formData.healthFactorThreshold < 120 && " Low threshold = loans survive bigger drops (riskier for LPs)."}
+                      {formData.healthFactorThreshold > 150 && " High threshold = more sensitive, safer for LPs but borrowers liquidated sooner."}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
+                    <strong>Expiry-only:</strong> Loans liquidated only after {formData.duration} days + {formData.gracePeriod}h grace. Simpler but no protection against intra-term price crashes. Recommended to enable for volatile collateral.
+                  </p>
+                )}
+              </div>
+
+              {/* Circuit Breaker (Advanced) */}
+              <details className="rounded-2xl border border-border bg-card overflow-hidden">
+                <summary className="px-4 py-3 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/50 flex items-center justify-between">
+                  <span>Advanced: Circuit Breaker</span>
+                  <span className="text-xs text-muted-foreground">{formData.enableCircuitBreaker ? "Enabled" : "Disabled"}</span>
+                </summary>
+                <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                  <p className="text-xs text-muted-foreground">Auto-pauses new loans on oracle failure or 20%+ price swing. Existing loans still repayable. Recommended enabled.</p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setFormData({ enableCircuitBreaker: !formData.enableCircuitBreaker })}
+                      className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", formData.enableCircuitBreaker ? "bg-ice-400" : "bg-muted")}
+                    >
+                      <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", formData.enableCircuitBreaker ? "translate-x-6" : "translate-x-1")} />
+                    </button>
+                    <span className="text-sm text-foreground">Enable Circuit Breaker</span>
+                  </div>
+                  {formData.enableCircuitBreaker && (
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div><span className="text-muted-foreground">Pause:</span> <span className="font-medium">{formData.pauseThresholdBps / 100}% swing</span></div>
+                      <div><span className="text-muted-foreground">Resume:</span> <span className="font-medium">{formData.resumeThresholdBps / 100}% + {formData.cooldownSeconds / 3600}h cooldown</span></div>
+                    </div>
+                  )}
+                </div>
+              </details>
             </div>
           )}
 
@@ -580,7 +781,7 @@ export default function CreateMarketPage() {
                 required
               />
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground">Initial Liquidity (tokens)</label>
+                <label className="text-xs font-semibold text-muted-foreground">Initial Liquidity (tokens, 6 decimals for USDC)</label>
                 <input
                   type="text"
                   placeholder="1000"
@@ -588,52 +789,194 @@ export default function CreateMarketPage() {
                   onChange={(e) => setFormData({ liquidity: e.target.value })}
                   className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 placeholder:text-muted-foreground"
                 />
+                {formData.liquidity && (() => {
+                  try {
+                    const raw = parseUnits(formData.liquidity, 6);
+                    const fee = raw * BigInt(50) / BigInt(10000);
+                    const net = raw - fee;
+                    const dec = lendingToken?.decimals ?? 6;
+                    const fmt = (v: bigint) => formatUnits(v, 6);
+                    return (
+                      <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-xs space-y-1">
+                        <div className="flex justify-between"><span className="text-muted-foreground">Creation fee (0.5%)</span><span className="font-medium font-mono">{fmt(fee)} {lendingToken?.symbol || 'USDC'}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Net liquidity to market</span><span className="font-semibold font-mono">{fmt(net)} {lendingToken?.symbol || 'USDC'}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Total approval needed</span><span className="font-mono">{fmt(raw)} {lendingToken?.symbol || 'USDC'}</span></div>
+                        <p className="text-[11px] text-muted-foreground pt-1">Fee sent to protocol treasury; net liquidity seeds the pool and mints LP shares.</p>
+                      </div>
+                    );
+                  } catch { return null; }
+                })()}
+                {/* Dry-run simulation */}
+                {contracts?.marketFactory && formData.liquidity && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const raw = parseUnits(formData.liquidity, 6);
+                        const cfg: any = {
+                          lpAddress: userAddress || "0x0000000000000000000000000000000000000000",
+                          collateralAsset: formData.collateralAsset,
+                          assetAdapter: formData.assetAdapter,
+                          oracleAdapter: formData.oracleAdapter,
+                          complianceAdapter: formData.enableCompliance ? formData.complianceAdapter : "0x0000000000000000000000000000000000000000",
+                          liquidationAdapter: formData.liquidationAdapter,
+                          positionAdapter: formData.positionAdapter,
+                          lendingAsset: formData.lendingAsset,
+                          ltvBasisPoints: BigInt(Math.round(formData.ltv * 100)),
+                          aprBasisPoints: BigInt(Math.round(formData.apr * 100)),
+                          durationSeconds: BigInt(formData.duration * 86400),
+                          gracePeriodHours: BigInt(formData.gracePeriod),
+                          enableHealthFactor: formData.enableHealthFactor,
+                          healthFactorThreshold: BigInt(Math.round(formData.healthFactorThreshold * 100)),
+                          enableCircuitBreaker: formData.enableCircuitBreaker,
+                          pauseThresholdBps: BigInt(formData.pauseThresholdBps),
+                          lookbackPeriodSeconds: BigInt(formData.lookbackPeriodSeconds),
+                          resumeThresholdBps: BigInt(formData.resumeThresholdBps),
+                          cooldownSeconds: BigInt(formData.cooldownSeconds),
+                        };
+                        await (publicClient as any).simulateContract({
+                          address: contracts.marketFactory as Address,
+                          abi: [{ name: 'createMarket', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'config', type: 'tuple', components: [{ name: 'lpAddress', type: 'address' }, { name: 'collateralAsset', type: 'address' }, { name: 'assetAdapter', type: 'address' }, { name: 'oracleAdapter', type: 'address' }, { name: 'complianceAdapter', type: 'address' }, { name: 'liquidationAdapter', type: 'address' }, { name: 'positionAdapter', type: 'address' }, { name: 'lendingAsset', type: 'address' }, { name: 'ltvBasisPoints', type: 'uint256' }, { name: 'aprBasisPoints', type: 'uint256' }, { name: 'durationSeconds', type: 'uint256' }, { name: 'gracePeriodHours', type: 'uint256' }, { name: 'enableHealthFactor', type: 'bool' }, { name: 'healthFactorThreshold', type: 'uint256' }, { name: 'enableCircuitBreaker', type: 'bool' }, { name: 'pauseThresholdBps', type: 'uint256' }, { name: 'lookbackPeriodSeconds', type: 'uint256' }, { name: 'resumeThresholdBps', type: 'uint256' }, { name: 'cooldownSeconds', type: 'uint256' }] }, { name: 'initialLiquidity', type: 'uint256' }], outputs: [{ name: 'marketAddress', type: 'address' }] }],
+                          functionName: 'createMarket',
+                          args: [cfg, raw],
+                          account: userAddress as Address,
+                        });
+                        toast.success("Dry-run passed — market creation will succeed");
+                      } catch (e: any) {
+                        toast.error(decodeContractError(e), { description: "Fix the highlighted field and try again" });
+                      }
+                    }}
+                    className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-accent"
+                  >
+                    Simulate deployment (dry-run)
+                  </button>
+                )}
+                {/* Risk disclosure for high LTV / long-tail */}
+                {!isB20Selected && (formData.ltv > 85 || formData.apr > 50) && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+                    <strong>Risk note:</strong> {formData.ltv > 85 ? `High LTV ${formData.ltv}% leaves little buffer. ` : ''}{formData.apr > 50 ? `High APR ${formData.apr}% may be unattractive to borrowers. ` : ''}For volatile long-tail assets, consider LTV ≤75% and TWAP oracle.
+                  </div>
+                )}
+                {formData.collateralAsset && !isB20Selected && !isRobinhoodSelected && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Generic ERC20 market: ensure the token has sufficient DEX liquidity for TWAP and no fee-on-transfer mechanics (see <code>isTransferable</code> check).
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {step === 8 && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold text-foreground">Deploy</h2>
-              <p className="text-sm text-muted-foreground">
-                Review your configuration and deploy the market.
-              </p>
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Review & Confirm</h2>
+                <p className="text-sm text-muted-foreground">Double-check everything. This will deploy a new isolated market on-chain — parameters are <strong>immutable</strong> after deployment.</p>
+              </div>
+
               {isB20Selected && (
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 space-y-2">
                   <h3 className="text-sm font-bold text-red-600 dark:text-red-400">{B20_RISK_DISCLOSURE.title}</h3>
                   <ul className="list-disc list-inside space-y-1 text-xs text-red-600/90 dark:text-red-300/90">
                     {B20_RISK_DISCLOSURE.bullets.map((b) => (<li key={b}>{b}</li>))}
                   </ul>
-                  <label className="flex items-center gap-2 pt-2 text-xs">
-                    <input type="checkbox" required className="h-3.5 w-3.5 rounded border-border" />
+                  <label className="flex items-start gap-2 pt-2 text-xs">
+                    <input type="checkbox" required className="h-3.5 w-3.5 rounded border-border mt-0.5" />
                     <span className="text-foreground">I understand US persons are ineligible and escrow dividends accrue to the market contract until repay.</span>
                   </label>
                 </div>
               )}
-              <div className="rounded-2xl border border-border bg-muted/50 p-4 text-xs space-y-2.5">
-                {[
-                  ["Collateral", collateralToken?.isValid
-                    ? `${collateralToken.name} (${collateralToken.symbol})`
-                    : formData.collateralAsset ? formData.collateralAsset.slice(0, 10) + "..." : "Not set"],
-                  ["Asset Adapter", findAdapterName("ASSET", formData.assetAdapter)],
-                  ["Oracle", findAdapterName("ORACLE", formData.oracleAdapter)],
-                  ["Compliance", formData.enableCompliance ? "Enabled" : "Disabled"],
-                  ["Liquidation", findAdapterName("LIQUIDATION", formData.liquidationAdapter)],
-                  ["Position", findAdapterName("POSITION", formData.positionAdapter)],
-                  ["LTV", `${formData.ltv}%`],
-                  ["APR", `${formData.apr}%`],
-                  ["Duration", `${formData.duration} days`],
-                  ["Lending Asset", lendingToken?.isValid
-                    ? `${lendingToken.name} (${lendingToken.symbol})`
-                    : formData.lendingAsset ? formData.lendingAsset.slice(0, 10) + "..." : "Not set"],
-                  ["Liquidity", `${formData.liquidity} tokens`],
-                  ...(isB20Selected ? [["B20 Feed", b20Info?.feed.slice(0,10)+"..."], ["B20 Staleness", "90000s (25h)"], ["Sequencer", "0xBCF8…6433"]] as [string,string][] : []),
-                ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between items-center">
-                    <span className="text-muted-foreground">{label}:</span>
-                    <span className="font-medium text-foreground text-right">{value}</span>
+
+              {/* Full market summary */}
+              <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                <div className="bg-muted/50 px-4 py-2.5 border-b border-border flex items-center justify-between">
+                  <span className="text-sm font-semibold text-foreground">Market Summary</span>
+                  <span className="text-xs text-muted-foreground">Chain {chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : chainId}</span>
+                </div>
+                <div className="p-4 space-y-4">
+                  {/* Adapters with verification */}
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Adapters</h4>
+                    {[
+                      ["Asset", findAdapterName("ASSET", formData.assetAdapter), formData.assetAdapter],
+                      ["Oracle", findAdapterName("ORACLE", formData.oracleAdapter), formData.oracleAdapter],
+                      ["Compliance", formData.enableCompliance ? findAdapterName("COMPLIANCE", formData.complianceAdapter) : "Disabled", formData.complianceAdapter],
+                      ["Liquidation", findAdapterName("LIQUIDATION", formData.liquidationAdapter), formData.liquidationAdapter],
+                      ["Position", findAdapterName("POSITION", formData.positionAdapter), formData.positionAdapter],
+                    ].map(([label, name, addr]) => {
+                      const v = addr ? getVerification(addr as string) : { verified: false, deprecated: false };
+                      return (
+                        <div key={label as string} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                          <span className="text-sm text-muted-foreground">{label as string}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">{name as string}</span>
+                            {addr && (label as string) !== "Compliance" || (label as string) === "Compliance" && formData.enableCompliance ? (
+                              <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-medium", v.verified ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : v.deprecated ? "bg-red-500/10 text-red-600 border-red-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20")}>
+                                {v.deprecated ? "Deprecated" : v.verified ? "Verified" : "Unverified"}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+
+                  {/* Risk & Terms */}
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Risk & Terms</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-xl bg-muted/50 p-3">
+                        <div className="text-xs text-muted-foreground">LTV</div>
+                        <div className="font-bold text-foreground">{formData.ltv}% <span className={cn("text-xs font-medium ml-1", formData.ltv > 85 ? "text-red-500" : formData.ltv > 75 ? "text-amber-500" : "text-emerald-500")}>({formData.ltv <= 50 ? "Conservative" : formData.ltv <= 75 ? "Balanced" : formData.ltv <= 85 ? "Aggressive" : "High Risk"})</span></div>
+                      </div>
+                      <div className="rounded-xl bg-muted/50 p-3">
+                        <div className="text-xs text-muted-foreground">APR</div>
+                        <div className="font-bold text-foreground">{formData.apr}% <span className="text-xs text-muted-foreground">→ {((formData.apr / 100) * (formData.duration / 365) * 100).toFixed(2)}% per loan</span></div>
+                      </div>
+                      <div className="rounded-xl bg-muted/50 p-3">
+                        <div className="text-xs text-muted-foreground">Duration</div>
+                        <div className="font-bold text-foreground">{formData.duration} days + {formData.gracePeriod}h grace</div>
+                      </div>
+                      <div className="rounded-xl bg-muted/50 p-3">
+                        <div className="text-xs text-muted-foreground">Health Factor</div>
+                        <div className="font-bold text-foreground">{formData.enableHealthFactor ? `${formData.healthFactorThreshold}% threshold` : "Disabled (expiry only)"}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-xl px-3 py-2">
+                      <span>Circuit Breaker:</span>
+                      <span className="font-medium text-foreground">{formData.enableCircuitBreaker ? `Enabled (${formData.pauseThresholdBps/100}% pause / ${formData.cooldownSeconds/3600}h cooldown)` : "Disabled"}</span>
+                    </div>
+                  </div>
+
+                  {/* Assets */}
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assets & Liquidity</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Collateral</span><span className="font-medium text-foreground">{collateralToken?.isValid ? `${collateralToken.name} (${collateralToken.symbol})` : formData.collateralAsset.slice(0,10)+"..."}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Lending Asset</span><span className="font-medium text-foreground">{lendingToken?.isValid ? `${lendingToken.name} (${lendingToken.symbol})` : formData.lendingAsset.slice(0,10)+"..."}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Initial Liquidity</span><span className="font-medium text-foreground">{formData.liquidity} {lendingToken?.symbol || "tokens"}</span></div>
+                      {formData.liquidity && (() => { try { const raw = parseUnits(formData.liquidity, 6); const fee = raw * BigInt(50) / BigInt(10000); const net = raw - fee; return <><div className="flex justify-between text-xs"><span className="text-muted-foreground">Protocol fee (0.5%)</span><span className="font-mono text-foreground">{formatUnits(fee, 6)} {lendingToken?.symbol || "USDC"}</span></div><div className="flex justify-between text-xs"><span className="text-muted-foreground">Net to market</span><span className="font-mono font-bold text-foreground">{formatUnits(net, 6)} {lendingToken?.symbol || "USDC"}</span></div></>; } catch { return null; }})()}
+                      {isB20Selected && b20Info && <><div className="flex justify-between text-xs"><span className="text-muted-foreground">B20 Feed</span><span className="font-mono text-foreground">{b20Info.feed.slice(0,10)}...</span></div><div className="flex justify-between text-xs"><span className="text-muted-foreground">Staleness / Sequencer</span><span className="font-medium text-foreground">90000s / 0xBCF8…6433</span></div></>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Final confirmation */}
+              <div className="rounded-2xl border-2 border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Warning className="h-4 w-4 text-amber-500" />
+                  Confirm Deployment
+                </h4>
+                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Market will be <strong>isolated</strong> — insolvency in this market does not affect others.</li>
+                  <li>Parameters above are <strong>immutable</strong> after deployment. Double-check LTV, APR, and adapters.</li>
+                  <li>Deployment costs gas + 0.5% protocol fee on initial liquidity.</li>
+                  <li>New markets are <strong>permissionless</strong> — anyone can supply/borrow per your terms.</li>
+                </ul>
+                <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
+                  <input type="checkbox" id="deploy-confirm" className="h-4 w-4 rounded border-border mt-0.5 shrink-0" required />
+                  <span className="text-sm text-foreground">I have reviewed the summary above and confirm deployment on <strong>{chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : `Chain ${chainId}`}</strong>. I understand parameters cannot be changed after deployment.</span>
+                </label>
               </div>
             </div>
           )}

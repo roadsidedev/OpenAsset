@@ -48,33 +48,35 @@ describe("LendingMarketV2", function () {
     const MockPositionAdapter = await ethers.getContractFactory("MockPositionAdapter");
     positionAdapter = await MockPositionAdapter.deploy();
 
-    // Deploy LendingMarketV2
+    // Deploy LendingMarketV2 via initialize (clone pattern)
     const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-    market = await LendingMarketV2.deploy(
-      ethers.ZeroAddress, // factory (not used in unit test)
-      owner.address, // marketOwner
-      await mockToken.getAddress(), // collateralAsset
-      await lendingToken.getAddress(), // lendingAsset
-      treasury.address, // protocolTreasury
-      await assetAdapter.getAddress(), // assetAdapter
-      await oracleAdapter.getAddress(), // oracleAdapter
-      ethers.ZeroAddress, // complianceAdapter (none for basic test)
-      await liquidationAdapter.getAddress(), // liquidationAdapter
-      await positionAdapter.getAddress(), // positionAdapter
-      LTV,
-      APR,
-      DURATION,
-      GRACE_PERIOD,
-      true, // enableHealthFactor
-      12000, // healthFactorThreshold (120%)
-      {
+    market = await LendingMarketV2.deploy();
+    await market.waitForDeployment();
+    await market.initialize({
+      factory: ethers.ZeroAddress,
+      marketOwner: owner.address,
+      collateralAsset: await mockToken.getAddress(),
+      lendingAsset: await lendingToken.getAddress(),
+      protocolTreasury: treasury.address,
+      assetAdapter: await assetAdapter.getAddress(),
+      oracleAdapter: await oracleAdapter.getAddress(),
+      complianceAdapter: ethers.ZeroAddress,
+      liquidationAdapter: await liquidationAdapter.getAddress(),
+      positionAdapter: await positionAdapter.getAddress(),
+      ltvBps: LTV,
+      aprBps: APR,
+      durationSeconds: DURATION,
+      gracePeriodHours: GRACE_PERIOD,
+      enableHealthFactor: true,
+      healthFactorThreshold: 12000,
+      cbConfig: {
         enabled: true,
-        pauseThresholdBps: 2000, // 20%
-        lookbackPeriodSeconds: 3600, // 1 hour
-        resumeThresholdBps: 1000, // 10%
-        cooldownSeconds: 7200, // 2 hours
+        pauseThresholdBps: 2000,
+        lookbackPeriodSeconds: 3600,
+        resumeThresholdBps: 1000,
+        cooldownSeconds: 7200,
       }
-    );
+    });
 
     // Mint tokens
     await mockToken.mint(borrower.address, ethers.parseEther("100000"));
@@ -154,31 +156,33 @@ describe("LendingMarketV2", function () {
       const Position = await ethers.getContractFactory("MockPositionAdapter");
       const b20Position = await Position.deploy();
       const Market = await ethers.getContractFactory("LendingMarketV2");
-      const b20Market = await Market.deploy(
-        owner.address,
-        owner.address,
-        b20Token.target,
-        usdc.target,
-        treasury.address,
-        b20Adapter.target,
-        b20Oracle.target,
-        ethers.ZeroAddress,
-        b20Liquidation.target,
-        b20Position.target,
-        5000,
-        1200,
-        DURATION,
-        GRACE_PERIOD,
-        true,
-        12000,
-        { enabled: false, pauseThresholdBps: 0, lookbackPeriodSeconds: 0, resumeThresholdBps: 0, cooldownSeconds: 0 },
-      );
+      const b20Market = await Market.deploy();
+      await b20Market.waitForDeployment();
+      await b20Market.initialize({
+        factory: owner.address,
+        marketOwner: owner.address,
+        collateralAsset: b20Token.target,
+        lendingAsset: usdc.target,
+        protocolTreasury: treasury.address,
+        assetAdapter: b20Adapter.target,
+        oracleAdapter: b20Oracle.target,
+        complianceAdapter: ethers.ZeroAddress,
+        liquidationAdapter: b20Liquidation.target,
+        positionAdapter: b20Position.target,
+        ltvBps: 5000,
+        aprBps: 1200,
+        durationSeconds: DURATION,
+        gracePeriodHours: GRACE_PERIOD,
+        enableHealthFactor: true,
+        healthFactorThreshold: 12000,
+        cbConfig: { enabled: false, pauseThresholdBps: 0, lookbackPeriodSeconds: 0, resumeThresholdBps: 0, cooldownSeconds: 0 },
+      });
       await b20Adapter.configure(b20Market.target, b20Token.target);
       await usdc.mint(lp.address, ethers.parseUnits("1000", 6));
       await usdc.connect(lp).approve(b20Market.target, ethers.parseUnits("1000", 6));
       await b20Market.connect(lp).depositLiquidity(ethers.parseUnits("1000", 6));
       await b20Token.mint(borrower.address, 10n ** 8n);
-      await b20Token.connect(borrower).approve(b20Adapter.target, 10n ** 8n);
+      await b20Token.connect(borrower).approve(b20Adapter.target, ethers.MaxUint256);
 
       await b20Market.connect(borrower)["requestLoan(uint256,uint256)"](10n ** 8n, ethers.parseUnits("500", 6));
 
@@ -218,10 +222,11 @@ describe("LendingMarketV2", function () {
       await ethers.provider.send("evm_increaseTime", [DURATION + 1]);
       await ethers.provider.send("evm_mine");
 
-      // Set liquidation adapter to return some value
-      await liquidationAdapter.setMockReturns(ethers.parseEther("500"), ethers.parseEther("100"));
+      // Mock liquidation adapter is non-transferring in unit tests — set 0,0 to pass enterprise balance-delta check
+      // (real DEX adapter transfers; mock just returns values for status testing)
+      await liquidationAdapter.setMockReturns(0, 0);
 
-      // Liquidate
+      // Liquidate (expired loan; mock returns 0 recovery)
       await market.connect(owner).liquidate(0);
 
       const loan = await market.loans(0);

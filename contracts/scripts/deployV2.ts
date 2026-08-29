@@ -264,9 +264,14 @@ async function deployMarketDeployer(existing?: Record<string, string>) {
   if (existing?.marketDeployer && forceRedeployDeployer) {
     console.log(`  MarketDeployer (force redeploy, was ${existing.marketDeployer})`);
   }
-  console.log("\n=== Deploying MarketDeployer ===");
+  console.log("\n=== Deploying MarketDeployer (clone pattern) ===");
+  const Template = await ethers.getContractFactory("LendingMarketV2");
+  const template = await Template.deploy();
+  await waitTx(template.deploymentTransaction(), "LendingMarketV2.template.deploy");
+  const templateAddr = await template.getAddress();
+  console.log(`  LendingMarketV2 template: ${templateAddr}`);
   const Deployer = await ethers.getContractFactory("MarketDeployer");
-  const dep = await Deployer.deploy();
+  const dep = await Deployer.deploy(templateAddr);
   await waitTx(dep.deploymentTransaction(), "MarketDeployer.deploy");
   const address = await dep.getAddress();
   console.log(`  MarketDeployer: ${address}`);
@@ -437,13 +442,13 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
     await deployIfMissing("UniswapV3TWAPAdapter", UniswapTWAPFactory, [600, config.uniswapV3QuoteToken, factoryAddress], "uniswapV3TWAPAdapter");
   }
 
-  // --- Position Adapters ---
+  // --- Position Adapters (clone templates — no args, sentinel factory; real factory set via initialize on clone) ---
   const StandardPos = await ethers.getContractFactory("StandardPositionAdapter");
-  await deployIfMissing("StandardPositionAdapter", StandardPos, [factoryAddress], "standardPosition");
+  await deployIfMissing("StandardPositionAdapter", StandardPos, [], "standardPosition");
   const SoulboundPos = await ethers.getContractFactory("SoulboundPositionAdapter");
-  await deployIfMissing("SoulboundPositionAdapter", SoulboundPos, [factoryAddress], "soulboundPosition");
+  await deployIfMissing("SoulboundPositionAdapter", SoulboundPos, [], "soulboundPosition");
   const TransferablePos = await ethers.getContractFactory("TransferablePositionAdapter");
-  await deployIfMissing("TransferablePositionAdapter", TransferablePos, [factoryAddress], "transferablePosition");
+  await deployIfMissing("TransferablePositionAdapter", TransferablePos, [], "transferablePosition");
 
   // --- Liquidation Adapters ---
   const DEXSwap = await ethers.getContractFactory("DEXSwapLiquidationAdapter");

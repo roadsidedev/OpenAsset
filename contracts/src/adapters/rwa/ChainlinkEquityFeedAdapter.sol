@@ -40,6 +40,7 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
         uint8 feedDecimals;
         address pauseToken;
         bool checkTokenOraclePause;
+        bool enforceTradingWindow; // true for 24/5 equities (B20), false for 24/7 NAV/RWA
     }
 
     mapping(address => MarketConfig) public marketConfigs;
@@ -102,7 +103,8 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
             l2Sequencer: _l2Sequencer,
             feedDecimals: _getFeedDecimals(_feed),
             pauseToken: address(0),
-            checkTokenOraclePause: false
+            checkTokenOraclePause: false,
+            enforceTradingWindow: true
         });
     }
 
@@ -127,8 +129,17 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
             l2Sequencer: _l2Sequencer,
             feedDecimals: _getFeedDecimals(_feed),
             pauseToken: _pauseToken,
-            checkTokenOraclePause: true
+            checkTokenOraclePause: true,
+            enforceTradingWindow: true
         });
+    }
+
+    /// @notice Toggle trading window enforcement per market (e.g., disable for 24/7 NAV)
+    function setTradingWindowEnforcement(address market, bool enforce) external onlyFactoryOwnerOrConfigurator {
+        require(market != address(0), "Invalid market");
+        MarketConfig storage cfg = marketConfigs[market];
+        require(address(cfg.feed) != address(0), "Market not configured");
+        cfg.enforceTradingWindow = enforce;
     }
 
     function setAuthorizedConfigurator(address configurator, bool authorized) external onlyFactoryOrOwner {
@@ -141,7 +152,7 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
         MarketConfig storage config = marketConfigs[msg.sender];
         if (address(config.feed) == address(0)) return (0, false, 0);
 
-        if (!_isWithinTradingWindow()) {
+        if (config.enforceTradingWindow && !_isWithinTradingWindow()) {
             return (0, false, 0);
         }
 

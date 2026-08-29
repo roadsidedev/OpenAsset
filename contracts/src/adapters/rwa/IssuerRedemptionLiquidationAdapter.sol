@@ -142,4 +142,61 @@ contract IssuerRedemptionLiquidationAdapter is ILiquidationAdapter {
         MarketConfig storage config = marketConfigs[msg.sender];
         return config.issuerRedemption.checkSettlement(redemptionId);
     }
+
+    /**
+     * @notice Claim settlement proceeds after issuer confirms redemption — called by market's finalizeRedemptionSettlement
+     * @dev Only callable by a configured market. Verifies settlement via issuer, then transfers
+     *      `proceeds` of lending asset from this adapter (where issuer sent funds) to the calling market.
+     *      If the issuer sends funds directly to the market, this will return 0 recovered and the market
+     *      will verify via its own balance delta; callers should ensure proceeds reach the market either way.
+     * @param loanId The loan in SETTLING state
+     * @return recoveredForLP Amount of lending asset transferred to the market
+     * @return returnedToHolder Surplus already forwarded to holder (0 for this adapter — holder surplus handled off-chain)
+     */
+    function claimSettlement(uint256 loanId) external returns (uint256 recoveredForLP, uint256 returnedToHolder) {
+        MarketConfig storage config = marketConfigs[msg.sender];
+        require(config.isActive, "Unconfigured market");
+        uint256 redemptionId = loanRedemptionId[loanId];
+        require(redemptionId != 0, "No redemption");
+
+        (bool settled, uint256 proceeds) = config.issuerRedemption.checkSettlement(redemptionId);
+        require(settled, "Not settled");
+        require(proceeds > 0, "Zero proceeds");
+
+        // If proceeds are already at the market (issuer transferred directly), nothing to pull
+        // Otherwise, if adapter holds the proceeds (e.g., issuer transferred to adapter), forward to market
+        address market = msg.sender;
+        // Try to pull from adapter's balance if it holds the lending asset (best-effort)
+        // We do not know lending asset address here — query via market view; fall back to no-op if unavailable
+        try this._forwardProceeds(market, proceeds) returns (uint256 forwarded) {
+            recoveredForLP = forwarded;
+        } catch {
+            recoveredForLP = 0;
+        }
+        returnedToHolder = 0;
+    }
+
+    function _forwardProceeds(address market, uint256 proceeds) external returns (uint256 forwarded) {
+        require(msg.sender == address(this), "Only self");
+        // Resolve lending asset from market; if call fails, revert and let market use balance delta
+        (bool ok, bytes memory data) = market.staticcall(abi.encodeWithSignature("lendingAsset()"));
+        if (!ok) revert("No lending asset");
+        address lendingAsset = abi.decode(data, (address));
+        // If this adapter holds at least `proceeds` of lending asset, forward to market
+        uint256 bal = 0;
+        try this._balanceOf(lendingAsset) returns (uint256 b) { bal = b; } catch { return 0; }
+        if (bal >= proceeds) {
+            // solhint-disable-next-line avoid-low-level-calls
+            (bool s, ) = lendingAsset.call(abi.encodeWithSignature("transfer(address,uint256)", market, proceeds));
+            require(s, "Forward failed");
+            return proceeds;
+        }
+        return 0;
+    }
+
+    function _balanceOf(address token) external view returns (uint256) {
+        (bool ok, bytes memory data) = token.staticcall(abi.encodeWithSignature("balanceOf(address)", address(this)));
+        require(ok, "balanceOf failed");
+        return abi.decode(data, (uint256));
+    }
 }

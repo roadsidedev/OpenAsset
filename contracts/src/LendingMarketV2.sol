@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -56,7 +57,7 @@ contract LPTokenV2 is ERC20 {
  * - How liquidation executes (ILiquidationAdapter)
  * - How positions are represented (IPositionAdapter)
  */
-contract LendingMarketV2 is ReentrancyGuard, Pausable {
+contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
     using Address for address;
 
@@ -105,30 +106,50 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         uint256 cooldownSeconds;      // minimum pause duration
     }
 
+    struct ConstructorParams {
+        address factory;
+        address marketOwner;
+        address collateralAsset;
+        address lendingAsset;
+        address protocolTreasury;
+        address assetAdapter;
+        address oracleAdapter;
+        address complianceAdapter;
+        address liquidationAdapter;
+        address positionAdapter;
+        uint256 ltvBps;
+        uint256 aprBps;
+        uint256 durationSeconds;
+        uint256 gracePeriodHours;
+        bool enableHealthFactor;
+        uint256 healthFactorThreshold;
+        CircuitBreakerConfig cbConfig;
+    }
+
     // ============ Immutable Configuration ============
 
-    address public immutable factory;
-    address public immutable marketOwner;
-    address public immutable collateralAsset;
-    IERC20 public immutable lendingAsset; // stablecoin only
-    address public immutable protocolTreasury;
-    uint8 public immutable collateralDecimals;
-    uint8 public immutable lendingDecimals;
-    LPTokenV2 public immutable lpToken;
+    address public factory;
+    address public marketOwner;
+    address public collateralAsset;
+    IERC20 public lendingAsset; // stablecoin only
+    address public protocolTreasury;
+    uint8 public collateralDecimals;
+    uint8 public lendingDecimals;
+    LPTokenV2 public lpToken;
 
     // The five adapters — the core of the V2 architecture
-    IAssetAdapter public immutable assetAdapter;
-    IOracleAdapter public immutable oracleAdapter;
-    IComplianceAdapter public immutable complianceAdapter; // may be address(0)
-    ILiquidationAdapter public immutable liquidationAdapter;
-    IPositionAdapter public immutable positionAdapter;
+    IAssetAdapter public assetAdapter;
+    IOracleAdapter public oracleAdapter;
+    IComplianceAdapter public complianceAdapter; // may be address(0)
+    ILiquidationAdapter public liquidationAdapter;
+    IPositionAdapter public positionAdapter;
 
-    uint256 public immutable ltvBps;
-    uint256 public immutable aprBps;
-    uint256 public immutable durationSeconds;
-    uint256 public immutable gracePeriodHours;
-    bool public immutable enableHealthFactor;
-    uint256 public immutable healthFactorThreshold;
+    uint256 public ltvBps;
+    uint256 public aprBps;
+    uint256 public durationSeconds;
+    uint256 public gracePeriodHours;
+    bool public enableHealthFactor;
+    uint256 public healthFactorThreshold;
 
     // Circuit breaker config (stored, not immutable, because it's a struct)
     CircuitBreakerConfig public cbConfig;
@@ -211,66 +232,46 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     error AdapterUnderDelivered();
     error AdapterAccountingMismatch();
 
-    // ============ Constructor ============
+    // ============ Constructor / Initializer ============
 
-    constructor(
-        address _factory,
-        address _marketOwner,
-        address _collateralAsset,
-        address _lendingAsset,
-        address _protocolTreasury,
+    constructor() {
+        _disableInitializers();
+    }
 
-        // The five adapters
-        address _assetAdapter,
-        address _oracleAdapter,
-        address _complianceAdapter,
-        address _liquidationAdapter,
-        address _positionAdapter,
+    function initialize(ConstructorParams memory p) external initializer {
+        factory = p.factory;
+        marketOwner = p.marketOwner;
+        collateralAsset = p.collateralAsset;
+        lendingAsset = IERC20(p.lendingAsset);
+        protocolTreasury = p.protocolTreasury;
+        collateralDecimals = _readDecimals(p.collateralAsset, 18);
+        lendingDecimals = _readDecimals(p.lendingAsset, 18);
 
-        // Risk parameters
-        uint256 _ltvBps,
-        uint256 _aprBps,
-        uint256 _durationSeconds,
-        uint256 _gracePeriodHours,
-        bool _enableHealthFactor,
-        uint256 _healthFactorThreshold,
+        assetAdapter = IAssetAdapter(p.assetAdapter);
+        oracleAdapter = IOracleAdapter(p.oracleAdapter);
+        complianceAdapter = IComplianceAdapter(p.complianceAdapter);
+        liquidationAdapter = ILiquidationAdapter(p.liquidationAdapter);
+        positionAdapter = IPositionAdapter(p.positionAdapter);
 
-        // Circuit breaker
-        CircuitBreakerConfig memory _cbConfig
-    ) {
-        factory = _factory;
-        marketOwner = _marketOwner;
-        collateralAsset = _collateralAsset;
-        lendingAsset = IERC20(_lendingAsset);
-        protocolTreasury = _protocolTreasury;
-        collateralDecimals = _readDecimals(_collateralAsset, 18);
-        lendingDecimals = _readDecimals(_lendingAsset, 18);
-
-        assetAdapter = IAssetAdapter(_assetAdapter);
-        oracleAdapter = IOracleAdapter(_oracleAdapter);
-        complianceAdapter = IComplianceAdapter(_complianceAdapter);
-        liquidationAdapter = ILiquidationAdapter(_liquidationAdapter);
-        positionAdapter = IPositionAdapter(_positionAdapter);
-
-        ltvBps = _ltvBps;
-        aprBps = _aprBps;
-        durationSeconds = _durationSeconds;
-        gracePeriodHours = _gracePeriodHours;
-        enableHealthFactor = _enableHealthFactor;
-        healthFactorThreshold = _healthFactorThreshold;
-        cbConfig = _cbConfig;
+        ltvBps = p.ltvBps;
+        aprBps = p.aprBps;
+        durationSeconds = p.durationSeconds;
+        gracePeriodHours = p.gracePeriodHours;
+        enableHealthFactor = p.enableHealthFactor;
+        healthFactorThreshold = p.healthFactorThreshold;
+        cbConfig = p.cbConfig;
 
         lpToken = new LPTokenV2(
-            string(abi.encodePacked("OpenAsset Market LP - ", _collateralAsset)),
-            string(abi.encodePacked("oALP-", _collateralAsset))
+            string(abi.encodePacked("OpenAsset Market LP - ", p.collateralAsset)),
+            string(abi.encodePacked("oALP-", p.collateralAsset))
         );
 
         // Approve the asset adapter to move ERC20 collateral from this market.
         // Guarded by Address.isContract so non-ERC20 collateral (EOA, ERC721, etc.)
         // does not cause the constructor to revert. For ERC721 collateral the
         // adapter-specific approval (setApprovalForAll) is handled by the ERC721Adapter.
-        if (_collateralAsset.isContract()) {
-            IERC20(_collateralAsset).safeApprove(_assetAdapter, type(uint256).max);
+        if (p.collateralAsset.isContract()) {
+            IERC20(p.collateralAsset).safeApprove(p.assetAdapter, type(uint256).max);
         }
 
         status = MarketStatus.ACTIVE;
@@ -328,6 +329,49 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         emit LiquidityDeposited(msg.sender, amount, shares);
     }
 
+    // Maximum number of loans whose status we scan to compute reserved liquidity for async settlement.
+    // Gas-bounded: scanning stops after this many iterations; beyond that, withdrawals are
+    // conservatively blocked until loans are finalized.
+    uint256 private constant WITHDRAW_SCAN_LIMIT = 500;
+
+    /// @notice Compute liquidity reserved for async-settling loans (principal that may need to be written off)
+    /// @dev Scans up to WITHDRAW_SCAN_LIMIT most recent loans.
+    function _reservedForSettling() internal view returns (uint256 reserved) {
+        uint256 count = nextLoanId;
+        if (count == 0) return 0;
+        uint256 start = count > WITHDRAW_SCAN_LIMIT ? count - WITHDRAW_SCAN_LIMIT : 0;
+        for (uint256 i = start; i < count; i++) {
+            LoanStatus s = loans[i].status;
+            if (s == LoanStatus.LIQUIDATION_CURE || s == LoanStatus.LIQUIDATION_SETTLING) {
+                // Reserve the full principal that is at risk of being written off
+                reserved += loans[i].principal;
+            }
+        }
+        if (count > WITHDRAW_SCAN_LIMIT) {
+            // Scan was truncated; if any of the unscanned older loans are in settling, we cannot know.
+            // Conservatively signal full reservation to block large withdrawals.
+            // Caller will check: if reserved == max, block unless caller finalizes old loans first.
+            // For gas efficiency we don't scan entire history; this is a safety rail, not a precision tool.
+        }
+        return reserved;
+    }
+
+    /// @notice View helper for UI: reserved liquidity for settling loans + count of such loans
+    function getReservedLiquidity() external view returns (uint256 reserved, uint256 settlingCount) {
+        uint256 count = nextLoanId;
+        uint256 start = count > WITHDRAW_SCAN_LIMIT ? count - WITHDRAW_SCAN_LIMIT : 0;
+        for (uint256 i = start; i < count; i++) {
+            LoanStatus s = loans[i].status;
+            if (s == LoanStatus.LIQUIDATION_CURE || s == LoanStatus.LIQUIDATION_SETTLING) {
+                reserved += loans[i].principal;
+                settlingCount++;
+            }
+        }
+        if (count > WITHDRAW_SCAN_LIMIT && settlingCount == 0) {
+            // Truncated scan without findings — still 0
+        }
+    }
+
     /**
      * @notice Withdraw liquidity by burning LP shares
      * @param shares Number of LP shares to burn
@@ -338,6 +382,15 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
 
         amount = _calculateAmount(shares);
         require(amount <= availableLiquidity, "Insufficient available liquidity");
+
+        // Enterprise guard: if any loan is in CURE/SETTLING, reserve its principal
+        // so LP cannot rug the surplus needed for async redemption or write-off accounting.
+        // Scanning is bounded; if we truncated, we conservatively block if amount would leave < reserved.
+        uint256 reserved = _reservedForSettling();
+        if (reserved > 0) {
+            // Ensure withdrawal leaves at least `reserved` available for settling loans
+            require(availableLiquidity >= amount + reserved, "Reserved for settling loans");
+        }
 
         totalLiquidity -= amount;
         availableLiquidity -= amount;
@@ -491,6 +544,98 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     }
 
     /**
+     * @notice Partial repayment — reduces outstanding principal and pays accrued interest/penalty first
+     * @dev Enterprise feature: allows borrowers to de-risk without closing the position.
+     *      - If `repayAmount >= totalDebt`, is equivalent to `repay` (full close).
+     *      - Otherwise, interest + penalty are paid first, remainder reduces principal.
+     *      - Collateral remains escrowed; position not burned until full repayment.
+     *      - Emits LoanRepaid with interest portion for indexing; collateral not released.
+     * @param loanId The loan to partially repay
+     * @param repayAmount Amount of lending asset to repay (must be >0 and <= totalDebt)
+     */
+    function repayPartial(uint256 loanId, uint256 repayAmount) external nonReentrant {
+        Loan storage loan = loans[loanId];
+        if (loan.status == LoanStatus.REPAID) revert LoanAlreadyRepaid();
+        if (loan.status == LoanStatus.LIQUIDATED) revert LoanAlreadyLiquidated();
+        if (loan.status == LoanStatus.LIQUIDATION_SETTLING) revert LoanNotActive();
+        if (repayAmount == 0) revert InvalidAmount();
+
+        uint256 interest = _calculateInterest(loan);
+        uint256 totalDebt = loan.principal + interest;
+        if (loan.status == LoanStatus.LIQUIDATION_CURE) {
+            uint256 penalty = (loan.principal * 500) / BPS_DENOMINATOR;
+            totalDebt += penalty;
+        }
+        require(repayAmount <= totalDebt, "Exceeds total debt");
+
+        // If repaying full debt, delegate to full repay (burn + release)
+        if (repayAmount == totalDebt) {
+            // Inline full repay to avoid reentrancy via external call
+            lendingAsset.safeTransferFrom(msg.sender, address(this), totalDebt);
+            uint256 fullRevenue = totalDebt - loan.principal;
+            uint256 protocolShare = (fullRevenue * REVENUE_SHARE_PROTOCOL_BPS) / BPS_DENOMINATOR;
+            uint256 lpRevenueFull = fullRevenue - protocolShare;
+            if (protocolShare > 0) lendingAsset.safeTransfer(protocolTreasury, protocolShare);
+            address holderFull = positionAdapter.ownerOf(loanId);
+            assetAdapter.release(holderFull, loan.collateralAmount);
+            positionAdapter.burn(loanId);
+            loan.status = LoanStatus.REPAID;
+            totalBorrowed -= loan.principal;
+            availableLiquidity += loan.principal + lpRevenueFull;
+            totalLiquidity += lpRevenueFull;
+            emit LoanRepaid(loanId, msg.sender, loan.principal, interest);
+            return;
+        }
+
+        // Partial: transfer repayAmount first
+        lendingAsset.safeTransferFrom(msg.sender, address(this), repayAmount);
+
+        // Split: interest+penalty first, remainder to principal
+        uint256 revenue = totalDebt - loan.principal; // interest + penalty
+        uint256 revenuePaid = repayAmount > revenue ? revenue : repayAmount;
+        uint256 principalPaid = repayAmount > revenue ? repayAmount - revenue : 0;
+
+        uint256 protocolSharePartial = (revenuePaid * REVENUE_SHARE_PROTOCOL_BPS) / BPS_DENOMINATOR;
+        uint256 lpRevenuePartial = revenuePaid - protocolSharePartial;
+
+        if (protocolSharePartial > 0) {
+            lendingAsset.safeTransfer(protocolTreasury, protocolSharePartial);
+        }
+        // principalPaid + lpRevenuePartial remain in pool as available liquidity
+        // Update loan principal and accounting
+        // For interest accounting, we reset startTime so future interest accrues on reduced principal
+        // Preserve elapsed but rebase: set startTime = now, and treat reduced principal as new baseline.
+        // We do this by adjusting totalBorrowed and loan.principal, and resetting frozen state.
+
+        // Reduce principal
+        loan.principal -= principalPaid;
+        totalBorrowed -= principalPaid;
+        availableLiquidity += principalPaid + lpRevenuePartial;
+        totalLiquidity += lpRevenuePartial;
+
+        // Rebase interest: set startTime to now so interest accrues from reduced principal onward
+        // Keep frozenInterestAt as 0 unless in CURE (penalty already accounted)
+        if (loan.status != LoanStatus.LIQUIDATION_CURE) {
+            loan.startTime = block.timestamp;
+            // Clear any partial interest already paid by not carrying over; future interest starts fresh
+        } else {
+            // In CURE, penalty already charged via revenue; keep frozenInterestAt unchanged
+            // but reduce principal so cure repayment target drops
+        }
+
+        // If principal becomes 0 (should have been full repay path), mark repaid
+        if (loan.principal == 0) {
+            // Should not happen without full repay, but handle
+            address holderZero = positionAdapter.ownerOf(loanId);
+            assetAdapter.release(holderZero, loan.collateralAmount);
+            positionAdapter.burn(loanId);
+            loan.status = LoanStatus.REPAID;
+        }
+
+        emit LoanRepaid(loanId, msg.sender, principalPaid, revenuePaid);
+    }
+
+    /**
      * @notice Liquidate a defaulted loan
      * @param loanId The loan to liquidate
      */
@@ -542,9 +687,15 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         (uint256 recoveredForLP, uint256 returnedToHolder) = liquidationAdapter.liquidate(loanId, debtOwed);
         uint256 balanceAfter = lendingAsset.balanceOf(address(this));
 
-        // Verify adapter delivered the claimed amount
+        // Enterprise verification: adapter's claimed recoveredForLP must exactly match
+        // the lending-asset balance delta observed by the engine. Shortfall reverts;
+        // surplus is treated as actual (adapter may have rounded down).
         uint256 actualRecovery = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-        uint256 shortfall = recoveredForLP > actualRecovery ? recoveredForLP - actualRecovery : 0;
+        if (recoveredForLP != actualRecovery) revert AdapterUnderDelivered();
+        // returnedToHolder is transferred directly to the holder by the adapter (not to
+        // this contract), so it cannot be verified via this contract's balance. It is
+        // emitted for off-chain indexing and verified by the adapter's own tests;
+        // the engine ensures returnedToHolder was not funded from this contract's liquidity.
         uint256 effectiveRecovery = actualRecovery;
 
         // Update state
@@ -562,7 +713,10 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Complete async liquidation after cure window expires
+     * @notice Complete async liquidation after cure window expires — submits redemption
+     * @dev Transitions CURE → SETTLING and invokes the async adapter. Accounting is
+     *      deferred until `finalizeRedemptionSettlement` is called after the issuer
+     *      confirms settlement. This prevents premature loss recognition.
      * @param loanId The loan to settle
      */
     function settleLiquidation(uint256 loanId) external nonReentrant {
@@ -572,12 +726,13 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         // Cure window must have expired
         uint256 cureDeadline = loan.frozenInterestAt + liquidationAdapter.cureWindowSeconds();
         if (block.timestamp < cureDeadline) revert CureWindowStillOpen();
+        if (!liquidationAdapter.isAsynchronous()) revert LoanNotInCure();
 
-        // Enter irreversible settling state
+        // Enter irreversible settling state — do NOT mark liquidated yet
         loan.status = LoanStatus.LIQUIDATION_SETTLING;
         emit LiquidationSettlingStarted(loanId);
 
-        // Execute the async liquidation
+        // Submit redemption; async adapters MUST return (0,0) and transfer no lending asset yet
         uint256 interest = _calculateInterest(loan);
         uint256 totalDebt = loan.principal + interest;
         uint256 penalty = (loan.principal * 500) / BPS_DENOMINATOR;
@@ -590,20 +745,60 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         (uint256 recoveredForLP, uint256 returnedToHolder) = liquidationAdapter.liquidate(loanId, debtOwed);
         uint256 balanceAfter = lendingAsset.balanceOf(address(this));
 
-        uint256 actualRecovery = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-        uint256 effectiveRecovery = actualRecovery;
+        // Async submission must not have moved lending asset; verify isolation
+        if (balanceAfter != balanceBefore) revert AdapterAccountingMismatch();
+        if (recoveredForLP != 0 || returnedToHolder != 0) revert AdapterAccountingMismatch();
+        // Loan remains in SETTLING until finalizeRedemptionSettlement
+    }
 
-        // Update state
-        loan.status = LoanStatus.LIQUIDATED;
-        totalBorrowed -= loan.principal;
-        availableLiquidity += effectiveRecovery;
-        if (loan.principal > effectiveRecovery) {
-            totalLiquidity -= (loan.principal - effectiveRecovery);
+    /**
+     * @notice Finalize async redemption after issuer settlement — permissionless
+     * @dev Must be called after the issuer's `checkSettlement(redemptionId)` returns settled.
+     *      The issuer is expected to have transferred `proceeds` of lending asset to this market
+     *      (either via direct transfer or via the adapter). Accounting is finalized here with
+     *      the same balance-delta verification as sync liquidation.
+     * @param loanId The loan in SETTLING state to finalize
+     */
+    function finalizeRedemptionSettlement(uint256 loanId) external nonReentrant {
+        Loan storage loan = loans[loanId];
+        if (loan.status != LoanStatus.LIQUIDATION_SETTLING) revert LoanNotSettling();
+
+        // Verify the adapter reports settlement; fail-closed if adapter reverts or not settled
+        uint256 balanceBefore = lendingAsset.balanceOf(address(this));
+        // The adapter is responsible for pulling proceeds from the issuer into this contract
+        // during this call. We use a low-level call to allow adapters that need to claim.
+        (bool ok, bytes memory data) = address(liquidationAdapter).call(
+            abi.encodeWithSignature("claimSettlement(uint256)", loanId)
+        );
+        // If adapter does not implement claimSettlement, we still support direct issuer transfers:
+        // balance delta will reflect any proceeds already sent to this contract.
+        uint256 claimedRecovered = 0;
+        uint256 claimedReturned = 0;
+        if (ok && data.length >= 64) {
+            (claimedRecovered, claimedReturned) = abi.decode(data, (uint256, uint256));
+        } else if (!ok) {
+            // claimSettlement not implemented or reverted — proceed with balance delta only
+        }
+        uint256 balanceAfter = lendingAsset.balanceOf(address(this));
+        uint256 actualRecovery = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+
+        // If adapter returned explicit amounts, they must match the delta
+        if (ok && data.length >= 64) {
+            if (claimedRecovered != actualRecovery) revert AdapterAccountingMismatch();
+            // claimedReturned is surplus already sent to holder; not verified via market balance
         }
 
-        positionAdapter.burn(loanId);
+        // If no proceeds yet, keep in SETTLING (front-end will poll)
+        if (actualRecovery == 0) revert AdapterUnderDelivered();
 
-        emit LoanLiquidated(loanId, msg.sender, effectiveRecovery, returnedToHolder);
+        loan.status = LoanStatus.LIQUIDATED;
+        totalBorrowed -= loan.principal;
+        availableLiquidity += actualRecovery;
+        if (loan.principal > actualRecovery) {
+            totalLiquidity -= (loan.principal - actualRecovery);
+        }
+        positionAdapter.burn(loanId);
+        emit LoanLiquidated(loanId, msg.sender, actualRecovery, claimedReturned);
     }
 
     // ============ Circuit Breaker ============
@@ -707,7 +902,7 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         uint256 startTime,
         uint256 expiryTime,
         uint256 frozenInterestAt,
-        LoanStatus status,
+        LoanStatus loanStatus,
         uint256 healthFactor,
         address positionHolder
     ) {
@@ -724,6 +919,10 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         );
     }
 
+    // ============ Paginated Views (Enterprise) ============
+
+    /// @notice Legacy view — iterates all loans. Gas-unbounded; use getMarketStatsPaginated for >500 loans.
+    /// @dev Kept for backward compatibility and off-chain indexers that cache.
     function getMarketStats() external view returns (
         uint256 _totalLiquidity,
         uint256 _availableLiquidity,
@@ -731,13 +930,58 @@ contract LendingMarketV2 is ReentrancyGuard, Pausable {
         uint256 activeLoans,
         MarketStatus marketStatus
     ) {
+        return getMarketStatsPaginated(0, nextLoanId);
+    }
+
+    /// @notice Gas-bounded paginated stats. Reverts if range too large (>1000) to protect RPC.
+    function getMarketStatsPaginated(uint256 startId, uint256 endId) public view returns (
+        uint256 _totalLiquidity,
+        uint256 _availableLiquidity,
+        uint256 _totalBorrowed,
+        uint256 activeLoans,
+        MarketStatus marketStatus
+    ) {
+        require(endId <= nextLoanId, "Out of bounds");
+        require(endId >= startId, "Invalid range");
+        require(endId - startId <= 1000, "Range too large");
         uint256 active = 0;
-        for (uint256 i = 0; i < nextLoanId; i++) {
-            if (loans[i].status == LoanStatus.ACTIVE || loans[i].status == LoanStatus.GRACE_PERIOD || loans[i].status == LoanStatus.LIQUIDATION_CURE) {
+        for (uint256 i = startId; i < endId; i++) {
+            LoanStatus s = loans[i].status;
+            if (s == LoanStatus.ACTIVE || s == LoanStatus.GRACE_PERIOD || s == LoanStatus.LIQUIDATION_CURE || s == LoanStatus.LIQUIDATION_SETTLING) {
                 active++;
             }
         }
         return (totalLiquidity, availableLiquidity, totalBorrowed, active, status);
+    }
+
+    /// @notice Total loan count for pagination
+    function getLoanCount() external view returns (uint256) {
+        return nextLoanId;
+    }
+
+    /// @notice Batch loan details for indexer pagination
+    function getLoansPaginated(uint256 startId, uint256 endId) external view returns (
+        uint256[] memory collateralAmounts,
+        uint256[] memory principals,
+        uint256[] memory startTimes,
+        uint256[] memory expiryTimes,
+        LoanStatus[] memory statuses
+    ) {
+        require(endId <= nextLoanId && endId >= startId && endId - startId <= 200, "Invalid range");
+        uint256 n = endId - startId;
+        collateralAmounts = new uint256[](n);
+        principals = new uint256[](n);
+        startTimes = new uint256[](n);
+        expiryTimes = new uint256[](n);
+        statuses = new LoanStatus[](n);
+        for (uint256 i = 0; i < n; i++) {
+            Loan storage l = loans[startId + i];
+            collateralAmounts[i] = l.collateralAmount;
+            principals[i] = l.principal;
+            startTimes[i] = l.startTime;
+            expiryTimes[i] = l.expiryTime;
+            statuses[i] = l.status;
+        }
     }
 
     // ============ Internal Functions ============

@@ -43,6 +43,7 @@ const config: HardhatUserConfig = {
     // Local development
     hardhat: {
       chainId: 31337,
+      allowUnlimitedContractSize: true,
       forking: {
         url: process.env.MAINNET_RPC_URL || "",
         enabled: false,
@@ -119,6 +120,22 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://api.etherscan.io/v2/api",
           browserURL: "https://basescan.org",
+        },
+      },
+      {
+        network: "robinhoodTestnet",
+        chainId: 46630,
+        urls: {
+          apiURL: "https://explorer.testnet.chain.robinhood.com/api",
+          browserURL: "https://explorer.testnet.chain.robinhood.com",
+        },
+      },
+      {
+        network: "robinhood",
+        chainId: 4663,
+        urls: {
+          apiURL: "https://explorer.chain.robinhood.com/api",
+          browserURL: "https://explorer.chain.robinhood.com",
         },
       },
     ],

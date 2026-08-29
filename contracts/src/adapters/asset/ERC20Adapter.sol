@@ -55,12 +55,25 @@ contract ERC20Adapter is IAssetAdapter {
     }
 
     /// @notice Check if ERC20 transfer would succeed
+    /// @dev Allowance is checked against this adapter (address(this)), which is the
+    ///      actual spender in `escrow` (adapter calls token.safeTransferFrom).
+    ///      For fee-on-transfer or rebasing tokens, also verify via balance delta in escrow.
     function isTransferable(address from, address to, uint256 amountOrId) external view override returns (bool) {
         if (from == address(0) || to == address(0)) return false;
+        if (amountOrId == 0) return false;
         IERC20 token = marketConfigs[msg.sender].token;
         if (address(token) == address(0)) return false;
-        uint256 balance = token.balanceOf(from);
-        uint256 allowance = token.allowance(from, address(this));
-        return balance >= amountOrId && allowance >= amountOrId;
+        // Fail-closed on token reverts
+        try token.balanceOf(from) returns (uint256 balance) {
+            if (balance < amountOrId) return false;
+            // Spender is this adapter (escrow calls token.transferFrom via adapter)
+            try token.allowance(from, address(this)) returns (uint256 allowance) {
+                return allowance >= amountOrId;
+            } catch {
+                return false;
+            }
+        } catch {
+            return false;
+        }
     }
 }

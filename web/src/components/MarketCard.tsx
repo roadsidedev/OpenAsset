@@ -170,9 +170,32 @@ export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, cla
         </div>
       </div>
 
+      {/* Risk band — visible risk signal */}
+      {!isB20 && (
+        <div className={cn(
+          "mt-3 flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-[11px] font-medium",
+          market.ltvBps <= 5000
+            ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+            : market.ltvBps <= 7500
+              ? "border-ice-500/20 bg-ice-500/5 text-ice-600 dark:text-ice-300"
+              : market.ltvBps <= 8500
+                ? "border-amber-500/20 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+                : "border-red-500/20 bg-red-500/5 text-red-600 dark:text-red-400"
+        )}>
+          <span>Risk · {market.ltvBps <= 5000 ? "Conservative" : market.ltvBps <= 7500 ? "Balanced" : market.ltvBps <= 8500 ? "Aggressive" : "High"}</span>
+          <span>{formatLtv(market.ltvBps)} LTV</span>
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3.5 text-xs">
+      <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
         <span className="text-muted-foreground">Duration · {formatDuration(market.durationSeconds)}</span>
+        {market.owner ? (
+          <span className="inline-flex items-center gap-1 text-muted-foreground" title={`Created by ${market.owner}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-ice-400" />
+            {shortAddr(market.owner)}
+          </span>
+        ) : null}
         <span className="inline-flex items-center gap-1 font-medium text-foreground transition-transform group-hover:translate-x-0.5">
           View pool <span aria-hidden>→</span>
         </span>

@@ -150,13 +150,16 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
         collateral.safeApprove(router, 0);
         collateral.safeApprove(router, collateralAmount);
 
+        // Deadline with 15-minute grace to prevent grief on congested blocks;
+        // capped to avoid indefinite pending. minimumOutput already enforces slippage.
+        uint256 swapDeadline = block.timestamp + 900;
         uint256 amountOut = IUniswapV3SwapRouter(router).exactInputSingle(
             IUniswapV3SwapRouter.ExactInputSingleParams({
                 tokenIn: collateralToken,
                 tokenOut: lendingToken,
                 fee: marketConfigs[msg.sender].poolFee,
                 recipient: address(this),
-                deadline: block.timestamp,
+                deadline: swapDeadline,
                 amountIn: collateralAmount,
                 amountOutMinimum: minimumOutput,
                 sqrtPriceLimitX96: 0
