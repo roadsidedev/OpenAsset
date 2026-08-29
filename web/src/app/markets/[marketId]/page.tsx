@@ -48,8 +48,15 @@ export default function MarketDetailPage() {
 
   const { data: market, isLoading, isFetching, error, refetch } = useMarket(marketId);
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
+  // Hooks must remain unconditional: the market query starts empty, then populates
+  // asynchronously. Keeping metadata queries here avoids a hook-order crash when
+  // the details view transitions from loading to the loaded market.
   const { data: collateralToken } = useTokenMetadata(
     market && isAddress(market.collateralAsset) ? market.collateralAsset : undefined,
+    market?.chainId,
+  );
+  const { data: loanToken } = useTokenMetadata(
+    market && market.loanAsset && isAddress(market.loanAsset) ? market.loanAsset : undefined,
     market?.chainId,
   );
   const publicClient = usePublicClient({ chainId: market?.chainId });
@@ -187,18 +194,12 @@ export default function MarketDetailPage() {
   const isPaused = statusLabel !== "ACTIVE";
 
   // Brand-agnostic identity derived from adapter + collateral metadata (same as MarketCard)
-  const isAddr = isAddress(market.collateralAsset as `0x${string}`);
-  const { data: collateralMeta } = useTokenMetadata(isAddr ? market.collateralAsset : undefined, market.chainId);
-  const { data: loanMeta } = useTokenMetadata(
-    market.loanAsset && isAddress(market.loanAsset as `0x${string}`) ? market.loanAsset : undefined,
-    market.chainId
-  );
   const identity = resolveAssetIdentity({
     market,
-    tokenSymbol: collateralMeta?.symbol || collateralToken?.symbol || null,
-    tokenName: collateralMeta?.name || collateralToken?.name || null,
-    tokenLogoUri: collateralMeta?.logoUri || collateralToken?.logoUri || null,
-    loanAssetSymbol: loanMeta?.symbol || null,
+    tokenSymbol: collateralToken?.symbol || null,
+    tokenName: collateralToken?.name || null,
+    tokenLogoUri: collateralToken?.logoUri || null,
+    loanAssetSymbol: loanToken?.symbol || null,
   });
 
   return (
@@ -252,8 +253,8 @@ export default function MarketDetailPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Collateral: <span className="font-mono">{market.collateralAsset ? `${market.collateralAsset.slice(0, 10)}…` : "—"}</span> · 
-              Loan: <span className="font-mono">{loanMeta?.symbol || (market.loanAsset ? `${market.loanAsset.slice(0, 10)}…` : "—")}</span> · 
+              Collateral: <span className="font-mono">{market.collateralAsset ? `${market.collateralAsset.slice(0, 10)}…` : "—"}</span> ·
+              Loan: <span className="font-mono">{loanToken?.symbol || (market.loanAsset ? `${market.loanAsset.slice(0, 10)}…` : "—")}</span> ·
               Owner: <span className="font-mono">{market.owner ? `${market.owner.slice(0, 10)}…` : "—"}</span>
             </p>
           </div>
