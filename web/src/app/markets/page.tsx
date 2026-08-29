@@ -1,27 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useEnrichedMarkets } from "@/hooks/useEnrichedMarkets";
 import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 import { PlatformStatsDashboard } from "@/components/PlatformStatsDashboard";
 
-const CATEGORY_TABS = [
-  "All Markets",
-  "RWA",
-  "Tokenized Equities",
-  "Tokens",
-  "NFT",
-] as const;
-
-type Category = (typeof CATEGORY_TABS)[number];
-
 export default function MarketsPage() {
-  const { data, isLoading, error } = useMarkets(0, 50);
-  const { enriched } = useEnrichedMarkets(
-    (data?.markets || []).filter((e) => e.identity.category === "All Markets")
-  );
+  const { data, isLoading } = useMarkets(0, 50);
+  const { enriched } = useEnrichedMarkets(data?.markets || []);
 
   const filteredEnriched = useMemo(() => {
     return enriched.filter((e) => e.market.active);
