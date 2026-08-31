@@ -54,8 +54,6 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
     return [];
   }
 
-  const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
-
   async function enrichMarket(addr: string): Promise<Market | null> {
     try {
       const [totalLiq, availLiq, totalBorrowed] = await publicClient.readContract({
@@ -67,7 +65,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
       const [
         providerId,
         status,
-        lpTokenAddr,
+        marketOwner,
         collateralAsset,
         loanAsset,
         assetAdapter,
@@ -86,7 +84,7 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
           args: [addr as Address],
         }).catch(() => '0x' + '0'.repeat(64)),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'status' }).catch(() => 0),
-        publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lpToken' }).catch(() => '0x0000000000000000000000000000000000000000'),
+        publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'marketOwner' }).catch(() => ''),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'collateralAsset' }).catch(() => ''),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingAsset' }).catch(() => ''),
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'assetAdapter' }).catch(() => ''),
@@ -99,30 +97,9 @@ async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
         publicClient.readContract({ address: addr as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'durationSeconds' }).catch(() => BigInt(0)),
       ]);
 
-      let lpOwner = '';
-      if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
-        try {
-          lpOwner = (await publicClient.readContract({
-            address: lpTokenAddr as Address,
-            abi: parseAbi(ERC721_OWNER_ABI),
-            functionName: 'ownerOf',
-            args: [BigInt(0)],
-          }) as string) || '';
-        } catch {
-          try {
-            lpOwner = (await publicClient.readContract({
-              address: lpTokenAddr as Address,
-              abi: parseAbi(ERC721_OWNER_ABI),
-              functionName: 'ownerOf',
-              args: [BigInt(1)],
-            }) as string) || '';
-          } catch {}
-        }
-      }
-
       return {
         marketAddress: addr,
-        owner: lpOwner,
+        owner: (marketOwner as string) || '',
         providerId: providerId as string,
         collateralAsset: collateralAsset as string,
         loanAsset: loanAsset as string,
@@ -230,12 +207,11 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
   if (!publicClient) return null;
   try {
     const factoryAddress = getContract(chainId, 'marketFactory');
-    const ERC721_OWNER_ABI = ['function ownerOf(uint256 tokenId) external view returns (address)'];
     const [
       stats,
       providerId,
       status,
-      lpTokenAddr,
+      marketOwner,
       collateralAsset,
       loanAsset,
       assetAdapter,
@@ -268,8 +244,8 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
       publicClient.readContract({
         address: address as Address,
         abi: parseAbi(LENDING_MARKET_ABI),
-        functionName: 'lpToken',
-      }) as Promise<string>,
+        functionName: 'marketOwner',
+      }).catch(() => '') as Promise<string>,
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'collateralAsset' }) as Promise<string>,
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingAsset' }) as Promise<string>,
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'assetAdapter' }) as Promise<string>,
@@ -282,30 +258,9 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'durationSeconds' }) as Promise<bigint>,
     ]);
 
-    let lpOwner = '';
-    if (lpTokenAddr && lpTokenAddr !== '0x0000000000000000000000000000000000000000') {
-      try {
-        lpOwner = (await publicClient.readContract({
-          address: lpTokenAddr as Address,
-          abi: parseAbi(ERC721_OWNER_ABI),
-          functionName: 'ownerOf',
-          args: [BigInt(0)],
-        }) as string) || '';
-      } catch {
-        try {
-          lpOwner = (await publicClient.readContract({
-            address: lpTokenAddr as Address,
-            abi: parseAbi(ERC721_OWNER_ABI),
-            functionName: 'ownerOf',
-            args: [BigInt(1)],
-          }) as string) || '';
-        } catch {}
-      }
-    }
-
     return {
       marketAddress: address,
-      owner: lpOwner,
+      owner: (marketOwner as string) || '',
       providerId: providerId as string,
       collateralAsset: collateralAsset as string,
       loanAsset: loanAsset as string,

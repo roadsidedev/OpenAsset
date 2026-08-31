@@ -1,12 +1,13 @@
 /**
  * @file usePlatformStats.ts
- * @description Unified platform stats hook — fetches markets + loans data
- *              and computes aggregate stats for the dashboard.
- *              Zero mock data — everything comes from the backend API.
+ * @description Platform stats from unified market discovery (backend + on-chain fallback).
  */
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchJson } from '@/lib/apiClient';
+import { useMarkets } from '@/hooks/useMarkets';
+import { resolveAssetIdentity } from '@/lib/assetIdentity';
 
 export interface AssetDistribution {
   label: string;
@@ -58,117 +59,105 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const usePlatformStats = () => {
-  return useQuery<PlatformStats>({
-    queryKey: ['platformStats'],
-    queryFn: async () => {
-      const [marketsData, loansData] = await Promise.all([
-        apiFetchJson<{ total: number; markets: any[] }>(`/api/v1/markets?start=0&count=500`),
-        apiFetchJson<{ total: number; loans: any[] }>(`/api/v1/loans?take=100&skip=0`),
-      ]);
-
-      // --- Markets ---
-      let totalActiveMarkets = 0;
-      const assetTypeCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0 };
-
-      if (marketsData?.markets) {
-        const markets = marketsData.markets;
-        for (const m of markets) {
-          if (m.active) totalActiveMarkets++;
-          const t = Number(m.assetType);
-          if (t in assetTypeCounts) assetTypeCounts[t]++;
-        }
-      }
-
-      // --- Loans ---
-      let totalActiveLoans = 0;
-      let collateralWei = BigInt(0);
-
-      if (loansData?.loans) {
-        const loans = loansData.loans;
-        for (const loan of loans) {
-          if (loan.status === 'ACTIVE') {
-            totalActiveLoans++;
-            if (loan.collateralAmount) {
-              try {
-                collateralWei += BigInt(loan.collateralAmount);
-              } catch { /* skip */ }
-            }
-          }
-        }
-      }
-
-      const assetDistribution: AssetDistribution[] = [
-        { label: 'ERC20 Tokens', count: assetTypeCounts[0], color: COLORS[0] },
-        { label: 'NFT (ERC721)', count: assetTypeCounts[1], color: COLORS[1] },
-        { label: 'ERC1155', count: assetTypeCounts[2], color: COLORS[2] },
-        // Placeholder categories — show 0 when no data
-        { label: 'RWA', count: 0, color: COLORS[3] },
-        { label: 'Tokenized Equities', count: 0, color: '#94A3B8' },
-      ];
-
-      const totalMarketCount = totalActiveMarkets || 1;
-      const assetCategories: AssetCategory[] = [
-        {
-          id: 'erc20',
-          name: 'ERC20 Tokens',
-          count: assetTypeCounts[0],
-          value: assetTypeCounts[0],
-          percentage: totalMarketCount > 0 ? Math.round((assetTypeCounts[0] / totalMarketCount) * 1000) / 10 : 0,
-          color: CATEGORY_COLORS.erc20,
-          itemDetails: [],
-        },
-        {
-          id: 'nft',
-          name: 'NFT (ERC721)',
-          count: assetTypeCounts[1],
-          value: assetTypeCounts[1],
-          percentage: totalMarketCount > 0 ? Math.round((assetTypeCounts[1] / totalMarketCount) * 1000) / 10 : 0,
-          color: CATEGORY_COLORS.nft,
-          itemDetails: [],
-        },
-        {
-          id: 'erc1155',
-          name: 'ERC1155',
-          count: assetTypeCounts[2],
-          value: assetTypeCounts[2],
-          percentage: totalMarketCount > 0 ? Math.round((assetTypeCounts[2] / totalMarketCount) * 1000) / 10 : 0,
-          color: CATEGORY_COLORS.erc1155,
-          itemDetails: [],
-        },
-        {
-          id: 'rwa',
-          name: 'Real World Assets (RWA)',
-          count: 0,
-          value: 0,
-          percentage: 0,
-          color: CATEGORY_COLORS.rwa,
-          itemDetails: [],
-        },
-        {
-          id: 'equities',
-          name: 'Tokenized Equities',
-          count: 0,
-          value: 0,
-          percentage: 0,
-          color: CATEGORY_COLORS.equities,
-          itemDetails: [],
-        },
-      ];
-
-      return {
-        totalActiveMarkets,
-        totalActiveLoans,
-        totalCollateral: formatUsd(collateralWei.toString()),
-        totalValue: totalActiveMarkets,
-        performance30d: 0,
-        assetDistribution,
-        assetCategories,
-      };
-    },
+  const marketsQuery = useMarkets(0, 500);
+  const loansQuery = useQuery({
+    queryKey: ['platformStats', 'loans'],
+    queryFn: async () => apiFetchJson<{ total: number; loans: any[] }>(`/api/v1/loans?take=100&skip=0`),
     staleTime: 60_000,
-    gcTime: 300000,
-    retry: 1,
+    retry: 0,
     refetchOnWindowFocus: false,
-    placeholderData: (prev) => prev,
   });
+
+  const data = useMemo<PlatformStats>(() => {
+    const markets = marketsQuery.data?.markets || [];
+    let totalActiveMarkets = 0;
+    const catCounts: Record<string, number> = {
+      Tokens: 0,
+      NFT: 0,
+      RWA: 0,
+      'Tokenized Equities': 0,
+    };
+
+    let liquidityWei = BigInt(0);
+    for (const m of markets) {
+      if (m.active) totalActiveMarkets++;
+      const identity = resolveAssetIdentity({ market: m, tokenSymbol: null, tokenName: null, tokenLogoUri: null, loanAssetSymbol: null });
+      const cat = identity.category || 'Tokens';
+      if (cat in catCounts) catCounts[cat]++;
+      else catCounts.Tokens++;
+      try {
+        liquidityWei += BigInt(m.liquidity?.total || '0');
+      } catch { /* skip */ }
+    }
+
+    const loans = loansQuery.data?.loans || [];
+    let totalActiveLoans = 0;
+    let collateralWei = BigInt(0);
+    for (const loan of loans) {
+      if (loan.status === 'ACTIVE' || loan.status === 0) {
+        totalActiveLoans++;
+        if (loan.collateralAmount) {
+          try { collateralWei += BigInt(loan.collateralAmount); } catch { /* skip */ }
+        }
+      }
+    }
+
+    const totalMarketCount = Math.max(totalActiveMarkets, 1);
+    const assetDistribution: AssetDistribution[] = [
+      { label: 'ERC20 Tokens', count: catCounts.Tokens, color: COLORS[0] },
+      { label: 'NFT (ERC721)', count: catCounts.NFT, color: COLORS[1] },
+      { label: 'RWA', count: catCounts.RWA, color: COLORS[2] },
+      { label: 'Tokenized Equities', count: catCounts['Tokenized Equities'], color: COLORS[3] },
+    ];
+
+    const assetCategories: AssetCategory[] = [
+      {
+        id: 'erc20',
+        name: 'ERC20 Tokens',
+        count: catCounts.Tokens,
+        value: catCounts.Tokens,
+        percentage: Math.round((catCounts.Tokens / totalMarketCount) * 1000) / 10,
+        color: CATEGORY_COLORS.erc20,
+      },
+      {
+        id: 'nft',
+        name: 'NFT (ERC721)',
+        count: catCounts.NFT,
+        value: catCounts.NFT,
+        percentage: Math.round((catCounts.NFT / totalMarketCount) * 1000) / 10,
+        color: CATEGORY_COLORS.nft,
+      },
+      {
+        id: 'rwa',
+        name: 'Real World Assets (RWA)',
+        count: catCounts.RWA,
+        value: catCounts.RWA,
+        percentage: Math.round((catCounts.RWA / totalMarketCount) * 1000) / 10,
+        color: CATEGORY_COLORS.rwa,
+      },
+      {
+        id: 'equities',
+        name: 'Tokenized Equities',
+        count: catCounts['Tokenized Equities'],
+        value: catCounts['Tokenized Equities'],
+        percentage: Math.round((catCounts['Tokenized Equities'] / totalMarketCount) * 1000) / 10,
+        color: CATEGORY_COLORS.equities,
+      },
+    ];
+
+    return {
+      totalActiveMarkets,
+      totalActiveLoans,
+      totalCollateral: collateralWei > 0 ? formatUsd(collateralWei.toString()) : formatUsd(liquidityWei.toString()),
+      totalValue: totalActiveMarkets,
+      performance30d: 0,
+      assetDistribution,
+      assetCategories,
+    };
+  }, [marketsQuery.data, loansQuery.data]);
+
+  return {
+    data,
+    isLoading: marketsQuery.isLoading,
+  };
 };

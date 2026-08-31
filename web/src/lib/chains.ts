@@ -29,7 +29,7 @@ export const DEFAULT_CHAIN_ID: number = Number(process.env.NEXT_PUBLIC_CHAIN_ID)
 export function getRpcUrlForChain(chainId: number): string | undefined {
   if (chainId === base.id) return process.env.NEXT_PUBLIC_RPC_URL_8453 || 'https://mainnet.base.org';
   if (chainId === baseSepolia.id) return process.env.NEXT_PUBLIC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL_84532 || 'https://sepolia.base.org';
-  if (chainId === sepolia.id) return process.env.NEXT_PUBLIC_RPC_URL_11155111 || 'https://rpc.sepolia.org';
+  if (chainId === sepolia.id) return process.env.NEXT_PUBLIC_RPC_URL_11155111 || 'https://ethereum-sepolia-rpc.publicnode.com';
   if (chainId === robinhoodChain.id) return process.env.NEXT_PUBLIC_RPC_URL_4663 || 'https://rpc.mainnet.chain.robinhood.com';
   if (chainId === robinhoodChainTestnet.id) return process.env.NEXT_PUBLIC_RPC_URL_46630 || 'https://rpc.testnet.chain.robinhood.com';
   return undefined;

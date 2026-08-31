@@ -15,7 +15,7 @@ import { getContracts } from "@/lib/contracts";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { decodeContractError } from "@/lib/contractErrors";
 import { cn } from "@/lib/utils";
-import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, MagnifyingGlass } from "@phosphor-icons/react";
+import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
 import { adapterSupportsPicker, getSuggestedAdaptersForB20, getSuggestedAdaptersForRobinhood } from "@/lib/supportedAssets";
 import { getProviderAsset, getProviderAssetByAddress, getProviderSequencerFeed, PROVIDER_IDS } from "@/lib/providerBundles";
@@ -63,6 +63,17 @@ export default function CreateMarketPage() {
 
   const isB20Chain = chainId === 8453;
   const isRobinhoodChain = chainId === 4663;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isDeploying) {
+        reset();
+        router.push("/markets");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isDeploying, reset, router]);
 
   // Registry verification map — queried on-chain, fallback to hardcoded if registry not deployed
   const [registryVerification, setRegistryVerification] = useState<Record<string, { verified: boolean; deprecated: boolean }>>({});
@@ -340,6 +351,18 @@ export default function CreateMarketPage() {
           <div className="flex items-center gap-3">
             <Rocket className="h-6 w-6 text-ice-500" />
             <h1 className="text-2xl font-bold text-foreground text-balance">Launch a Market</h1>
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                router.push("/markets");
+              }}
+              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Cancel and exit"
+              title="Cancel (Esc)"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
           <p className="text-sm text-muted-foreground">
             Configure flat parameters and deploy an isolated lending market
@@ -813,6 +836,20 @@ export default function CreateMarketPage() {
                     onClick={async () => {
                       try {
                         const raw = parseUnits(formData.liquidity, 6);
+                        if (userAddress && formData.lendingAsset && publicClient && contracts.marketFactory) {
+                          const allowance = await publicClient.readContract({
+                            address: formData.lendingAsset as Address,
+                            abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }],
+                            functionName: 'allowance',
+                            args: [userAddress as Address, contracts.marketFactory as Address],
+                          }) as bigint;
+                          if (allowance < raw) {
+                            toast.info("Dry-run skipped: token approval is still needed", {
+                              description: `Deploy will ask your wallet to approve ${formatUnits(raw, 6)} ${lendingToken?.symbol || 'USDC'} to the factory, then create the market.`,
+                            });
+                            return;
+                          }
+                        }
                         const cfg: any = {
                           lpAddress: userAddress || "0x0000000000000000000000000000000000000000",
                           collateralAsset: formData.collateralAsset,
@@ -993,7 +1030,17 @@ export default function CreateMarketPage() {
               Back
             </button>
           ) : (
-            <div />
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                router.push("/markets");
+              }}
+              className="flex items-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-premium active-press"
+            >
+              <X className="h-4 w-4" />
+              Cancel
+            </button>
           )}
           {step < 8 ? (
             <button

@@ -81,6 +81,7 @@ const REQUIRE_MESSAGES: Array<[RegExp, string]> = [
   [/adapter not selectable/i, 'One or more selected adapters is not registered or has been deprecated.'],
   [/Position adapter registration failed/i, 'Position adapter registration failed.'],
   [/ERC20: transfer amount exceeds balance/i, 'Insufficient balance for this transaction.'],
+  [/ERC20: transfer amount exceeds allowance/i, 'Token approval is required. Deploy will ask your wallet to approve the factory, then create the market.'],
   [/ERC20: insufficient allowance/i, 'Insufficient allowance. Approve the token first.'],
   [/ERC20: transfer from the zero address/i, 'Invalid token transfer.'],
   [/SafeERC20: approve failed/i, 'Token approval failed. The token may be non-standard or incompatible.'],

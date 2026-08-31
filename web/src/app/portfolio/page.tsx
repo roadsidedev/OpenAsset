@@ -101,7 +101,7 @@ function PortfolioContent() {
   const activeLoans: any[] = loansData?.loans || [];
   const allMarkets: any[] = marketsData?.markets || [];
   const myMarkets = address
-    ? allMarkets.filter((m: any) => m.owner.toLowerCase() === address.toLowerCase())
+    ? allMarkets.filter((m: any) => (m.owner || '').toLowerCase() === address.toLowerCase())
     : [];
 
   return (
