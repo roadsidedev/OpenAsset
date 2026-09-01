@@ -108,3 +108,4 @@ The `monitoringWorker` tracks volatility in real-time. If an asset's price moves
 
 Adapter developers should begin with the [Adapter Specification](docs/ADAPTER_SPECIFICATION.md), which defines the interfaces, inputs and outputs, permissions, failure behavior, security assumptions, upgrade and versioning policy, testing requirements, and verification process. The [Adapter Developer Guide](docs/ADAPTER_DEVELOPER.md) contains implementation patterns, and [`ExampleOracleAdapter`](contracts/src/adapters/examples/ExampleOracleAdapter.sol) is a deterministic local reference implementation.
 
+The [Adapter Security Model](docs/ADAPTER_SECURITY_MODEL.md) defines the adapter permission, verification, version, upgrade, revocation, and emergency-response controls.

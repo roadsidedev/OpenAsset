@@ -2,6 +2,8 @@
 **Owner:** Audit Governance Multisig (`AdapterRegistry.auditGovernance`)  
 **Applies to:** All `AdapterType` (ASSET, ORACLE, COMPLIANCE, LIQUIDATION, POSITION)
 
+This policy is implemented within the broader [`ADAPTER_SECURITY_MODEL.md`](./ADAPTER_SECURITY_MODEL.md), which defines adapter permissions, versioning, upgrade, revocation, and emergency controls.
+
 ## 1. What Verification Means
 
 - `verified == true` means the audit governance has reviewed source, tests, and external dependencies and **attests** the adapter implements its interface correctly and fails closed.

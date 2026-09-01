@@ -7,7 +7,7 @@
 
 > An adapter is a non-upgradeable smart contract that implements one OpenAsset adapter interface and supplies a bounded, fail-closed integration for an isolated lending market.
 
-This document is the normative companion to [`ADAPTER_DEVELOPER.md`](./ADAPTER_DEVELOPER.md). If this specification conflicts with an implementation comment or an older guide, the Solidity interface and the rules in this document take precedence.
+This document is the normative companion to [`ADAPTER_DEVELOPER.md`](./ADAPTER_DEVELOPER.md). The adapter-specific security controls are consolidated in [`ADAPTER_SECURITY_MODEL.md`](./ADAPTER_SECURITY_MODEL.md). If this specification conflicts with an implementation comment or an older guide, the Solidity interface and the rules in this document take precedence.
 
 ## 1. Design boundaries
 
