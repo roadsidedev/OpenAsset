@@ -1,11 +1,11 @@
 ---
 title: Adapter registry
-description: Hybrid permissionless registration with Verified / unverified / deprecated metadata.
+description: Hybrid permissionless registration with discoverability metadata and Verified / unverified / deprecated review states.
 ---
 
 # Adapter registry
 
-**Model: hybrid.** Anyone can deploy an adapter conforming to one of the five interfaces and register it. The registry does not gate what exists — it attaches and surfaces trust metadata so creators and borrowers can decide.
+**Model: hybrid.** Anyone can deploy an adapter conforming to one of the five interfaces and register it. The registry does not gate what exists. It attaches discoverability and trust metadata so market creators and borrowers can make informed decisions.
 
 ## AdapterInfo
 
@@ -22,33 +22,46 @@ struct AdapterInfo {
     uint256 registeredAt;
     uint256 totalValueSecured; // TVL through markets using this adapter
 }
+
+struct AdapterMetadata {
+    string name;
+    string version;           // semantic version supplied by developer
+    address developer;
+    string category;
+    string supportedAssets;
+    string documentationURI;
+    string repositoryURI;
+    string auditURI;
+    ReviewStatus reviewStatus; // UNREVIEWED, IN_REVIEW, APPROVED, REJECTED
+    uint256 usageCount;
+}
 ```
+
+Use `getAdapterInfo(adapter)` for compatibility fields and `getAdapterMetadata(adapter)` for the developer-facing catalog record. Usage is reported by the configured protocol reporter, not by arbitrary callers.
 
 ## Lifecycle operations
 
 | Function | Who | Effect |
 |---|---|---|
-| `registerAdapter` | Anyone | Adds unverified adapter |
-| `markVerified` | Audit governance multisig | Sets verified + audit reference |
+| `registerAdapter` | Anyone | Adds an adapter as unreviewed with a compatible legacy record |
+| `registerAdapterWithMetadata` | Developer | Adds an adapter and its name, version, category, assets, docs, and repository |
+| `updateMetadata` | Registered developer | Updates descriptive metadata before or during review |
+| `markInReview` | Audit governance multisig | Makes an active review visible and reproducible |
+| `markVerified` | Audit governance multisig | Sets `verified`, `APPROVED`, and the audit reference |
+| `markRejected` | Audit governance multisig | Sets `REJECTED` and records the rejection reference |
 | `markDeprecated` | Audit governance multisig | Blocks new selection; does **not** pause existing markets |
+| `recordUsage` | Configured usage reporter | Increments usage count and secured value |
 
-### Deprecation behavior (explicit)
+## Review meaning
 
-Deprecation does **not** retroactively pause markets already using the adapter — consistent with “market creator controls their market.” It does:
+A Verified mark means governance reviewed the committed source, tests, dependencies, and assumptions against the [verification policy](/docs/VERIFICATION_POLICY). It is a time-bounded trust signal, not insurance, an audit guarantee, or a claim that the adapter is economically safe. A Rejected status records a review outcome and reason reference; the developer may fix the findings and submit a new review. A Deprecated status blocks new market selection but does not retroactively change existing markets.
 
-1. Block the adapter from selection in any **new** market
-2. Surface a persistent warning on existing markets still wired to it
-3. Directly notify affected LP(s)
-
-## Reference adapters (ship Verified at launch)
-
-Protocol-authored defaults so most usage runs through vetted code while the registry door stays open:
+## Reference adapters
 
 | Type | Adapters |
 |---|---|
-| Asset | `ERC20Adapter`, `ERC721Adapter` |
-| Oracle | `UniswapV3TWAPAdapter`, `ChainlinkAdapter` |
-| Liquidation | `DEXSwapLiquidationAdapter`, `NFTAuctionLiquidationAdapter` |
+| Asset | `ERC20Adapter`, `ERC721Adapter`, `B20AssetAdapter` |
+| Oracle | `UniswapV3TWAPAdapter`, `ChainlinkAdapter`, `NAVOracleAdapter`, `ChainlinkEquityFeedAdapter` |
+| Compliance | `ERC3643ComplianceAdapter`, `ManagedAllowlistComplianceAdapter`, `B20PolicyComplianceAdapter` |
+| Liquidation | `DEXSwapLiquidationAdapter`, `NFTAuctionLiquidationAdapter`, `IssuerRedemptionLiquidationAdapter` |
 | Position | `StandardPositionAdapter`, `SoulboundPositionAdapter`, `TransferablePositionAdapter` |
-
-RWA-specific adapters (`ChainlinkEquityFeedAdapter`, `ERC3643ComplianceAdapter`, `IssuerRedemptionLiquidationAdapter`) follow the same model once issuer integrations and counsel gates are met.

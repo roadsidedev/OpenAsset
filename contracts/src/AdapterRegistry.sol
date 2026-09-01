@@ -35,15 +35,32 @@ contract AdapterRegistry {
         uint256 totalValueSecured;
     }
 
+    enum ReviewStatus { UNREVIEWED, IN_REVIEW, APPROVED, REJECTED }
+
+    struct AdapterMetadata {
+        string name;
+        string version;
+        address developer;
+        string category;
+        string supportedAssets;
+        string documentationURI;
+        string repositoryURI;
+        string auditURI;
+        ReviewStatus reviewStatus;
+        uint256 usageCount;
+    }
+
     // ============ Storage ============
 
     mapping(address => AdapterInfo) public adapters;
+    mapping(address => AdapterMetadata) public adapterMetadata;
     address[] public allAdapters;
     mapping(AdapterType => address[]) public adaptersByType;
     mapping(AdapterType => uint256) public adapterCountByType;
 
     // Governance multisig for markVerified / markDeprecated
     address public auditGovernance;
+    address public usageReporter;
 
     // ============ Events ============
 
@@ -68,6 +85,11 @@ contract AdapterRegistry {
         address indexed newGovernance
     );
 
+    event AdapterMetadataUpdated(address indexed adapter, string name, string version, address indexed developer);
+    event AdapterUsageRecorded(address indexed adapter, uint256 usageCount, uint256 valueSecured);
+    event AdapterReviewStatusUpdated(address indexed adapter, ReviewStatus status, string reviewReference);
+    event UsageReporterUpdated(address indexed oldReporter, address indexed newReporter);
+
     // ============ Errors ============
 
     error AlreadyRegistered();
@@ -80,6 +102,7 @@ contract AdapterRegistry {
     constructor(address _auditGovernance) {
         if (_auditGovernance == address(0)) revert InvalidAddress();
         auditGovernance = _auditGovernance;
+        usageReporter = _auditGovernance;
     }
 
     // ============ Modifiers ============
@@ -99,13 +122,17 @@ contract AdapterRegistry {
      * @param adapterType Which interface the adapter implements
      */
     function registerAdapter(address adapter, AdapterType adapterType) external {
+        _registerAdapter(adapter, adapterType, msg.sender);
+    }
+
+    function _registerAdapter(address adapter, AdapterType adapterType, address registrant) internal {
         if (adapter == address(0)) revert InvalidAddress();
         if (adapters[adapter].adapterAddress != address(0)) revert AlreadyRegistered();
 
         adapters[adapter] = AdapterInfo({
             adapterAddress: adapter,
             adapterType: adapterType,
-            registeredBy: msg.sender,
+            registeredBy: registrant,
             verified: false,
             deprecated: false,
             auditReference: "",
@@ -117,7 +144,90 @@ contract AdapterRegistry {
         adaptersByType[adapterType].push(adapter);
         adapterCountByType[adapterType]++;
 
-        emit AdapterRegistered(adapter, adapterType, msg.sender);
+        emit AdapterRegistered(adapter, adapterType, registrant);
+        _setMetadata(adapter, "Unnamed adapter", "0.0.0", registrant, "", "", "", "", "");
+    }
+
+    /**
+     * @notice Register an adapter with the metadata shown to market creators.
+     * @dev Registration remains permissionless and starts as UNREVIEWED.
+     */
+    function registerAdapterWithMetadata(
+        address adapter,
+        AdapterType adapterType,
+        string calldata name,
+        string calldata version,
+        string calldata category,
+        string calldata supportedAssets,
+        string calldata documentationURI,
+        string calldata repositoryURI
+    ) external {
+        _registerAdapter(adapter, adapterType, msg.sender);
+        _setMetadata(adapter, name, version, msg.sender, category, supportedAssets, documentationURI, repositoryURI, "");
+    }
+
+    function _setMetadata(
+        address adapter,
+        string memory name,
+        string memory version,
+        address developer,
+        string memory category,
+        string memory supportedAssets,
+        string memory documentationURI,
+        string memory repositoryURI,
+        string memory auditURI
+    ) internal {
+        adapterMetadata[adapter] = AdapterMetadata({
+            name: name,
+            version: version,
+            developer: developer,
+            category: category,
+            supportedAssets: supportedAssets,
+            documentationURI: documentationURI,
+            repositoryURI: repositoryURI,
+            auditURI: auditURI,
+            reviewStatus: ReviewStatus.UNREVIEWED,
+            usageCount: 0
+        });
+        emit AdapterMetadataUpdated(adapter, name, version, developer);
+    }
+
+    /** @notice Update developer-owned descriptive metadata before review. */
+    function updateMetadata(
+        address adapter,
+        string calldata name,
+        string calldata version,
+        string calldata category,
+        string calldata supportedAssets,
+        string calldata documentationURI,
+        string calldata repositoryURI
+    ) external {
+        if (adapters[adapter].adapterAddress == address(0)) revert NotRegistered();
+        AdapterMetadata storage metadata = adapterMetadata[adapter];
+        if (metadata.developer != msg.sender) revert Unauthorized();
+        metadata.name = name;
+        metadata.version = version;
+        metadata.category = category;
+        metadata.supportedAssets = supportedAssets;
+        metadata.documentationURI = documentationURI;
+        metadata.repositoryURI = repositoryURI;
+        emit AdapterMetadataUpdated(adapter, name, version, msg.sender);
+    }
+
+    /** @notice Record adapter usage from the configured protocol usage reporter. */
+    function recordUsage(address adapter, uint256 valueSecured) external {
+        if (msg.sender != usageReporter && msg.sender != auditGovernance) revert Unauthorized();
+        if (adapters[adapter].adapterAddress == address(0)) revert NotRegistered();
+        adapters[adapter].totalValueSecured += valueSecured;
+        adapterMetadata[adapter].usageCount++;
+        emit AdapterUsageRecorded(adapter, adapterMetadata[adapter].usageCount, valueSecured);
+    }
+
+    /** @notice Mark a registered adapter as actively under review. */
+    function markInReview(address adapter) external onlyAuditGovernance {
+        if (adapters[adapter].adapterAddress == address(0)) revert NotRegistered();
+        adapterMetadata[adapter].reviewStatus = ReviewStatus.IN_REVIEW;
+        emit AdapterReviewStatusUpdated(adapter, ReviewStatus.IN_REVIEW, "");
     }
 
     // ============ Verification (Governance Only) ============
@@ -134,8 +244,20 @@ contract AdapterRegistry {
 
         adapters[adapter].verified = true;
         adapters[adapter].auditReference = auditReference;
+        adapterMetadata[adapter].reviewStatus = ReviewStatus.APPROVED;
+        adapterMetadata[adapter].auditURI = auditReference;
 
         emit AdapterVerified(adapter, auditReference);
+        emit AdapterReviewStatusUpdated(adapter, ReviewStatus.APPROVED, auditReference);
+    }
+
+    /** @notice Record a rejected review with a reproducible reason reference. */
+    function markRejected(address adapter, string calldata reasonReference) external onlyAuditGovernance {
+        if (adapters[adapter].adapterAddress == address(0)) revert NotRegistered();
+        adapters[adapter].verified = false;
+        adapterMetadata[adapter].reviewStatus = ReviewStatus.REJECTED;
+        adapterMetadata[adapter].auditURI = reasonReference;
+        emit AdapterReviewStatusUpdated(adapter, ReviewStatus.REJECTED, reasonReference);
     }
 
     /**
@@ -154,7 +276,20 @@ contract AdapterRegistry {
         emit AdapterDeprecated(adapter, reason);
     }
 
+    /** @notice Return the discoverability and review metadata for an adapter. */
+    function getAdapterMetadata(address adapter) external view returns (AdapterMetadata memory) {
+        if (adapters[adapter].adapterAddress == address(0)) revert NotRegistered();
+        return adapterMetadata[adapter];
+    }
+
     // ============ Admin ============
+
+    function setUsageReporter(address newReporter) external onlyAuditGovernance {
+        if (newReporter == address(0)) revert InvalidAddress();
+        address oldReporter = usageReporter;
+        usageReporter = newReporter;
+        emit UsageReporterUpdated(oldReporter, newReporter);
+    }
 
     /**
      * @notice Update audit governance address

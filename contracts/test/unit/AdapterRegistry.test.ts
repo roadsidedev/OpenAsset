@@ -87,6 +87,37 @@ describe("AdapterRegistry", function () {
         registry.connect(governance).markVerified(user2.address, "Audit #123")
       ).to.be.revertedWithCustomError(registry, "NotRegistered");
     });
+
+    it("should expose developer metadata and approved review status", async function () {
+      await registry.connect(user1).registerAdapterWithMetadata(
+        user2.address,
+        1,
+        "Example Oracle",
+        "1.2.0",
+        "ERC-20 pricing",
+        "ERC-20",
+        "ipfs://docs",
+        "https://github.com/example/oracle"
+      );
+      let metadata = await registry.getAdapterMetadata(user2.address);
+      expect(metadata.name).to.equal("Example Oracle");
+      expect(metadata.version).to.equal("1.2.0");
+      expect(metadata.developer).to.equal(user1.address);
+      expect(metadata.reviewStatus).to.equal(0);
+
+      await registry.connect(governance).markVerified(user2.address, "ipfs://review-1");
+      metadata = await registry.getAdapterMetadata(user2.address);
+      expect(metadata.reviewStatus).to.equal(2);
+      expect(metadata.auditURI).to.equal("ipfs://review-1");
+    });
+
+    it("tracks usage data for registered adapters", async function () {
+      await registry.recordUsage(user1.address, 1000);
+      const info = await registry.getAdapterInfo(user1.address);
+      const metadata = await registry.getAdapterMetadata(user1.address);
+      expect(info.totalValueSecured).to.equal(1000);
+      expect(metadata.usageCount).to.equal(1);
+    });
   });
 
   describe("Deprecation", function () {
