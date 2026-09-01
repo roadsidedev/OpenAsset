@@ -3,6 +3,8 @@
 **Version 2.0**
 **Status: Canonical / Source of Truth**
 
+For the normative contract, security, versioning, testing, and verification requirements, start with [`ADAPTER_SPECIFICATION.md`](./ADAPTER_SPECIFICATION.md). This guide provides implementation detail and worked patterns.
+
 This is the guide for anyone — third-party developer, issuer's engineering team, or internal contributor — building an adapter for OpenAsset Market. It covers the five adapter interfaces, the multi-tenancy pattern, clone templates for position adapters, registration and verification, and a complete worked example.
 
 If you only read one section before writing code, read Section 2 — it covers structural requirements that aren't obvious from the bare interface signatures.
