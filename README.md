@@ -102,9 +102,9 @@ The `monitoringWorker` tracks volatility in real-time. If an asset's price moves
 - **Zero RLS Policy**: Database access is restricted to the service role within secure backend environments.
 - **Input Validation**: All API inputs are validated using Zod schemas.
 - **Checks-Effects-Interactions**: Smart contracts strictly follow CEI patterns to prevent reentrancy.
+- **Security Baseline**: The [Security Baseline](docs/SECURITY_BASELINE.md) defines the threat model, critical contracts, attack paths, monitoring requirements, and incident process.
 
 ## Adapter Platform
 
 Adapter developers should begin with the [Adapter Specification](docs/ADAPTER_SPECIFICATION.md), which defines the interfaces, inputs and outputs, permissions, failure behavior, security assumptions, upgrade and versioning policy, testing requirements, and verification process. The [Adapter Developer Guide](docs/ADAPTER_DEVELOPER.md) contains implementation patterns, and [`ExampleOracleAdapter`](contracts/src/adapters/examples/ExampleOracleAdapter.sol) is a deterministic local reference implementation.
-
 
