@@ -1,0 +1,12 @@
+{
+  "name": "@openasset/adapter-sdk",
+  "version": "1.0.0",
+  "description": "Interfaces, base contracts, helpers, test utilities, and templates for OpenAsset adapters",
+  "license": "MIT",
+  "files": ["contracts", "test-utils", "templates", "bin", "README.md"],
+  "bin": { "create-openasset-adapter": "bin/create-openasset-adapter.js" },
+  "scripts": { "test": "node test-utils/smoke-test.js", "pack:check": "npm pack --dry-run" },
+  "engines": { "node": ">=18" },
+  "peerDependencies": { "@openzeppelin/contracts": ">=4.9.0 <6" },
+  "publishConfig": { "access": "public" }
+}
