@@ -1,4 +1,4 @@
-# OpenAsset Adapter Specification
+# oA Adapter Specification
 
 **Version:** 1.0.0
 **Status:** Normative
