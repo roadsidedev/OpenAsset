@@ -3,48 +3,45 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
-import { useAccount, usePublicClient } from "wagmi";
+import { usePublicClient } from "wagmi";
 import { parseUnits, formatUnits, isAddress, encodeAbiParameters, type Address } from "viem";
 import { toast } from "sonner";
-import { AdapterSelector } from "@/components/adapters/AdapterSelector";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
 import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
-import { SupportedAssetPicker } from "@/components/tokens/SupportedAssetPicker";
+import { AssetSourceStep } from "@/components/create-market/AssetSourceStep";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
+import { useSession } from "@/context/SessionContext";
+import { useChainOrchestrator } from "@/hooks/useChainOrchestrator";
+import { useTxTrail } from "@/store/useTxTrail";
+import { Confetti } from "@/components/Confetti";
 import { getContracts } from "@/lib/contracts";
+import { getChainLabel } from "@/lib/chainLabels";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { decodeContractError } from "@/lib/contractErrors";
+import { validateInitialLiquidityUSD, MIN_INITIAL_LIQUIDITY_USD } from "@/lib/minDeposit";
 import { cn } from "@/lib/utils";
-import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, MagnifyingGlass, X } from "@phosphor-icons/react";
-import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
-import { adapterSupportsPicker, getSuggestedAdaptersForB20, getSuggestedAdaptersForRobinhood } from "@/lib/supportedAssets";
+import { Rocket, ArrowLeft, ArrowRight, CheckCircle, Warning, Wallet, X } from "@phosphor-icons/react";
+import { isB20Token, getB20Info, B20_RISK_DISCLOSURE, b20MarketHoursLabel, BASE_SEQUENCER_FEED } from "@/lib/b20";
 import { getProviderAsset, getProviderAssetByAddress, getProviderSequencerFeed, PROVIDER_IDS } from "@/lib/providerBundles";
 
-interface AdapterOption {
-  address: string;
-  name: string;
-  type: number;
-  verified: boolean;
-  deprecated: boolean;
-}
-
 const DEFAULT_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-
-const ADAPTER_TYPE_NAMES = ["ASSET", "ORACLE", "COMPLIANCE", "LIQUIDATION", "POSITION"];
 
 const STEP_ICONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export default function CreateMarketPage() {
   const router = useRouter();
-  const { address: userAddress, chain } = useAccount();
+  const session = useSession();
+  const { address: userAddress } = session;
   const publicClient = usePublicClient();
-  const chainId = chain?.id;
+  const chainId = session.chainId ?? undefined;
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
   const { createMarket, clearError } = useContractInteraction();
+  const { nudgeChain } = useChainOrchestrator();
+  const recordTx = useTxTrail((s) => s.record);
   const [isDeploying, setIsDeploying] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
 
-  const contracts = useMemo(() => getContracts(chainId), [chainId]);
+  const contracts = useMemo(() => (chainId ? getContracts(chainId) : undefined), [chainId]);
 
   const { data: collateralToken } = useTokenMetadata(
     isAddress(formData.collateralAsset) ? formData.collateralAsset : undefined,
@@ -59,7 +56,6 @@ export default function CreateMarketPage() {
   const knownProviderAsset = getProviderAssetByAddress(formData.collateralAsset);
   const isB20Selected = !!b20Info;
   const isRobinhoodSelected = providerAsset?.provider === 'robinhood';
-  const b20HoursLabel = isWithinB20TradingWindow() ? b20MarketHoursLabel() : b20MarketHoursLabel();
 
   const isB20Chain = chainId === 8453;
   const isRobinhoodChain = chainId === 4663;
@@ -93,6 +89,7 @@ export default function CreateMarketPage() {
     (async () => {
       const results = await Promise.allSettled(allAddrs.map(async (addr) => {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const info: any = await publicClient.readContract({
             address: registry,
             abi: [{ name: 'getAdapterInfo', type: 'function', stateMutability: 'view', inputs: [{ name: 'adapter', type: 'address' }], outputs: [{ name: 'adapterAddress', type: 'address' }, { name: 'adapterType', type: 'uint8' }, { name: 'registeredBy', type: 'address' }, { name: 'verified', type: 'bool' }, { name: 'deprecated', type: 'bool' }, { name: 'auditReference', type: 'string' }, { name: 'registeredAt', type: 'uint256' }, { name: 'totalValueSecured', type: 'uint256' }] }],
@@ -119,11 +116,11 @@ export default function CreateMarketPage() {
   };
 
   // All adapters from contract addresses — verification/deprecation now from on-chain registry
-  const adapters = useMemo((): Record<string, AdapterOption[]> => {
+  const adapters = useMemo((): Record<string, import("@/components/create-market/types").AdapterOption[]> => {
     if (!contracts) return {};
     const isB20 = isB20Chain && contracts.b20AssetAdapter && contracts.b20AssetAdapter !== "0x0000000000000000000000000000000000000000";
     const isRobinhood = isRobinhoodChain && contracts.robinhoodComplianceAdapter && contracts.robinhoodComplianceAdapter !== "0x0000000000000000000000000000000000000000";
-    const mk = (address: string, name: string, type: number): AdapterOption => {
+    const mk = (address: string, name: string, type: number): import("@/components/create-market/types").AdapterOption => {
       const v = getVerification(address);
       return { address, name, type, verified: v.verified, deprecated: v.deprecated };
     };
@@ -163,44 +160,6 @@ export default function CreateMarketPage() {
     return match?.name || addr.slice(0, 10) + "...";
   };
 
-  const canShowPicker = adapterSupportsPicker(formData.assetAdapter, chainId);
-  const handlePickerSelect = (asset: { address: string; symbol: string; isB20?: boolean; provider?: 'b20' | 'robinhood' }) => {
-    const selectedProvider = asset.provider || getProviderAsset(chainId, asset.address)?.provider;
-    if (selectedProvider === 'b20' && chainId && contracts) {
-      const suggested = getSuggestedAdaptersForB20(chainId);
-      if (suggested) {
-        setFormData({
-          collateralAsset: asset.address,
-          assetAdapter: suggested.assetAdapter || formData.assetAdapter,
-          oracleAdapter: suggested.oracleAdapter || formData.oracleAdapter,
-          complianceAdapter: suggested.complianceAdapter || formData.complianceAdapter,
-          liquidationAdapter: suggested.liquidationAdapter || formData.liquidationAdapter,
-          positionAdapter: suggested.positionAdapter || formData.positionAdapter,
-          enableCompliance: true,
-        });
-        toast.success(`${asset.symbol} selected — Base B20 provider bundle applied`);
-        return;
-      }
-    }
-    if (selectedProvider === 'robinhood' && chainId && contracts) {
-      const suggested = getSuggestedAdaptersForRobinhood(chainId);
-      if (suggested) {
-        setFormData({
-          collateralAsset: asset.address,
-          assetAdapter: suggested.assetAdapter || formData.assetAdapter,
-          oracleAdapter: suggested.oracleAdapter || formData.oracleAdapter,
-          complianceAdapter: suggested.complianceAdapter || formData.complianceAdapter,
-          liquidationAdapter: suggested.liquidationAdapter || formData.liquidationAdapter,
-          positionAdapter: suggested.positionAdapter || formData.positionAdapter,
-          enableCompliance: true,
-        });
-        toast.success(`${asset.symbol} selected — Robinhood provider bundle applied`);
-        return;
-      }
-    }
-    setFormData({ collateralAsset: asset.address });
-    toast.success(`${asset.symbol} selected`);
-  };
 
   const validateConfig = async (): Promise<string | null> => {
     if (!formData.collateralAsset) return "Collateral asset is required.";
@@ -213,7 +172,7 @@ export default function CreateMarketPage() {
       return "Robinhood Chain markets must use an approved provider-catalog asset; manual generic ERC-20 creation is disabled.";
     }
     if (isRobinhoodSelected) {
-      const sequencerFeed = getProviderSequencerFeed(chainId, 'robinhood');
+      const sequencerFeed = getProviderSequencerFeed(chainId ?? 0, 'robinhood');
       if (!sequencerFeed || !isAddress(sequencerFeed) || sequencerFeed === "0x0000000000000000000000000000000000000000") {
         return "Robinhood Chain sequencer feed is not configured; market creation is blocked fail-closed.";
       }
@@ -228,6 +187,9 @@ export default function CreateMarketPage() {
     if (formData.apr < 0 || formData.apr > 100) return "APR must be between 0% and 100%.";
     if (formData.duration <= 0 || formData.duration > 365) return "Duration must be between 1 and 365 days.";
     if (formData.gracePeriod <= 0) return "Grace period must be greater than zero.";
+
+    const liquidityCheck = validateInitialLiquidityUSD(formData.liquidity);
+    if (!liquidityCheck.ok) return liquidityCheck.error ?? "Invalid liquidity.";
 
     if (!publicClient) return "Network client not available. Connect your wallet.";
     if (!contracts?.marketFactory) return "Factory not configured for this chain.";
@@ -255,8 +217,15 @@ export default function CreateMarketPage() {
   };
 
   const handleDeploy = async () => {
-    if (!userAddress) { toast.error("Please connect your wallet."); return; }
-    if (!contracts?.marketFactory) { toast.error("Factory address not configured for this chain."); return; }
+    if (!session.ready) return;
+    if (!session.isAuthenticated || !userAddress) {
+      toast.error("Please sign in to deploy a market.");
+      return;
+    }
+    if (!contracts?.marketFactory) {
+      toast.error("Factory address not configured for this chain.");
+      return;
+    }
 
     const validationError = await validateConfig();
     if (validationError) {
@@ -308,7 +277,7 @@ export default function CreateMarketPage() {
           }
         : undefined;
 
-      const robinhoodSequencer = getProviderSequencerFeed(chainId, 'robinhood');
+      const robinhoodSequencer = getProviderSequencerFeed(chainId ?? 0, 'robinhood');
       const robinhoodProviderConfig = isRobinhoodSelected && providerAsset?.feed && robinhoodSequencer
         ? {
             providerId: PROVIDER_IDS.ROBINHOOD,
@@ -325,11 +294,26 @@ export default function CreateMarketPage() {
         initialLiquidity,
         b20Config,
         robinhoodProviderConfig,
+        chainId,
       );
       toast.success("Market deployed successfully!", {
         id: toastId,
         description: `Tx: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`,
       });
+      recordTx({
+        type: 'MARKET_CREATED',
+        txHash: result.txHash,
+        chainId: chainId ?? 0,
+        address: userAddress,
+        summary: `${collateralToken?.symbol || formData.collateralAsset.slice(0, 6) + '…'} market · ${formData.liquidity || '?'} ${lendingToken?.symbol || 'USDC'} liquidity`,
+        details: {
+          market: result.receipt?.logs?.[0]?.address ?? '',
+          txHash: result.txHash,
+          collateral: formData.collateralAsset,
+          message: `${collateralToken?.symbol || 'Market'} market created with ${formData.liquidity || '?'} ${lendingToken?.symbol || 'USDC'} liquidity`,
+        },
+      });
+      setShowConfetti(true);
       setTimeout(() => {
         reset();
         router.push("/markets");
@@ -369,11 +353,25 @@ export default function CreateMarketPage() {
           </p>
         </div>
 
-        {/* Chain indicator */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2">
+        {/* Chain indicator — actionable, not a dead end */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2 flex-wrap">
           <Wallet className="h-3.5 w-3.5" />
-          <span>Chain: {chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : `Chain ${chainId}`}</span>
-          {!contracts && <span className="text-amber-500 font-medium">(unsupported)</span>}
+          <span>
+            {session.walletType === 'embedded' ? 'Embedded wallet' : session.walletType === 'external' ? 'External wallet' : 'No wallet'} ·{' '}
+            {getChainLabel(chainId)}
+          </span>
+          {!contracts && (
+            <>
+              <span className="text-amber-500 font-medium">(unsupported)</span>
+              <button
+                type="button"
+                onClick={() => nudgeChain(84532, 'Market creation is configured on Base Sepolia')}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors"
+              >
+                Switch to Base Sepolia
+              </button>
+            </>
+          )}
         </div>
 
         {/* Step Indicator */}
@@ -412,62 +410,18 @@ export default function CreateMarketPage() {
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-foreground">Collateral Asset</h2>
               <p className="text-sm text-muted-foreground">
-                Pick the adapter first — supported assets will appear automatically. No pasting needed.
+                Search what you want to lend against — tokenized stocks, Robinhood equities or tokens. The right adapter, provider bundle and network are applied automatically.
               </p>
-              <AdapterSelector
-                label="Asset Adapter"
-                description="Handles collateral custody (escrow/release)"
-                adapters={adapters["ASSET"] || []}
-                selected={formData.assetAdapter}
-                onSelect={(addr) => {
-                  setFormData({ assetAdapter: addr });
-                  // Interceptive: auto-open picker when adapter supports curated assets
-                  if (adapterSupportsPicker(addr, chainId)) {
-                    setTimeout(() => setPickerOpen(true), 150);
-                  }
-                }}
-                required
+              <AssetSourceStep
+                formData={formData}
+                setFormData={setFormData}
                 chainId={chainId}
-              />
-              {canShowPicker ? (
-                <div className="space-y-3 rounded-2xl border border-ice-300/30 dark:border-ice-400/20 bg-ice-50/50 dark:bg-ice-500/10 p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                      <MagnifyingGlass className="h-4 w-4 text-ice-500" />
-                      Supported assets for {findAdapterName("ASSET", formData.assetAdapter)}
-                    </h3>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">Intercepts manual paste</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {formData.assetAdapter.toLowerCase() === contracts?.b20AssetAdapter?.toLowerCase()
-                      ? "13 B20 tokenized stocks (AAPLc…TSLAc) — TRV feeds, 90000s staleness, PolicyRegistry 0x3f3E…5CaD. Tap to auto-fill collateral + suggest B20 stack."
-                      : "Curated ERC20s (USDC, WETH) + recent market assets on this chain. Tap to fill."}
-                  </p>
-                  <button
-                    onClick={() => setPickerOpen(true)}
-                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-ice-300 dark:bg-ice-400 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors"
-                  >
-                    <MagnifyingGlass className="h-4 w-4" />
-                    {formData.collateralAsset ? `Selected: ${formData.collateralAsset.slice(0,10)}… — Browse again` : "Browse supported assets"}
-                  </button>
-                  {formData.collateralAsset && (
-                    <div className="text-xs text-muted-foreground">
-                      Or edit manually below — picker and manual stay in sync.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
-                  Select an asset adapter above to see its supported assets.
-                </div>
-              )}
-              <TokenAddressInput
-                label={canShowPicker ? "Or paste custom address (advanced)" : "Collateral Token Address"}
-                placeholder="0x... (ERC20 / B20 / ERC721)"
-                value={formData.collateralAsset}
-                onChange={(addr) => setFormData({ collateralAsset: addr })}
-                chainId={chainId}
-                required
+                assetAdapters={adapters["ASSET"] || []}
+                collateralPreview={
+                  collateralToken?.isValid
+                    ? { symbol: collateralToken.symbol, name: collateralToken.name, logoUri: collateralToken.logoUri ?? null }
+                    : null
+                }
               />
               {isB20Selected && b20Info && (
                 <div className="rounded-2xl border border-ice-300/30 dark:border-ice-400/20 bg-ice-50 dark:bg-ice-500/10 p-4 space-y-2">
@@ -804,20 +758,29 @@ export default function CreateMarketPage() {
                 required
               />
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground">Initial Liquidity (tokens, 6 decimals for USDC)</label>
+                <label className="text-xs font-semibold text-muted-foreground">
+                  Initial Liquidity (tokens, 6 decimals for USDC) — minimum ${MIN_INITIAL_LIQUIDITY_USD.toLocaleString()}
+                </label>
                 <input
                   type="text"
                   placeholder="1000"
                   value={formData.liquidity}
                   onChange={(e) => setFormData({ liquidity: e.target.value })}
-                  className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 placeholder:text-muted-foreground"
+                  className={cn(
+                    "w-full rounded-2xl border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400 placeholder:text-muted-foreground",
+                    formData.liquidity && !validateInitialLiquidityUSD(formData.liquidity).ok
+                      ? "border-destructive/50"
+                      : "border-border",
+                  )}
                 />
+                {formData.liquidity && !validateInitialLiquidityUSD(formData.liquidity).ok && (
+                  <p className="text-xs text-destructive">{validateInitialLiquidityUSD(formData.liquidity).error}</p>
+                )}
                 {formData.liquidity && (() => {
                   try {
                     const raw = parseUnits(formData.liquidity, 6);
                     const fee = raw * BigInt(50) / BigInt(10000);
                     const net = raw - fee;
-                    const dec = lendingToken?.decimals ?? 6;
                     const fmt = (v: bigint) => formatUnits(v, 6);
                     return (
                       <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-xs space-y-1">
@@ -850,6 +813,8 @@ export default function CreateMarketPage() {
                             return;
                           }
                         }
+                        // MarketConfig tuple for simulateContract — mirrors MarketFactoryV2.MarketConfig
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const cfg: any = {
                           lpAddress: userAddress || "0x0000000000000000000000000000000000000000",
                           collateralAsset: formData.collateralAsset,
@@ -871,6 +836,7 @@ export default function CreateMarketPage() {
                           resumeThresholdBps: BigInt(formData.resumeThresholdBps),
                           cooldownSeconds: BigInt(formData.cooldownSeconds),
                         };
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         await (publicClient as any).simulateContract({
                           address: contracts.marketFactory as Address,
                           abi: [{ name: 'createMarket', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'config', type: 'tuple', components: [{ name: 'lpAddress', type: 'address' }, { name: 'collateralAsset', type: 'address' }, { name: 'assetAdapter', type: 'address' }, { name: 'oracleAdapter', type: 'address' }, { name: 'complianceAdapter', type: 'address' }, { name: 'liquidationAdapter', type: 'address' }, { name: 'positionAdapter', type: 'address' }, { name: 'lendingAsset', type: 'address' }, { name: 'ltvBasisPoints', type: 'uint256' }, { name: 'aprBasisPoints', type: 'uint256' }, { name: 'durationSeconds', type: 'uint256' }, { name: 'gracePeriodHours', type: 'uint256' }, { name: 'enableHealthFactor', type: 'bool' }, { name: 'healthFactorThreshold', type: 'uint256' }, { name: 'enableCircuitBreaker', type: 'bool' }, { name: 'pauseThresholdBps', type: 'uint256' }, { name: 'lookbackPeriodSeconds', type: 'uint256' }, { name: 'resumeThresholdBps', type: 'uint256' }, { name: 'cooldownSeconds', type: 'uint256' }] }, { name: 'initialLiquidity', type: 'uint256' }], outputs: [{ name: 'marketAddress', type: 'address' }] }],
@@ -879,7 +845,7 @@ export default function CreateMarketPage() {
                           account: userAddress as Address,
                         });
                         toast.success("Dry-run passed — market creation will succeed");
-                      } catch (e: any) {
+                      } catch (e) {
                         toast.error(decodeContractError(e), { description: "Fix the highlighted field and try again" });
                       }
                     }}
@@ -1066,18 +1032,8 @@ export default function CreateMarketPage() {
             </button>
           )}
         </div>
-        {/* Interceptive Supported Asset Picker — appears after adapter selection */}
-        <SupportedAssetPicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          adapterAddress={formData.assetAdapter}
-          chainId={chainId}
-          selectedAddress={formData.collateralAsset}
-          onSelect={handlePickerSelect}
-          manualValue={formData.collateralAsset}
-          onManualChange={(addr) => setFormData({ collateralAsset: addr })}
-        />
       </main>
+      {showConfetti && <Confetti />}
     </div>
   );
 }

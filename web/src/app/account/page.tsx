@@ -351,6 +351,8 @@ function AccountContent() {
 
                   const label = event.type === "MARKET_CREATED"
                     ? "Market Created"
+                    : event.type === "LOAN_REQUESTED"
+                    ? "Loan Requested"
                     : event.type === "LOAN_ACTIVE"
                     ? "Loan Opened"
                     : event.type === "LOAN_REPAID"
@@ -361,7 +363,10 @@ function AccountContent() {
                     ? "Liquidity Deposited"
                     : event.type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-                  const detail = event.type === "MARKET_CREATED"
+                  const txHash = event.details?.txHash || event.details?.transactionHash || event.details?.tx || "";
+                  const detail = event.details?.message
+                    ? (txHash ? `${event.details.message} · Tx ${txHash.slice(0, 10)}…` : event.details.message)
+                    : event.type === "MARKET_CREATED"
                     ? `Market ${event.details.market?.slice(0, 8)}...`
                     : event.type.startsWith("LOAN_")
                     ? `Loan #${event.details.loanId} on ${event.details.market?.slice(0, 8)}...`

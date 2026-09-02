@@ -1,23 +1,77 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { usePublicClient, useWalletClient } from 'wagmi';
+import { usePublicClient, useWalletClient, useChainId, useSwitchChain, useConfig } from 'wagmi';
+import { getPublicClient } from '@wagmi/core';
 import { parseAbi, type Address, type Hex } from 'viem';
-import { MARKET_FACTORY_ABI, MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
+import { MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
 import { decodeContractError } from '@/lib/contractErrors';
+import { useSession } from '@/context/SessionContext';
+
+/**
+ * Chain guard: before every write, resolve the wallet onto `targetChainId`
+ * (market.chainId or the chain whose factory hosts the config). Embedded
+ * (Privy) wallets switch silently; external wallets raise a typed error the
+ * UI converts into the one-click switch banner.
+ */
+class ChainGuardError extends Error {
+  readonly targetChainId: number;
+  readonly currentChainId: number | null;
+  constructor(targetChainId: number, currentChainId: number | null) {
+    super(`This action requires the ${targetChainId} network. Switch networks to continue.`);
+    this.name = 'ChainGuardError';
+    this.targetChainId = targetChainId;
+    this.currentChainId = currentChainId;
+  }
+}
 
 export const useContractInteraction = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
+  const fallbackClient = usePublicClient();
+  const currentChainId = useChainId();
+  const config = useConfig();
+  const { switchChainAsync } = useSwitchChain();
+  const { walletType } = useSession();
+  const isPrivyEmbedded = walletType === 'embedded';
+
+  const clientForChain = useCallback(
+    (targetChainId: number | undefined | null) => {
+      if (!targetChainId) return fallbackClient;
+      try {
+        return (getPublicClient(config, { chainId: targetChainId }) as typeof fallbackClient) ?? fallbackClient;
+      } catch {
+        return fallbackClient;
+      }
+    },
+    [config, fallbackClient],
+  );
+
+  const ensureChain = useCallback(
+    async (targetChainId: number | undefined | null) => {
+      if (!targetChainId || !walletClient) return;
+      const current = currentChainId ?? walletClient.chain?.id ?? null;
+      if (current === targetChainId) return;
+      if (isPrivyEmbedded) {
+        try {
+          await switchChainAsync({ chainId: targetChainId });
+          return;
+        } catch {
+          // fall through to typed error
+        }
+      }
+      throw new ChainGuardError(targetChainId, current);
+    },
+    [walletClient, currentChainId, isPrivyEmbedded, switchChainAsync],
+  );
 
   const clearError = useCallback(() => setError(null), []);
 
   const approveToken = useCallback(
     async (tokenAddress: string, spenderAddress: string, amount: bigint) => {
       if (!walletClient) throw new Error('Wallet not connected');
-      if (!publicClient) throw new Error('Public client not available');
+      if (!fallbackClient) throw new Error('Public client not available');
 
       const hash = await walletClient.writeContract({
         address: tokenAddress as Address,
@@ -25,28 +79,33 @@ export const useContractInteraction = () => {
         functionName: 'approve',
         args: [spenderAddress as Address, amount],
       });
-      return publicClient.waitForTransactionReceipt({ hash });
+      return fallbackClient.waitForTransactionReceipt({ hash });
     },
-    [walletClient, publicClient]
+    [walletClient, fallbackClient]
   );
 
   const createMarket = useCallback(
     async (
+      // MarketConfig struct — layout mirrors MarketFactoryV2.MarketConfig
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       marketConfig: any,
       factoryAddress: string,
       initialLiquidity: bigint,
       b20Config?: { feed: string; maxStaleness: bigint; l2Sequencer: string },
       providerConfig?: { providerId: Hex; providerData: Hex },
+      targetChainId?: number,
     ) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
-        if (!publicClient) throw new Error('Public client not available');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
 
         // If there's initial liquidity, approve the factory to spend it first
         if (initialLiquidity > BigInt(0) && marketConfig.lendingAsset) {
-          const allowance = await publicClient.readContract({
+          const allowance = await activeClient.readContract({
             address: marketConfig.lendingAsset as Address,
             abi: parseAbi(ERC20_APPROVE_ABI),
             functionName: 'allowance',
@@ -60,7 +119,7 @@ export const useContractInteraction = () => {
               functionName: 'approve',
               args: [factoryAddress as Address, initialLiquidity],
             });
-            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+            await activeClient.waitForTransactionReceipt({ hash: approveHash });
           }
         }
 
@@ -81,9 +140,10 @@ export const useContractInteraction = () => {
             : b20Config
               ? [marketConfig, initialLiquidity, b20Config]
               : [marketConfig, initialLiquidity],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
         const error = new Error(decodeContractError(err));
@@ -93,19 +153,21 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient, clearError]
+    [walletClient, clientForChain, clearError, ensureChain]
   );
 
   const depositLiquidity = useCallback(
-    async (marketAddress: string, lendingAsset: string, amount: bigint) => {
+    async (marketAddress: string, lendingAsset: string, amount: bigint, targetChainId?: number) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
-        if (!publicClient) throw new Error('Public client not available');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
 
         // Approve the market to spend lendingAsset
-        const allowance = await publicClient.readContract({
+        const allowance = await activeClient.readContract({
           address: lendingAsset as Address,
           abi: parseAbi(ERC20_APPROVE_ABI),
           functionName: 'allowance',
@@ -119,7 +181,7 @@ export const useContractInteraction = () => {
             functionName: 'approve',
             args: [marketAddress as Address, amount],
           });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          await activeClient.waitForTransactionReceipt({ hash: approveHash });
         }
 
         const hash = await walletClient.writeContract({
@@ -129,7 +191,7 @@ export const useContractInteraction = () => {
           args: [amount],
         });
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
         const error = new Error(decodeContractError(err));
@@ -139,7 +201,7 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient, clearError]
+    [walletClient, clientForChain, clearError, ensureChain]
   );
 
   const requestLoan = useCallback(
@@ -149,18 +211,21 @@ export const useContractInteraction = () => {
       collateralAmount: string,
       assetAdapter: string,
       requestedPrincipal?: bigint,
+      targetChainId?: number,
     ) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
-        if (!publicClient) throw new Error('Public client not available');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
 
         const amount = BigInt(collateralAmount);
 
         // Approve the asset adapter to escrow collateral
         if (assetAdapter) {
-          const allowance = await publicClient.readContract({
+          const allowance = await activeClient.readContract({
             address: collateralAddress as Address,
             abi: parseAbi(ERC20_APPROVE_ABI),
             functionName: 'allowance',
@@ -174,7 +239,7 @@ export const useContractInteraction = () => {
               functionName: 'approve',
               args: [assetAdapter as Address, amount],
             });
-            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+            await activeClient.waitForTransactionReceipt({ hash: approveHash });
           }
         }
 
@@ -185,9 +250,10 @@ export const useContractInteraction = () => {
             ? 'requestLoan(uint256)'
             : 'requestLoan(uint256,uint256)',
           args: requestedPrincipal === undefined ? [amount] : [amount, requestedPrincipal],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
         const error = new Error(decodeContractError(err));
@@ -197,19 +263,21 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient, clearError]
+    [walletClient, clientForChain, clearError, ensureChain]
   );
 
   const repay = useCallback(
-    async (marketAddress: string, lendingAsset: string, loanId: string, totalRepayment: bigint) => {
+    async (marketAddress: string, lendingAsset: string, loanId: string, totalRepayment: bigint, targetChainId?: number) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
-        if (!publicClient) throw new Error('Public client not available');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
 
         if (totalRepayment > BigInt(0)) {
-          const allowance = await publicClient.readContract({
+          const allowance = await activeClient.readContract({
             address: lendingAsset as Address,
             abi: parseAbi(ERC20_APPROVE_ABI),
             functionName: 'allowance',
@@ -223,7 +291,7 @@ export const useContractInteraction = () => {
               functionName: 'approve',
               args: [marketAddress as Address, totalRepayment],
             });
-            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+            await activeClient.waitForTransactionReceipt({ hash: approveHash });
           }
         }
 
@@ -234,7 +302,7 @@ export const useContractInteraction = () => {
           args: [BigInt(loanId)],
         });
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
         const error = new Error(decodeContractError(err));
@@ -244,16 +312,18 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient, clearError]
+    [walletClient, clientForChain, clearError, ensureChain]
   );
 
   const liquidate = useCallback(
-    async (marketAddress: string, loanId: string) => {
+    async (marketAddress: string, loanId: string, targetChainId?: number) => {
       setIsLoading(true);
       clearError();
       try {
         if (!walletClient) throw new Error('Wallet not connected');
-        if (!publicClient) throw new Error('Public client not available');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
 
         const hash = await walletClient.writeContract({
           address: marketAddress as Address,
@@ -262,7 +332,7 @@ export const useContractInteraction = () => {
           args: [BigInt(loanId)],
         });
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
         return { txHash: hash, receipt };
       } catch (err) {
         const error = new Error(decodeContractError(err));
@@ -272,59 +342,59 @@ export const useContractInteraction = () => {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient, clearError]
+    [walletClient, clientForChain, clearError, ensureChain]
   );
 
   // Adapter Registry read functions
   const getAdapterRegistryInfo = useCallback(
     async (registryAddress: string, adapterAddress: string) => {
-      if (!publicClient) throw new Error('Public client not available');
-      return publicClient.readContract({
+      if (!fallbackClient) throw new Error('Public client not available');
+      return fallbackClient.readContract({
         address: registryAddress as Address,
         abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'getAdapterInfo',
         args: [adapterAddress as Address],
       });
     },
-    [publicClient]
+    [fallbackClient]
   );
 
   const getAdaptersByType = useCallback(
     async (registryAddress: string, adapterType: number) => {
-      if (!publicClient) throw new Error('Public client not available');
-      return publicClient.readContract({
+      if (!fallbackClient) throw new Error('Public client not available');
+      return fallbackClient.readContract({
         address: registryAddress as Address,
         abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'getAdaptersByType',
         args: [adapterType],
       });
     },
-    [publicClient]
+    [fallbackClient]
   );
 
   const getAllAdapters = useCallback(
     async (registryAddress: string) => {
-      if (!publicClient) throw new Error('Public client not available');
-      return publicClient.readContract({
+      if (!fallbackClient) throw new Error('Public client not available');
+      return fallbackClient.readContract({
         address: registryAddress as Address,
         abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'getAllAdapters',
       });
     },
-    [publicClient]
+    [fallbackClient]
   );
 
   const isSelectable = useCallback(
     async (registryAddress: string, adapterAddress: string) => {
-      if (!publicClient) throw new Error('Public client not available');
-      return publicClient.readContract({
+      if (!fallbackClient) throw new Error('Public client not available');
+      return fallbackClient.readContract({
         address: registryAddress as Address,
         abi: ADAPTER_REGISTRY_ABI_TYPED,
         functionName: 'isSelectable',
         args: [adapterAddress as Address],
       });
     },
-    [publicClient]
+    [fallbackClient]
   );
 
   return {

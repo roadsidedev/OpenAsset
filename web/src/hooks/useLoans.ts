@@ -7,14 +7,17 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetchJson } from '@/lib/apiClient';
 
 export interface Loan {
-  address: string;
+  id: string;
+  address?: string;
   marketAddress: string;
   borrowerAddress: string;
+  positionHolderAddress: string;
+  contractLoanId: string;
   collateralAmount: string;
   principal: string;
   startTime: string;
   expiryTime: string;
-  status: 'ACTIVE' | 'REPAID' | 'LIQUIDATED';
+  status: 'ACTIVE' | 'REPAID' | 'LIQUIDATED' | 'GRACE_PERIOD' | 'LIQUIDATION_CURE' | 'LIQUIDATION_SETTLING';
   createdAt: string;
 }
 
@@ -40,7 +43,17 @@ export const useLoans = (params: QueryParams = {}, { enabled = true }: { enabled
       const data = await apiFetchJson<{ total: number; loans: Loan[] }>(`/api/v1/loans?${searchParams.toString()}`);
       // graceful empty on 404/backend down — unified discovery should not error
       if (!data) return { total: 0, loans: [] };
-      return { total: data.total ?? data.loans?.length ?? 0, loans: data.loans ?? [] };
+      const raw = (data.loans ?? []) as unknown as Record<string, unknown>[];
+      const loans = raw.map((l) => ({
+        ...(l as object),
+        borrowerAddress: ((l as { borrowerAddress?: string; positionHolderAddress?: string }).borrowerAddress
+          ?? (l as { positionHolderAddress?: string }).positionHolderAddress
+          ?? '') as string,
+        positionHolderAddress: ((l as { positionHolderAddress?: string; borrowerAddress?: string }).positionHolderAddress
+          ?? (l as { borrowerAddress?: string }).borrowerAddress
+          ?? '') as string,
+      })) as unknown as Loan[];
+      return { total: data.total ?? loans.length, loans };
     },
     enabled,
     staleTime: 30000,

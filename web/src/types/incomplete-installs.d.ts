@@ -36,10 +36,13 @@ declare module 'viem/chains' {
 }
 
 declare module 'wagmi' {
-  export function useAccount(): { address?: string; isConnected: boolean; chain?: any };
+  export function useAccount(): { address?: string; isConnected: boolean; chain?: any; chainId?: number };
   export function useWalletClient(): { data?: any };
   export function usePublicClient(config?: { chainId?: number }): any;
-  export function useSwitchChain(): any;
+  export function useChainId(): number | undefined;
+  export function useConfig(): any;
+  export function useConnect(): { connectAsync: (args?: any) => Promise<any>; connectors: any[]; isPending: boolean };
+  export function useSwitchChain(): { switchChainAsync: (args: { chainId: number }) => Promise<any>; switchChain: (args?: any) => void; isPending: boolean };
   export function http(url?: string): any;
   export function createConfig(config: any): any;
   export const WagmiProvider: any;
@@ -50,7 +53,7 @@ declare module 'wagmi/connectors' {
 }
 
 declare module '@wagmi/core' {
-  export function getPublicClient(config: any): any;
+  export function getPublicClient(config: any, opts?: { chainId?: number }): any;
   export function getWalletClient(config: any): any;
 }
 
@@ -77,4 +80,6 @@ declare module '@tanstack/react-query' {
   export const QueryClientProvider: any;
   export function useQuery<T = any>(options: any): any;
   export function useQueries(options: any): any;
+  export function useQueryClient(): any;
+  export function useMutation(options?: any): any;
 }

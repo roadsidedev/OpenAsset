@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { config, supportedChains } from '../lib/wagmi';
 import { AuthProvider } from '../context/AuthContext';
+import { SessionProviderPrivy, SessionProviderPlain } from '../context/SessionContext';
+import { ChainSwitchBanner } from './ChainSwitchBanner';
 import { ThemeProvider, useTheme } from './ThemeProvider';
 
 function makeQueryClient() {
@@ -42,17 +44,20 @@ function ThemedPrivyProvider({ children, appId, queryClient }: { children: React
     >
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={config}>
-          <AuthProvider>{children}</AuthProvider>
+          <SessionProviderPrivy>
+            <AuthProvider>{children}</AuthProvider>
+          </SessionProviderPrivy>
+          <ChainSwitchBanner />
         </WagmiProvider>
       </QueryClientProvider>
-      <Toaster position="bottom-right" richColors closeButton theme={theme as any} />
+      <Toaster position="bottom-right" richColors closeButton theme={theme as "dark" | "light"} />
     </PrivyProvider>
   );
 }
 
 function ThemedToaster() {
   const { theme } = useTheme();
-  return <Toaster position="bottom-right" richColors closeButton theme={theme as any} />;
+  return <Toaster position="bottom-right" richColors closeButton theme={theme as "dark" | "light"} />;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -64,7 +69,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider>
       <WagmiProviderBase config={config}>
         <QueryClientProvider client={queryClient}>
-          {children}
+          <SessionProviderPlain>
+            {children}
+          </SessionProviderPlain>
+          <ChainSwitchBanner />
           <ThemedToaster />
         </QueryClientProvider>
       </WagmiProviderBase>

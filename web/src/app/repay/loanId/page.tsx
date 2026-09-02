@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
+import { useSession } from '@/context/SessionContext';
 import { LOAN_STATUS } from '@/lib/contractAbis';
 import { ArrowLeft } from "@phosphor-icons/react";
 
@@ -10,7 +10,7 @@ export default function RepayPage() {
   const params = useParams();
   const router = useRouter();
   const loanId = params.loanId as string;
-  const { address: userAddress } = useAccount();
+  const { address: userAddress, isAuthenticated, ready } = useSession();
   const [isRepaying, setIsRepaying] = useState(false);
 
   const loan = {
@@ -70,10 +70,16 @@ export default function RepayPage() {
 
           <button
             onClick={handleRepay}
-            disabled={!userAddress || isRepaying}
+            disabled={!isAuthenticated || !userAddress || isRepaying}
             className="w-full rounded-2xl bg-ice-300 dark:bg-ice-400 px-4 py-3 text-sm font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-premium active-press disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isRepaying ? 'Repaying...' : userAddress ? 'Repay Loan' : 'Connect Wallet'}
+            {isRepaying
+              ? 'Repaying...'
+              : ready && !isAuthenticated
+              ? 'Sign in to repay'
+              : userAddress
+              ? 'Repay Loan'
+              : 'Sign in to repay'}
           </button>
         </div>
       </div>
