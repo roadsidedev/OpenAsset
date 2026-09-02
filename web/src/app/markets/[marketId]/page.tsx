@@ -128,46 +128,31 @@ export default function MarketDetailPage() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Collateral balance + current allowance to the asset adapter (chain-scoped to
-  // the market). Keeps the CTA honest before any wallet popup.
+  // Collateral balance (chain-scoped to the market). Keeps the CTA honest before any wallet popup.
   const [collateralBalance, setCollateralBalance] = useState<bigint | null>(null);
   useEffect(() => {
     let active = true;
     setCollateralBalance(null);
-    setAdapterAllowance(null);
-    const readBalances = () => {
+    const readBalance = () => {
       if (!publicClient || !userAddress || !market?.collateralAsset || !isAddress(market.collateralAsset) || !market.marketAddress) return;
-      const owner = userAddress as `0x${string}`;
       publicClient.readContract({
         address: market.collateralAsset as `0x${string}`,
         abi: ERC20_ABI,
         functionName: "balanceOf",
-        args: [owner],
+        args: [userAddress as `0x${string}`],
       }).then((bal) => {
         if (active) setCollateralBalance(bal as bigint);
       }).catch(() => {
         if (active) setCollateralBalance(null);
       });
-      if (market.assetAdapter && isAddress(market.assetAdapter)) {
-        publicClient.readContract({
-          address: market.collateralAsset as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: "allowance",
-          args: [owner, market.assetAdapter as `0x${string}`],
-        }).then((allow) => {
-          if (active) setAdapterAllowance(allow as bigint);
-        }).catch(() => {
-          if (active) setAdapterAllowance(null);
-        });
-      }
     };
-    readBalances();
-    const interval = setInterval(readBalances, 30_000);
+    readBalance();
+    const interval = setInterval(readBalance, 30_000);
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [publicClient, userAddress, market?.collateralAsset, market?.assetAdapter, market?.marketAddress]);
+  }, [publicClient, userAddress, market?.collateralAsset, market?.marketAddress]);
 
   // Compliance pre-check (soft): surface ineligibility before the wallet popup.
   const [complianceNotice, setComplianceNotice] = useState<string | null>(null);
