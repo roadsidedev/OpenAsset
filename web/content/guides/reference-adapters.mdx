@@ -1,0 +1,37 @@
+---
+title: Reference adapters
+description: First-party adapter implementations used as teaching material and category starting points.
+---
+
+# First-party reference adapters
+
+These implementations are deployable code and teaching material. Read the implementation, its tests, and its assumptions together. They are not automatic safety endorsements; production use still requires the applicable verification and deployment review.
+
+| Lesson | Reference | Study |
+|---|---|---|
+| ERC-20 asset movement | `ERC20Adapter` | Safe transfers, per-market token configuration, allowance and balance checks |
+| NFT asset movement | `ERC721Adapter` | Ownership, approval, token IDs, and transferability |
+| ERC-20 pricing | `ChainlinkAdapter` | Feed registration, decimals, staleness, negative answers, sequencer checks |
+| TWAP pricing | `UniswapV3TWAPAdapter` | Pool configuration, bounded windows, fallback, trust signals |
+| RWA/NAV pricing | `NAVOracleAdapter` | Issuer NAV freshness, proof-of-reserve, normalization |
+| Tokenized equity pricing | `ChainlinkEquityFeedAdapter` | Trading sessions, sequencer grace, market settings |
+| Swap liquidation | `DEXSwapLiquidationAdapter` | Market-only calls, router handoff, minimum output, slippage, reconciliation |
+| NFT liquidation | `NFTAuctionLiquidationAdapter` | Async auction lifecycle and cure windows |
+| Compliance | `ERC3643ComplianceAdapter` | Registry integration and fail-closed eligibility |
+| Managed RWA compliance | `ManagedAllowlistComplianceAdapter` | Operator roles, allowlist events, honest claims |
+| Policy-controlled asset | `B20AssetAdapter` | External policy checks, pause behavior, fail-closed movement |
+| Position ownership | `StandardPositionAdapter` | Clone initialization, market authorization, mint/burn, `ownerOf` |
+
+Source code is available in the [`contracts/src/adapters`](https://github.com/roadsidedev/OpenAsset/tree/main/contracts/src/adapters) directory. The [adapter template catalog](/docs/protocol/adapter-registry) explains category coverage; the [security model](/docs/protocol/security) explains permissions, upgrades, revocation, and emergency handling.
+
+## How to study one
+
+Start at the constructor and identify immutable authority and dependencies. Follow `configure` to see what is keyed by market. Trace runtime calls from `msg.sender` through external calls and output validation. Read the focused unit or integration tests, especially unauthorized, stale, revert, and balance-delta cases. Finally compare code comments with the [security checklist](/docs/reference/security-checklist).
+
+## Build from a reference
+
+```bash
+npx create-openasset-adapter --type oracle --name MyOracleAdapter
+```
+
+Copy only the patterns you understand. Preserve factory and market authorization, fail-closed behavior, bounded gas, dependency documentation, and version/commit records. Add a focused test before changing the integration. Use the [developer quick start](/docs/guides/developer-quickstart) to run the local environment and prepare a submission.

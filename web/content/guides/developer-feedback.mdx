@@ -1,0 +1,58 @@
+---
+title: Developer feedback
+description: How early builders report friction and how repeated issues become product improvements.
+---
+
+# Developer feedback loop
+
+The developer ecosystem is successful when an independent builder can reach a working adapter without founder support. This process captures friction, assigns it to an owner, and feeds fixes back into code, tooling, and documentation.
+
+## Tell us what happened
+
+After a quick-start attempt, report:
+
+- Where did you get stuck?
+- What was unclear?
+- What did you expect?
+- What was missing?
+- What would make you build again?
+- Which command, error, or page did you last see?
+- Could you reproduce the example and prepare evidence without private context?
+
+Include the adapter category, repository commit, environment, step reached, exact command/output, expected outcome, workaround, severity, and whether an anonymous quote may be used. Do not include private keys, personal data, or undisclosed exploit details in ordinary feedback; use the security process for suspected vulnerabilities.
+
+## Issue categories
+
+| Category | Use when | Typical response |
+|---|---|---|
+| Documentation gap | A required concept or workflow is absent or unclear | Add an explanation, example, or warning |
+| Broken command | Install, test, scaffold, or submission command fails | Fix tooling and add a regression check |
+| Template/test gap | A category or failure case lacks a credible starting point | Add a reference implementation, mock, or test |
+| SDK gap | An interface, helper, type, or error is missing | Extend the SDK with compatibility notes |
+| Integration gap | ABI, event, registry, deployment, or chain detail is missing | Add integration guidance and an example |
+| Security confusion | A user could mistake a trust signal for a guarantee | Clarify the security boundary |
+| Performance gap | Gas, RPC, indexer, or local workflow is too slow | Measure, bound, optimize, or document limits |
+
+## What happens next
+
+Maintainers triage new feedback weekly, acknowledge it within two business days, assign an owner, link the affected page or code, and set a target release or explain why no change is planned. A repeated blocker becomes a product or documentation ticket when it appears twice, blocks a first successful adapter, causes a security misunderstanding, or requires undocumented founder knowledge. The original developer is invited to retry the exact path after the fix.
+
+Track time from clone to compile, time from scaffold to first passing test, quick-start completion, founder interventions, repeated-issue rate, failed command rate, template coverage, and resubmission causes. Review trends monthly and pair every metric with an owner and next action.
+
+## Feedback template
+
+```text
+Adapter category:
+Repository commit / SDK version:
+Operating system and Node version:
+Step reached: read | install | copy | modify | test | submit
+What did you try?
+What happened? (exact command and error)
+What did you expect?
+Where did you get stuck?
+What was unclear or missing?
+What workaround did you use?
+Would you build again? Why or why not?
+Suggested fix:
+Permission to quote anonymously: yes/no
+```
