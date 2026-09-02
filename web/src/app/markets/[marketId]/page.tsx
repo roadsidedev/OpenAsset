@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { usePublicClient } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMarket } from "@/hooks/useMarkets";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
@@ -19,6 +18,7 @@ import { IORACLE_ADAPTER_ABI, ERC20_ABI, ICOMPLIANCE_ADAPTER_ABI, MARKET_STATUS 
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { resolveAssetIdentity } from "@/lib/assetIdentity";
 import { getChainLabel } from "@/lib/chainLabels";
+import { createChainClient, DEFAULT_CHAIN_ID } from "@/lib/chains";
 import { toast } from "sonner";
 import { isWithinB20TradingWindow, b20MarketHoursLabel, isUSJurisdiction } from "@/lib/b20";
 
@@ -67,7 +67,14 @@ export default function MarketDetailPage() {
     market && market.loanAsset && isAddress(market.loanAsset) ? market.loanAsset : undefined,
     market?.chainId,
   );
-  const publicClient = usePublicClient({ chainId: market?.chainId });
+  // Standalone read-only client scoped to the market's chain. wagmi's lazy
+  // per-chain client can throw synchronously during render when the wallet is on
+  // a different chain (the "Connection failed until refresh" bug); the standalone
+  // client never does. Write ops still use the wallet via useContractInteraction.
+  const publicClient = useMemo(
+    () => (market?.chainId ? createChainClient(market.chainId) : createChainClient(DEFAULT_CHAIN_ID)),
+    [market?.chainId],
+  );
   const queryClient = useQueryClient();
   const [oracleData, setOracleData] = useState<readonly [bigint, boolean, bigint] | undefined>();
   const [oracleFailed, setOracleFailed] = useState(false);
@@ -124,7 +131,6 @@ export default function MarketDetailPage() {
   // Collateral balance + current allowance to the asset adapter (chain-scoped to
   // the market). Keeps the CTA honest before any wallet popup.
   const [collateralBalance, setCollateralBalance] = useState<bigint | null>(null);
-  const [adapterAllowance, setAdapterAllowance] = useState<bigint | null>(null);
   useEffect(() => {
     let active = true;
     setCollateralBalance(null);
@@ -198,7 +204,7 @@ export default function MarketDetailPage() {
     const trimmed = value.trim();
     if (!trimmed) return { error: "Enter an amount." };
     if (!/^\d*\.?\d*$/.test(trimmed)) return { error: "Amount must be a positive number." };
-    const [intPart = "0", fracPart = ""] = trimmed.split(".");
+    const [, fracPart = ""] = trimmed.split(".");
     if (fracPart.length > decimals) {
       return { error: `This asset supports up to ${decimals} decimals.` };
     }
@@ -342,6 +348,22 @@ export default function MarketDetailPage() {
     }
   };
 
+  // Reset an over-limit borrow input when collateral changes underneath it.
+  const maxBorrowValue = calculateMaxBorrow();
+  useEffect(() => {
+    if (!requestedBorrow.trim()) return;
+    if (!oracleTrusted || !collateralAmount) {
+      setRequestedBorrow("");
+      return;
+    }
+    const parsed = parseAmountInput(requestedBorrow, lendingDecimals);
+    if (!parsed.error && parsed.amount) {
+      const maxRaw = calculateMaxBorrowRaw();
+      if (maxRaw > 0n && parsed.amount > maxRaw) setRequestedBorrow(maxBorrowValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collateralAmount, maxBorrowValue]);
+
   const isInitialLoading = (!marketId || isLoading || (isFetching && !market)) && !error;
 
   if (isInitialLoading) {
@@ -415,22 +437,6 @@ export default function MarketDetailPage() {
   const b20WindowOpen = isWithinB20TradingWindow();
   const b20Closed = isB20Collateral && !b20WindowOpen;
   const usNotice = isB20Collateral && isUSJurisdiction();
-
-  // Reset an over-limit borrow input when collateral changes underneath it.
-  const maxBorrowValue = calculateMaxBorrow();
-  useEffect(() => {
-    if (!requestedBorrow.trim()) return;
-    if (!oracleTrusted || !collateralAmount) {
-      setRequestedBorrow("");
-      return;
-    }
-    const parsed = parseAmountInput(requestedBorrow, lendingDecimals);
-    if (!parsed.error && parsed.amount) {
-      const maxRaw = calculateMaxBorrowRaw();
-      if (maxRaw > 0n && parsed.amount > maxRaw) setRequestedBorrow(maxBorrowValue);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collateralAmount, maxBorrowValue]);
 
   return (
     <div className="min-h-dvh">

@@ -44,8 +44,8 @@ export const useProtocolStats = () => {
     },
     staleTime: 60_000,
     gcTime: 300000,
+    refetchInterval: 60_000,
     retry: 1,
-    refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
   });
 };

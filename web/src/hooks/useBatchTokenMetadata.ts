@@ -1,9 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { usePublicClient } from 'wagmi';
 import { isAddress, getAddress } from 'viem';
 import { parseAbi } from 'viem';
+import { createChainClient } from '@/lib/chains';
 import { getBrandLogoUrl } from '@/lib/brandLogos';
 
 const ERC20_READ_ABI = parseAbi([
@@ -74,7 +75,8 @@ function localLogo(symbol: string): string | null {
  */
 export function useBatchTokenMetadata(addresses: string[], chainId: number | undefined) {
   const effectiveChainId = chainId ?? 84532;
-  const publicClient = usePublicClient({ chainId: effectiveChainId as any });
+  // Standalone client (not wagmi lazy per-chain) — chain-agnostic, never throws on render.
+  const publicClient = useMemo(() => createChainClient(effectiveChainId), [effectiveChainId]);
 
   // Dedupe + valid addresses only
   const unique = Array.from(

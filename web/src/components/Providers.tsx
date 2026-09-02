@@ -4,6 +4,7 @@ import * as React from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider } from '@privy-io/wagmi';
 import { WagmiProvider as WagmiProviderBase } from 'wagmi';
+import { getPublicClient } from '@wagmi/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { config, supportedChains } from '../lib/wagmi';
@@ -20,12 +21,35 @@ function makeQueryClient() {
         gcTime: 5 * 60 * 1000,
         retry: 2,
         retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
-        refetchOnWindowFocus: false,
+        // Backward compatible: focus-return refreshes stale data so pages feel
+        // alive without manual reloads. staleTime above prevents hot loops.
+        refetchOnWindowFocus: true,
         refetchOnReconnect: true,
       },
       mutations: { retry: 1 },
     },
   });
+}
+
+/**
+ * Eagerly creates the wagmi public client for every supported chain once, at
+ * app mount. wagmi v3 creates clients lazily; a chain-switching render (e.g.
+ * opening a market on a chain other than the wallet's) could trigger a
+ * synchronous client-construction throw inside usePublicClient's getSnapshot,
+ * landing on the global error boundary ("Connection failed" until refresh).
+ * Pre-warming moves that construction off the render path entirely.
+ */
+function ChainPrewarmer() {
+  React.useEffect(() => {
+    for (const chain of supportedChains) {
+      try {
+        getPublicClient(config, { chainId: chain.id });
+      } catch {
+        // Transport for this chain may be unavailable — discovery handles it.
+      }
+    }
+  }, []);
+  return null;
 }
 
 function ThemedPrivyProvider({ children, appId, queryClient }: { children: React.ReactNode; appId: string; queryClient: InstanceType<typeof QueryClient> }) {
@@ -44,6 +68,7 @@ function ThemedPrivyProvider({ children, appId, queryClient }: { children: React
     >
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={config}>
+          <ChainPrewarmer />
           <SessionProviderPrivy>
             <AuthProvider>{children}</AuthProvider>
           </SessionProviderPrivy>
@@ -68,6 +93,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <WagmiProviderBase config={config}>
+        <ChainPrewarmer />
         <QueryClientProvider client={queryClient}>
           <SessionProviderPlain>
             {children}

@@ -31,6 +31,19 @@ const BRAND_MAP: Record<string, { domain: string; name: string }> = {
   BRK: { domain: 'berkshirehathaway.com', name: 'Berkshire Hathaway' },
 };
 
+// Module-level cache: resolved URLs keyed by symbol → never re-hits network on symbol change.
+const resolvedCache = new Map<string, string | null>();
+function getCachedOrResolve(symbol: string, resolver: () => string | null): string | null {
+  const key = symbol.toUpperCase();
+  if (resolvedCache.has(key)) return resolvedCache.get(key) ?? null;
+  const result = resolver();
+  resolvedCache.set(key, result);
+  if (result) {
+    try { sessionStorage.setItem(`logo:${key}`, result); } catch { /* noop */ }
+  }
+  return result;
+}
+
 // Known crypto overrides (fallback to CoinGecko CDN if brand map misses)
 const CRYPTO_LOGOS: Record<string, string> = {
   USDC: 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png',
@@ -86,18 +99,20 @@ function normalizeSymbol(symbol: string): string {
 export function getBrandLogoUrl(symbol: string): string | null {
   if (!symbol) return null;
   const normalized = normalizeSymbol(symbol);
-  if (CRYPTO_LOGOS[normalized]) return CRYPTO_LOGOS[normalized];
-  if (BRAND_MAP[normalized]) {
-    const domain = BRAND_MAP[normalized].domain;
-    // Clearbit logo API — reliable, returns png, handles size
-    return `https://logo.clearbit.com/${domain}`;
-  }
-  // Try without spaces/dashes for SPACEX
-  const compact = normalized.replace(/[^A-Z0-9]/g, '');
-  if (BRAND_MAP[compact]) return `https://logo.clearbit.com/${BRAND_MAP[compact].domain}`;
-  // Secondary: check if symbol without C maps to crypto
-  if (CRYPTO_LOGOS[compact]) return CRYPTO_LOGOS[compact];
-  return null;
+  return getCachedOrResolve(symbol, () => {
+    if (CRYPTO_LOGOS[normalized]) return CRYPTO_LOGOS[normalized];
+    // Google S2 favicon first (more reliable than Clearbit since Dec 2024)
+    const entry = BRAND_MAP[normalized] ?? BRAND_MAP[normalized.replace(/[^A-Z0-9]/g, '')];
+    if (entry) {
+      // Return favicon as primary (most reliable across regions)
+      return `https://www.google.com/s2/favicons?domain=${entry.domain}&sz=64`;
+    }
+    // Try without spaces/dashes for SPACEX
+    const compact = normalized.replace(/[^A-Z0-9]/g, '');
+    if (BRAND_MAP[compact]) return `https://www.google.com/s2/favicons?domain=${BRAND_MAP[compact].domain}&sz=64`;
+    if (CRYPTO_LOGOS[compact]) return CRYPTO_LOGOS[compact];
+    return null;
+  });
 }
 
 /**
@@ -111,23 +126,19 @@ export function getBrandFaviconUrl(symbol: string, size = 64): string | null {
 }
 
 /**
- * Resolve best logo for a token: prefers provided logoUri, then brand, then crypto, then favicon, then TrustWallet.
- * Priority preserved: 1) explicit logoUri (token list) 2) CoinGecko crypto 3) Clearbit brand 4) Google favicon 5) TrustWallet.
+ * Resolve best logo for a token. Priority (all cached in-session):
+ * 1) explicit logoUri (token list) 2) brand favicon (S2) 3) CoinGecko crypto.
+ * TrustWallet symbol-heuristic removed — it 404'd by design and just wasted a
+ * network round-trip; the letter avatar is the honest terminal fallback.
  */
 export function resolveTokenLogo(symbol: string, logoUri?: string | null): string | null {
   if (logoUri) return logoUri;
-  const brand = getBrandLogoUrl(symbol);
-  if (brand) return brand;
-  const favicon = getBrandFaviconUrl(symbol);
-  if (favicon) return favicon;
-  const trust = getTrustWalletFallbackUrl(symbol);
-  if (trust) return trust;
-  return null;
+  return getBrandLogoUrl(symbol);
 }
 
 /**
  * Returns prioritized logo candidates for progressive fallback via <img onError>.
- * Caller can try in order until load succeeds.
+ * Caller can try in order until load succeeds. Never emits a doomed URL.
  */
 export function getLogoCandidates(symbol: string, logoUri?: string | null): string[] {
   const candidates: string[] = [];
@@ -135,9 +146,7 @@ export function getLogoCandidates(symbol: string, logoUri?: string | null): stri
   const brand = getBrandLogoUrl(symbol);
   if (brand) candidates.push(brand);
   const favicon = getBrandFaviconUrl(symbol);
-  if (favicon) candidates.push(favicon);
-  const trust = getTrustWalletFallbackUrl(symbol);
-  if (trust) candidates.push(trust);
+  if (favicon && favicon !== brand) candidates.push(favicon);
   return candidates;
 }
 

@@ -4,7 +4,7 @@
  * Not dependent on wallet network selector. Persists via TanStack Query cache.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type Address, parseAbi } from 'viem';
 import { MARKET_FACTORY_ABI_TYPED, LENDING_MARKET_ABI } from '@/lib/contractAbis';
 import { getContract } from '@/lib/contracts';
@@ -194,9 +194,9 @@ export const useMarkets = (start = 0, count = 20) => {
     },
     staleTime: 20_000,
     gcTime: 5 * 60 * 1000,
+    refetchInterval: 45_000,
     retry: 2,
     retryDelay: (attempt) => Math.min(800 * 2 ** attempt, 4000),
-    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     placeholderData: (prev) => prev,
   });
@@ -290,6 +290,14 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
 }
 
 export const useMarket = (address: string) => {
+  const queryClient = useQueryClient();
+  // Snapshot from the markets list cache so the detail page renders instantly
+  // on first navigation (before the dedicated query resolves).
+  const listSnapshot = queryClient.getQueryData(['markets', 'unified', 0, 50]) as { markets: Market[] } | undefined;
+  const placeholder = listSnapshot?.markets?.find(
+    (m) => m.marketAddress.toLowerCase() === address?.toLowerCase()
+  );
+
   return useQuery<Market>({
     queryKey: ['market', address?.toLowerCase()],
     queryFn: async () => {
@@ -303,27 +311,28 @@ export const useMarket = (address: string) => {
         }
       }
 
-      // Probe all chains in parallel — first chain that resolves wins (discovery order prioritized)
+      // Probe all chains in parallel — shorter per-chain timeout (4s) so the
+      // detail page never blocks longer than the slowest responsive chain.
       const ids = discoveryChainIds();
       const results = await Promise.allSettled(
-        ids.map((id) => withTimeout(fetchMarketOnChain(address, id), 6000, null))
+        ids.map((id) => withTimeout(fetchMarketOnChain(address, id), 4000, null))
       );
 
-      // Prefer discovery order (DEFAULT_CHAIN_ID first)
       for (const id of ids) {
         const idx = ids.indexOf(id);
         const r = results[idx];
         if (r.status === 'fulfilled' && r.value) return r.value;
       }
-      // Fallback: any fulfilled value
       for (const r of results) {
         if (r.status === 'fulfilled' && r.value) return r.value;
       }
       throw new Error('Market not found on any supported chain');
     },
     enabled: !!address && address.startsWith('0x'),
+    placeholderData: placeholder,
     staleTime: 20_000,
     gcTime: 5 * 60 * 1000,
+    refetchInterval: 30_000,
     retry: 2,
     retryDelay: (attempt) => Math.min(800 * 2 ** attempt, 4000),
   });
@@ -358,6 +367,7 @@ export const useMarketLiquidity = (address: string) => {
     enabled: !!address && address.startsWith('0x'),
     staleTime: 15000,
     gcTime: 120000,
+    refetchInterval: 15_000,
     retry: 1,
   });
 };

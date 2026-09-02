@@ -64,8 +64,8 @@ export const usePlatformStats = () => {
     queryKey: ['platformStats', 'loans'],
     queryFn: async () => apiFetchJson<{ total: number; loans: any[] }>(`/api/v1/loans?take=100&skip=0`),
     staleTime: 60_000,
+    refetchInterval: 60_000,
     retry: 0,
-    refetchOnWindowFocus: false,
   });
 
   const data = useMemo<PlatformStats>(() => {

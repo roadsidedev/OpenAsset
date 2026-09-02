@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
 import { isB20Token, getB20Info } from "@/lib/b20";
+import { resolveTokenLogo } from "@/lib/brandLogos";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { isAddress } from "viem";
 import {

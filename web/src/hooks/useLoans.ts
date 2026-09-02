@@ -58,8 +58,8 @@ export const useLoans = (params: QueryParams = {}, { enabled = true }: { enabled
     enabled,
     staleTime: 30000,
     gcTime: 300000,
+    refetchInterval: 30_000,
     retry: 1,
-    refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
   });
 };

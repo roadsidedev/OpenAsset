@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { resolveTokenLogo } from '@/lib/brandLogos';
+import { getLogoCandidates } from '@/lib/brandLogos';
 import { Coins, Image, Stamp, Lock, ArrowsClockwise, Swap, Gavel, ChartLine, TrendUp, PuzzlePiece } from '@phosphor-icons/react';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Coins,
   Image,
@@ -28,20 +29,57 @@ interface TokenPreviewProps {
   compact?: boolean;
 }
 
-function GenericTokenIcon({ symbol, className }: { symbol: string; className?: string }) {
+export function GenericTokenIcon({ symbol, className }: { symbol: string; className?: string }) {
+  const letter = symbol ? symbol.charAt(0).toUpperCase() : '?';
+  // Deterministic pastel color from symbol for the background
+  const hue = Math.abs(hashStr(symbol || '?')) % 360;
   return (
     <div className={cn(
-      'flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground',
+      'flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold shrink-0',
       className,
-    )}>
-      {symbol ? symbol.charAt(0).toUpperCase() : '?'}
+    )} style={{ backgroundColor: `hsl(${hue}, 50%, 85%)`, color: `hsl(${hue}, 50%, 25%)` }}>
+      {letter}
     </div>
   );
 }
 
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+  return h;
+}
+
+/** Internal: renders a single image candidate with a letter‑avatar skeleton underneath.
+ *  The letter shows instantly; the img swaps in on load, hides on error, and
+ *  cycles to the next candidate on failure. Keyed by src so a candidate change
+ *  remounts (resets load/fail state) without a useEffect. */
+function CandidateImage({ src, symbol, className, onError }: { src: string; symbol: string; className?: string; onError: () => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="relative inline-flex shrink-0">
+      {(!loaded || failed) && <GenericTokenIcon symbol={symbol} className={className} />}
+      {!failed && (
+        <img
+          src={src}
+          alt={`${symbol} logo`}
+          className={cn('absolute inset-0 rounded-full object-contain bg-white p-0.5 shadow-sm transition-opacity duration-200', className, loaded ? 'opacity-100' : 'opacity-0')}
+          onLoad={() => setLoaded(true)}
+          onError={() => { setFailed(true); onError(); }}
+          loading="lazy"
+          decoding="async"
+          fetchPriority="low"
+        />
+      )}
+    </span>
+  );
+}
+
 export function TokenPreview({ name, symbol, decimals, logoUri, address, error, compact }: TokenPreviewProps) {
-  const resolvedLogo = resolveTokenLogo(symbol, logoUri);
-  const [imgFailed, setImgFailed] = useState(false);
+  const candidates = getLogoCandidates(symbol, logoUri);
+  const [idx, setIdx] = useState(0);
+  const current = idx < candidates.length ? candidates[idx] : null;
+
   if (error) {
     return (
       <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
@@ -58,14 +96,8 @@ export function TokenPreview({ name, symbol, decimals, logoUri, address, error, 
       'flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 dark:bg-emerald-500/10 dark:border-emerald-500/20',
       compact && 'p-2',
     )}>
-      {resolvedLogo && !imgFailed ? (
-        <img
-          src={resolvedLogo}
-          alt={`${symbol} logo`}
-          className={cn('h-8 w-8 rounded-full object-contain bg-white dark:bg-white p-0.5 shadow-sm', compact && 'h-6 w-6')}
-          onError={() => setImgFailed(true)}
-          loading="lazy"
-        />
+      {current ? (
+        <CandidateImage key={current} src={current} symbol={symbol} className={compact ? 'h-6 w-6' : 'h-8 w-8'} onError={() => setIdx((i) => i + 1)} />
       ) : (
         <GenericTokenIcon symbol={symbol} className={compact ? 'h-6 w-6 text-[10px]' : ''} />
       )}
@@ -86,22 +118,13 @@ export function TokenPreview({ name, symbol, decimals, logoUri, address, error, 
 }
 
 export function TokenIcon({ symbol, logoUri, className }: { symbol: string; logoUri?: string | null; className?: string }) {
-  const { getLogoCandidates } = require('@/lib/brandLogos') as typeof import('@/lib/brandLogos');
   const candidates = getLogoCandidates(symbol, logoUri);
   const [idx, setIdx] = useState(0);
-  const current = candidates[idx] || null;
+  const current = idx < candidates.length ? candidates[idx] : null;
+
   if (current) {
     return (
-      <img
-        src={current}
-        alt={`${symbol} logo`}
-        className={cn('h-6 w-6 rounded-full object-contain bg-white p-0.5 shadow-sm', className)}
-        onError={() => {
-          if (idx + 1 < candidates.length) setIdx((i) => i + 1);
-          else setIdx(candidates.length); // exhaust → fallback
-        }}
-        loading="lazy"
-      />
+      <CandidateImage key={current} src={current} symbol={symbol} className={className} onError={() => setIdx((i) => i + 1)} />
     );
   }
   return <GenericTokenIcon symbol={symbol} className={className} />;

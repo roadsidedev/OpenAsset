@@ -31,6 +31,7 @@ export const useActivity = (address: string | undefined, { enabled = true }: { e
     enabled: !!address && address.startsWith('0x') && enabled,
     staleTime: 30000,
     gcTime: 300000,
+    refetchInterval: 15_000,
     retry: 1,
     placeholderData: (prev) => prev,
   });

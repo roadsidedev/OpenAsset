@@ -1,9 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { usePublicClient } from 'wagmi';
 import { isAddress, getAddress } from 'viem';
 import { parseAbi } from 'viem';
+import { createChainClient } from './chains';
 import { getBrandLogoUrl } from './brandLogos';
 
 const ERC20_READ_ABI = parseAbi([
@@ -92,7 +93,10 @@ function getLocalLogo(symbol: string): string | null {
 
 export function useTokenMetadata(address: string | undefined, chainId?: number) {
   const effectiveChainId = chainId || 84532;
-  const publicClient = usePublicClient({ chainId: effectiveChainId });
+  // Standalone viem client (not wagmi's lazy per-chain client) so a first-paint
+  // chain switch can never throw during render — the same chain-agnostic path
+  // market discovery already uses.
+  const publicClient = useMemo(() => createChainClient(effectiveChainId), [effectiveChainId]);
 
   const enabled = !!address && isAddress(address) && !!publicClient;
 
