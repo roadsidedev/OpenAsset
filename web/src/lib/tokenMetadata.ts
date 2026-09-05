@@ -56,7 +56,6 @@ async function fetchTokenListLogos(chainId: number): Promise<Map<string, string>
       return new Map();
     }
     const data = await res.json();
-    // Handle both Uniswap format { tokens: [...] } and CoinGecko flat array [...]
     const tokens = Array.isArray(data) ? data : (data?.tokens || []);
     const logoMap = new Map<string, string>();
     for (const token of tokens) {

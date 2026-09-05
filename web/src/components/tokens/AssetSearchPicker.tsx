@@ -91,20 +91,19 @@ function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
         </div>
         <div className="text-xs text-muted-foreground truncate">{asset.name}</div>
       </div>
-      <div className="shrink-0 text-right">
+      <div className="shrink-0 text-right min-w-0">
         <span
           className={cn(
-            'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-medium',
+            'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-medium max-w-full',
             selected
               ? 'border-ice-400/40 bg-ice-500/10 text-ice-700 dark:text-ice-300'
               : 'border-border bg-muted/60 text-muted-foreground',
           )}
         >
-          <GlobeHemisphereWest className="h-3 w-3" />
-          {getChainLabel(asset.chainId)}
+          <span className="truncate">{getChainLabel(asset.chainId)}</span>
         </span>
         {onDifferentChain && unavailable && (
-          <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">Not deployed here</div>
+          <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">Unavailable on this chain</div>
         )}
       </div>
     </button>
@@ -131,7 +130,7 @@ export function AssetSearchResults({ assets, selectedAddress, onSelect, emptyHin
 
   if (assets.length === 0) {
     return (
-      <div className="p-6 rounded-2xl border border-dashed border-border bg-muted/30 text-center space-y-2">
+      <div className="p-5 rounded-2xl border border-dashed border-border bg-muted/30 text-center space-y-2">
         <MagnifyingGlass className="h-5 w-5 text-muted-foreground mx-auto" />
         <p className="text-sm text-muted-foreground">
           {emptyHint || 'No assets match your search. Try a symbol like "AAPL", "TSLA" or "USDC", or paste a token address below.'}
@@ -198,7 +197,7 @@ export function AssetSearchPicker({
 
   const content = (
     <div className="flex flex-col h-full min-h-0">
-      <div className="shrink-0 p-6 pb-3 space-y-3">
+      <div className="shrink-0 p-5 pb-3 space-y-3">
         <div>
           <h2 className="text-lg font-bold text-foreground">{title}</h2>
           <p className="text-xs text-muted-foreground mt-1">
@@ -218,7 +217,7 @@ export function AssetSearchPicker({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-3 min-h-0">
+      <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-0">
         <AssetSearchResults
           assets={results}
           selectedAddress={selectedAddress}
@@ -230,7 +229,7 @@ export function AssetSearchPicker({
       </div>
 
       {onManualChange && (
-        <div className="shrink-0 px-6 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
+        <div className="shrink-0 px-5 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
           <button
             type="button"
             onClick={() => setShowManual(!showManual)}
@@ -252,12 +251,12 @@ export function AssetSearchPicker({
         </div>
       )}
 
-      <div className="shrink-0 flex items-center justify-between gap-3 p-6 pt-3 border-t border-border bg-card">
+      <div className="shrink-0 flex flex-col gap-3 p-5 pt-3 border-t border-border bg-card">
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Info className="h-3.5 w-3.5 shrink-0" />
           Selecting an asset on another network switches you automatically (embedded wallets) or with one click.
         </div>
-        <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-2xl shrink-0">
+        <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-2xl">
           Close
         </Button>
       </div>
@@ -267,7 +266,7 @@ export function AssetSearchPicker({
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl p-0 flex flex-col">
+        <SheetContent side="bottom" className="h-[92dvh] rounded-t-3xl p-0 flex flex-col border-t border-border">
           <SheetHeader className="sr-only">
             <SheetTitle>{title}</SheetTitle>
             <SheetDescription>Search collateral assets across all networks</SheetDescription>
@@ -280,7 +279,7 @@ export function AssetSearchPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl rounded-3xl gap-0 p-0 overflow-hidden max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl rounded-3xl gap-0 p-0 overflow-hidden max-h-[92vh] flex flex-col">
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>Search collateral assets across all networks</DialogDescription>

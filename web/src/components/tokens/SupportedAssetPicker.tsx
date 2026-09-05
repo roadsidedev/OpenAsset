@@ -91,7 +91,7 @@ export function SupportedAssetPicker({
   const content = (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="shrink-0 p-6 pb-3 space-y-2">
+      <div className="shrink-0 p-5 pb-3 space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-foreground">Select supported asset</h2>
           {!isMobile && (
@@ -106,7 +106,7 @@ export function SupportedAssetPicker({
       </div>
 
       {/* Grid */}
-      <div className="flex-1 overflow-y-auto px-6">
+      <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-0">
         <SupportedAssetGrid
           assets={assets}
           selectedAddress={selected?.address || selectedAddress}
@@ -156,7 +156,7 @@ export function SupportedAssetPicker({
       </div>
 
       {/* Advanced manual */}
-      <div className="shrink-0 px-6 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
+      <div className="shrink-0 px-5 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
         <button
           onClick={() => setShowManual(!showManual)}
           className="text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -178,7 +178,7 @@ export function SupportedAssetPicker({
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 flex items-center justify-between gap-3 p-6 pt-3 border-t border-border bg-card dark:bg-card">
+      <div className="shrink-0 flex items-center justify-between gap-3 p-5 pt-3 border-t border-border bg-card dark:bg-card">
         <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-2xl">
           Cancel
         </Button>
@@ -196,7 +196,7 @@ export function SupportedAssetPicker({
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl p-0 flex flex-col">
+        <SheetContent side="bottom" className="h-[92dvh] rounded-t-3xl p-0 flex flex-col border-t border-border">
           <SheetHeader className="sr-only">
             <SheetTitle>Select supported asset</SheetTitle>
             <SheetDescription>Preview assets for this adapter</SheetDescription>

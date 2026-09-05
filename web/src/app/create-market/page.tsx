@@ -329,19 +329,18 @@ export default function CreateMarketPage() {
 
   return (
     <div className="min-h-dvh">
-      <main className="mx-auto max-w-2xl px-4 py-8 md:px-8 space-y-8">
+      <main className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-8 space-y-6 md:space-y-8">
         {/* Header */}
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Rocket className="h-6 w-6 text-ice-500" />
-            <h1 className="text-2xl font-bold text-foreground text-balance">Launch a Market</h1>
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg md:text-xl font-bold text-foreground text-balance">Create Market</h1>
             <button
               type="button"
               onClick={() => {
                 reset();
                 router.push("/markets");
               }}
-              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="inline-flex h-8 w-8 md:h-9 md:w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-label="Cancel and exit"
               title="Cancel (Esc)"
             >
@@ -355,18 +354,18 @@ export default function CreateMarketPage() {
 
         {/* Chain indicator — actionable, not a dead end */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2 flex-wrap">
-          <Wallet className="h-3.5 w-3.5" />
-          <span>
+          <Wallet className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">
             {session.walletType === 'embedded' ? 'Embedded wallet' : session.walletType === 'external' ? 'External wallet' : 'No wallet'} ·{' '}
             {getChainLabel(chainId)}
           </span>
           {!contracts && (
             <>
-              <span className="text-amber-500 font-medium">(unsupported)</span>
+              <span className="text-amber-500 font-medium truncate">(unsupported)</span>
               <button
                 type="button"
                 onClick={() => nudgeChain(84532, 'Market creation is configured on Base Sepolia')}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors shrink-0"
               >
                 Switch to Base Sepolia
               </button>
@@ -405,7 +404,7 @@ export default function CreateMarketPage() {
         </div>
 
         {/* Step Content Card */}
-        <div className="rounded-3xl border border-border bg-card p-6 md:p-8 space-y-6 shadow-soft">
+        <div className="rounded-3xl border border-border bg-card p-5 md:p-8 space-y-6 shadow-soft">
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-foreground">Collateral Asset</h2>
@@ -986,11 +985,11 @@ export default function CreateMarketPage() {
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-between">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3">
           {step > 1 ? (
             <button
               onClick={handleBack}
-              className="flex items-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-premium active-press"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-premium active-press"
             >
               <ArrowLeft className="h-4 w-4" />
               Back
@@ -1002,7 +1001,7 @@ export default function CreateMarketPage() {
                 reset();
                 router.push("/markets");
               }}
-              className="flex items-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-premium active-press"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-premium active-press"
             >
               <X className="h-4 w-4" />
               Cancel
@@ -1011,7 +1010,7 @@ export default function CreateMarketPage() {
           {step < 8 ? (
             <button
               onClick={handleNext}
-              className="flex items-center gap-2 rounded-2xl bg-ice-300 dark:bg-ice-400 px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-premium active-press shadow-glow"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ice-300 dark:bg-ice-400 px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-premium active-press shadow-glow"
             >
               Continue
               <ArrowRight className="h-4 w-4" />
@@ -1021,7 +1020,7 @@ export default function CreateMarketPage() {
               onClick={handleDeploy}
               disabled={isDeploying || !contracts?.marketFactory}
               className={cn(
-                "flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold transition-all",
+                "inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold transition-all w-full sm:w-auto",
                 isDeploying || !contracts?.marketFactory
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-glow active-press"

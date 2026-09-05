@@ -105,9 +105,9 @@ export function resolveAssetIdentity(params: {
   // Issuer: derive brand name from symbol via brandLogos (agnostic — works for any known ticker)
   const issuer = getBrandName(symbol) || (b20 ? getBrandName(b20.symbol) : null);
 
-  // Logo resolution: tokenLogoUri (token list) → Clearbit/Coingecko via symbol → favicon → TrustWallet
+  // Logo resolution: tokenLogoUri (token list) → B20 brand logo → resolved token logo by symbol → favicon fallback
   const effectiveLogo = logoUri || (b20 ? resolveTokenLogo(b20.symbol, null) : null);
-  const resolvedLogo = resolveTokenLogo(symbol, effectiveLogo);
+  const resolvedLogo = effectiveLogo || resolveTokenLogo(symbol, null);
 
   // Category strictly from adapter type
   const category = adapterCategoryForAddress(market.assetAdapter, market.chainId);
