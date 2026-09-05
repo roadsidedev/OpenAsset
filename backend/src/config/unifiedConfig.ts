@@ -129,6 +129,18 @@ const allowedFrontendOrigins = parseFrontendUrls(env.FRONTEND_URLS).map((u) => {
   try { return new URL(u).origin; } catch { return u; }
 });
 
+// Production fallback: when FRONTEND_URLS is not set, allow known frontend origins
+// so deployed backends do not hard-fail CORS after frontend domain changes.
+const knownFrontendOrigins = [
+  'https://www.openasset.markets',
+  'https://openasset-market.vercel.app',
+  'https://openasset.vercel.app',
+];
+const resolvedAllowedFrontendOrigins =
+  allowedFrontendOrigins.length > 0
+    ? allowedFrontendOrigins
+    : knownFrontendOrigins;
+
 export const config = {
   port: env.PORT,
   jwtSecret: env.JWT_SECRET,
@@ -142,7 +154,7 @@ export const config = {
   rpcUrls: rpcUrlsMap,
   frontendUrl: env.FRONTEND_URL,
   frontendUrls: env.FRONTEND_URLS,
-  allowedFrontendOrigins,
+  allowedFrontendOrigins: resolvedAllowedFrontendOrigins,
   
   // Chain configuration
   chains: chainIds.map(id => ({ 
