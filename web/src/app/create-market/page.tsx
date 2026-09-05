@@ -554,191 +554,295 @@ export default function CreateMarketPage() {
             <div className="space-y-5">
               <div>
                 <h2 className="text-lg font-bold text-foreground">Risk Parameters</h2>
-                <p className="text-sm text-muted-foreground">Set the core lending terms. Each setting affects borrower demand and your risk.</p>
+                <p className="text-xs text-muted-foreground">Choose a preset or tune parameters manually. All values are immutable after deployment.</p>
               </div>
 
-              {/* LTV with risk level and explanation */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-foreground">Loan-to-Value (LTV) — {formData.ltv}%</label>
-                  <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full border",
-                    formData.ltv <= 50 ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400" :
-                    formData.ltv <= 75 ? "bg-ice-500/10 text-ice-600 border-ice-500/20 dark:text-ice-300" :
-                    formData.ltv <= 85 ? "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400" :
-                    "bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400"
-                  )}>
-                    {formData.ltv <= 50 ? "Conservative" : formData.ltv <= 75 ? "Balanced" : formData.ltv <= 85 ? "Aggressive" : "High Risk"}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">Max loan as % of collateral value. <strong>50% = 2x over-collateralized</strong> (safe for volatile assets), <strong>95% = 1.05x</strong> (only for stable collateral). Higher LTV = more borrowers but less liquidation buffer.</p>
-                <input
-                  type="range"
-                  min="1"
-                  max="95"
-                  value={formData.ltv}
-                  onChange={(e) => setFormData({ ltv: Number(e.target.value) })}
-                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
-                />
-                <div className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>1% (ultra-safe)</span>
-                  <span>50% (recommended for long-tail)</span>
-                  <span>95% (max)</span>
-                </div>
-                {formData.ltv > 85 && (
-                  <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-600 dark:text-red-400">
-                    <Warning className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span><strong>High LTV warning:</strong> {formData.ltv}% leaves only {100 - formData.ltv}% buffer. A {100 - formData.ltv}% price drop triggers liquidation. Recommended for stable collateral only (e.g., USDC, B20 with TRV). For volatile ERC20, use ≤75%.</span>
-                  </div>
-                )}
-                {formData.ltv <= 50 && (
-                  <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span><strong>Conservative:</strong> Strong 2x buffer. Safer for volatile or low-liquidity collateral. Fewer borrowers but much lower bad-debt risk.</span>
-                  </div>
-                )}
+              {/* Preset quick selector */}
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {[
+                  { key: 'conservative', label: 'Conservative', ltv: 35, apr: 8.0, duration: 14, grace: 12, health: 125 },
+                  { key: 'moderate', label: 'Balanced', ltv: 50, apr: 12.0, duration: 30, grace: 1, health: 120 },
+                  { key: 'aggressive', label: 'High Yield', ltv: 75, apr: 18.5, duration: 60, grace: 24, health: 115 },
+                ].map((preset) => {
+                  const active =
+                    formData.ltv === preset.ltv &&
+                    formData.apr === preset.apr &&
+                    formData.duration === preset.duration &&
+                    formData.gracePeriod === preset.grace &&
+                    formData.healthFactorThreshold === preset.health;
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ltv: preset.ltv,
+                          apr: preset.apr,
+                          duration: preset.duration,
+                          gracePeriod: preset.grace,
+                          healthFactorThreshold: preset.health,
+                        })
+                      }
+                      className={cn(
+                        'shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors',
+                        active
+                          ? 'border-ice-400 bg-ice-500/10 text-ice-700 dark:text-ice-300'
+                          : 'border-border bg-card hover:bg-accent'
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* APR with explanation */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Annual Percentage Rate (APR) — {formData.apr}%</label>
-                <p className="text-xs text-muted-foreground">Yearly interest borrowers pay. <strong>5-15% is typical</strong> for over-collateralized lending. Higher APR = more yield but fewer borrowers. Billed pro-rata for loan duration.</p>
-                <div className="grid grid-cols-2 gap-4">
+              {/* Live computed banner */}
+              <div className="rounded-2xl border border-border bg-card p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                  Live Market Profile
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-muted/60 p-2">
+                    <div className="text-[10px] text-muted-foreground">Over-collateral</div>
+                    <div className="text-sm font-bold text-foreground">{formData.ltv > 0 ? (100 / formData.ltv).toFixed(2) : '—'}x</div>
+                  </div>
+                  <div className="rounded-xl bg-muted/60 p-2">
+                    <div className="text-[10px] text-muted-foreground">Est. 30d return</div>
+                    <div className="text-sm font-bold text-foreground">
+                      {((1000 * (formData.apr / 100) * (formData.duration / 365))).toFixed(2)} USDC
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">per 1,000 borrowed</div>
+                  </div>
+                  <div className="rounded-xl bg-muted/60 p-2">
+                    <div className="text-[10px] text-muted-foreground">Liquidation buffer</div>
+                    <div className="text-sm font-bold text-foreground">+{100 - formData.ltv}%</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Parameter cards */}
+              <div className="space-y-4">
+                {/* LTV */}
+                <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">Loan-to-Value (LTV)</div>
+                      <div className="text-[11px] text-muted-foreground">Max loan value as % of collateral.</div>
+                    </div>
+                    <span className={cn('text-xs font-semibold px-2 py-1 rounded-full border shrink-0',
+                      formData.ltv <= 50 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' :
+                      formData.ltv <= 75 ? 'bg-ice-500/10 text-ice-600 border-ice-500/20 dark:text-ice-300' :
+                      formData.ltv <= 85 ? 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400' :
+                      'bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400')}>
+                      {formData.ltv <= 50 ? 'Conservative' : formData.ltv <= 75 ? 'Balanced' : formData.ltv <= 85 ? 'Aggressive' : 'High Risk'}
+                    </span>
+                  </div>
                   <input
-                    type="number"
+                    type="range"
+                    min="1"
+                    max="95"
+                    value={formData.ltv}
+                    onChange={(e) => setFormData({ ltv: Number(e.target.value) })}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
+                  />
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>1%</span>
+                    <span className="font-medium text-foreground">{formData.ltv}%</span>
+                    <span>95%</span>
+                  </div>
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer font-medium hover:text-foreground">What does LTV mean?</summary>
+                    <p className="mt-2 space-y-1">
+                      <strong className="text-foreground">Lower LTV = safer.</strong> 50% means borrowers must deposit 2x the loan value.
+                      Higher LTV attracts more borrowers, but a smaller price drop triggers liquidation.
+                      For volatile collateral, use ≤75%; for stablecoins/B20 with TRV, ≤85–95% may be acceptable.
+                    </p>
+                  </details>
+                </div>
+
+                {/* APR + simulation */}
+                <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">APR</div>
+                      <div className="text-[11px] text-muted-foreground">Yearly interest charged to borrowers.</div>
+                    </div>
+                    <span className="text-xs font-bold text-foreground shrink-0">{formData.apr}%</span>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] gap-3 items-center">
+                    <input
+                      type="number"
+                      value={formData.apr}
+                      onChange={(e) => setFormData({ apr: Number(e.target.value) })}
+                      className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
+                      placeholder="8"
+                    />
+                    <div className="rounded-2xl border border-border bg-muted/30 px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">30d on 1,000</div>
+                      <div className="font-semibold text-foreground">
+                        {(1000 * (formData.apr / 100) * (formData.duration / 365)).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="40"
                     value={formData.apr}
                     onChange={(e) => setFormData({ apr: Number(e.target.value) })}
-                    className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
-                    placeholder="8"
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
                   />
-                  <div className="rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs">
-                    <div className="text-muted-foreground">Preview: {formData.duration}-day loan</div>
-                    <div className="font-medium text-foreground">{((formData.apr / 100) * (formData.duration / 365) * 100).toFixed(2)}% total interest</div>
-                    <div className="text-[11px] text-muted-foreground">e.g., 1000 USDC → {(1000 * (formData.apr / 100) * (formData.duration / 365)).toFixed(2)} USDC interest</div>
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>1%</span>
+                    <span>{formData.apr}%</span>
+                    <span>40%</span>
                   </div>
                 </div>
-                {formData.apr > 50 && (
-                  <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
-                    <Warning className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span><strong>High APR:</strong> {formData.apr}% APR may deter borrowers. For B20/large-cap, 5-12% is competitive. High APR is only attractive for niche, short-duration, or under-collateralized markets.</span>
-                  </div>
-                )}
-              </div>
 
-              {/* Duration and Grace */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Duration</label>
-                  <p className="text-xs text-muted-foreground">Loan lifetime before expiry. Short = faster capital rotation.</p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={formData.duration}
-                      onChange={(e) => setFormData({ duration: Number(e.target.value) })}
-                      className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
-                    />
-                    <span className="text-sm text-muted-foreground shrink-0">days</span>
+                {/* Duration + Grace */}
+                <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                  <div className="text-sm font-semibold text-foreground">Term</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Duration</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ duration: Math.max(1, formData.duration - 1) })}
+                          className="h-9 w-9 shrink-0 rounded-xl border border-border bg-muted/50 text-sm font-semibold hover:bg-accent"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          value={formData.duration}
+                          onChange={(e) => setFormData({ duration: Number(e.target.value) })}
+                          className="flex-1 rounded-2xl border border-border bg-muted/50 px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ice-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ duration: Math.min(365, formData.duration + 1) })}
+                          className="h-9 w-9 shrink-0 rounded-xl border border-border bg-muted/50 text-sm font-semibold hover:bg-accent"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">days</div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Grace Period</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ gracePeriod: Math.max(0, formData.gracePeriod - 1) })}
+                          className="h-9 w-9 shrink-0 rounded-xl border border-border bg-muted/50 text-sm font-semibold hover:bg-accent"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          value={formData.gracePeriod}
+                          onChange={(e) => setFormData({ gracePeriod: Number(e.target.value) })}
+                          className="flex-1 rounded-2xl border border-border bg-muted/50 px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ice-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ gracePeriod: Math.min(72, formData.gracePeriod + 1) })}
+                          className="h-9 w-9 shrink-0 rounded-xl border border-border bg-muted/50 text-sm font-semibold hover:bg-accent"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">hours</div>
+                    </div>
                   </div>
+                  {formData.gracePeriod < 6 && (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
+                      Short grace window: {formData.gracePeriod}h gives borrowers little time to repay after expiry.
+                    </div>
+                  )}
                   {formData.duration > 90 && (
                     <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
-                      <strong>Long duration:</strong> {formData.duration} days locks liquidity longer. Consider ≤30 days for volatile collateral.
+                      Long duration locks liquidity for {formData.duration} days. Consider shorter terms for volatile assets.
                     </div>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Grace Period</label>
-                  <p className="text-xs text-muted-foreground">Extra hours after expiry before liquidation.</p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={formData.gracePeriod}
-                      onChange={(e) => setFormData({ gracePeriod: Number(e.target.value) })}
-                      className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
-                    />
-                    <span className="text-sm text-muted-foreground shrink-0">hours</span>
-                  </div>
-                  {formData.gracePeriod < 24 && (
-                    <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
-                      Short grace ({formData.gracePeriod}h) — borrowers have little time to repay.
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Health Factor */}
-              <div className="rounded-2xl border border-border bg-muted/30 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">Health Factor Liquidation</div>
-                    <p className="text-xs text-muted-foreground">Liquidate before expiry if collateral price drops. Disable for expiry-only markets.</p>
-                  </div>
-                  <button
-                    onClick={() => setFormData({ enableHealthFactor: !formData.enableHealthFactor })}
-                    className={cn(
-                      "relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0",
-                      formData.enableHealthFactor ? "bg-ice-400" : "bg-muted"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                        formData.enableHealthFactor ? "translate-x-6" : "translate-x-1"
-                      )}
-                    />
-                  </button>
-                </div>
-                {formData.enableHealthFactor ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-muted-foreground">Threshold:</label>
-                      <span className="text-sm font-bold text-foreground">{formData.healthFactorThreshold}%</span>
-                      <span className="text-xs text-muted-foreground">(collateral value / debt)</span>
+                {/* Health Factor */}
+                <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">Health Factor</div>
+                      <div className="text-[11px] text-muted-foreground">Auto-liquidate before expiry when collateral weakens.</div>
                     </div>
-                    <input
-                      type="range"
-                      min="110"
-                      max="200"
-                      value={formData.healthFactorThreshold}
-                      onChange={(e) => setFormData({ healthFactorThreshold: Number(e.target.value) })}
-                      className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Liquidates when <code className="bg-muted px-1 py-0.5 rounded">health = collateralValue / debt &lt; {formData.healthFactorThreshold / 100}x</code>.
-                      {formData.healthFactorThreshold < 120 && " Low threshold = loans survive bigger drops (riskier for LPs)."}
-                      {formData.healthFactorThreshold > 150 && " High threshold = more sensitive, safer for LPs but borrowers liquidated sooner."}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
-                    <strong>Expiry-only:</strong> Loans liquidated only after {formData.duration} days + {formData.gracePeriod}h grace. Simpler but no protection against intra-term price crashes. Recommended to enable for volatile collateral.
-                  </p>
-                )}
-              </div>
-
-              {/* Circuit Breaker (Advanced) */}
-              <details className="rounded-2xl border border-border bg-card overflow-hidden">
-                <summary className="px-4 py-3 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/50 flex items-center justify-between">
-                  <span>Advanced: Circuit Breaker</span>
-                  <span className="text-xs text-muted-foreground">{formData.enableCircuitBreaker ? "Enabled" : "Disabled"}</span>
-                </summary>
-                <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-                  <p className="text-xs text-muted-foreground">Auto-pauses new loans on oracle failure or 20%+ price swing. Existing loans still repayable. Recommended enabled.</p>
-                  <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setFormData({ enableCircuitBreaker: !formData.enableCircuitBreaker })}
-                      className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", formData.enableCircuitBreaker ? "bg-ice-400" : "bg-muted")}
+                      onClick={() => setFormData({ enableHealthFactor: !formData.enableHealthFactor })}
+                      className={cn('shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors', formData.enableHealthFactor ? 'bg-ice-400' : 'bg-muted')}
+                      aria-label="Toggle health factor"
                     >
-                      <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", formData.enableCircuitBreaker ? "translate-x-6" : "translate-x-1")} />
+                      <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white transition-transform', formData.enableHealthFactor ? 'translate-x-6' : 'translate-x-1')} />
                     </button>
-                    <span className="text-sm text-foreground">Enable Circuit Breaker</span>
                   </div>
-                  {formData.enableCircuitBreaker && (
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div><span className="text-muted-foreground">Pause:</span> <span className="font-medium">{formData.pauseThresholdBps / 100}% swing</span></div>
-                      <div><span className="text-muted-foreground">Resume:</span> <span className="font-medium">{formData.resumeThresholdBps / 100}% + {formData.cooldownSeconds / 3600}h cooldown</span></div>
+                  {formData.enableHealthFactor ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Threshold</span>
+                        <span className="font-semibold text-foreground">{formData.healthFactorThreshold}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="110"
+                        max="200"
+                        value={formData.healthFactorThreshold}
+                        onChange={(e) => setFormData({ healthFactorThreshold: Number(e.target.value) })}
+                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-ice-500"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Triggers when <code className="bg-muted px-1 py-0.5 rounded">health = collateral / debt &lt; {formData.healthFactorThreshold / 100}x</code>
+                      </p>
                     </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
+                      Expiry-only: loans liquidate only after {formData.duration} days + {formData.gracePeriod}h grace. Enable for volatile collateral.
+                    </p>
                   )}
                 </div>
-              </details>
+
+                {/* Circuit Breaker */}
+                <details className="rounded-2xl border border-border bg-card overflow-hidden">
+                  <summary className="px-4 py-3 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/50 flex items-center justify-between">
+                    <span>Circuit Breaker</span>
+                    <span className={cn('text-xs font-medium', formData.enableCircuitBreaker ? 'text-emerald-600' : 'text-muted-foreground')}>
+                      {formData.enableCircuitBreaker ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </summary>
+                  <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                    <p className="text-xs text-muted-foreground">Auto-pauses new loans on oracle failure or large price swings.</p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setFormData({ enableCircuitBreaker: !formData.enableCircuitBreaker })}
+                        className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors', formData.enableCircuitBreaker ? 'bg-ice-400' : 'bg-muted')}
+                        aria-label="Toggle circuit breaker"
+                      >
+                        <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white transition-transform', formData.enableCircuitBreaker ? 'translate-x-6' : 'translate-x-1')} />
+                      </button>
+                      <span className="text-sm text-foreground">Enable Circuit Breaker</span>
+                    </div>
+                    {formData.enableCircuitBreaker && (
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-xl bg-muted/60 p-2">
+                          <div className="text-muted-foreground">Pause threshold</div>
+                          <div className="font-semibold text-foreground">{formData.pauseThresholdBps / 100}% swing</div>
+                        </div>
+                        <div className="rounded-xl bg-muted/60 p-2">
+                          <div className="text-muted-foreground">Resume / cooldown</div>
+                          <div className="font-semibold text-foreground">{formData.resumeThresholdBps / 100}% + {formData.cooldownSeconds / 3600}h</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </div>
             </div>
           )}
 
