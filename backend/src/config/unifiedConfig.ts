@@ -15,6 +15,7 @@ const envSchema = z.object({
   CHAIN_IDS: z.string().optional(), // e.g., "1,11155111"
   
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+  FRONTEND_URLS: z.string().optional(),
   
   // Contract Addresses (chainId:address format for multi-chain, e.g. "84532:0x...;11155111:0x...")
   MARKET_FACTORY_ADDRESS: z.string().default(''),
@@ -117,8 +118,16 @@ function parseContractAddresses(input: string): Map<number, string> {
   return result;
 }
 
+function parseFrontendUrls(input?: string): string[] {
+  if (!input) return [];
+  return input.split(',').map((u) => u.trim()).filter(Boolean);
+}
+
 const rpcUrlsMap = parseRpcUrls(env.RPC_URLS);
 const chainIds = Array.from(rpcUrlsMap.keys());
+const allowedFrontendOrigins = parseFrontendUrls(env.FRONTEND_URLS).map((u) => {
+  try { return new URL(u).origin; } catch { return u; }
+});
 
 export const config = {
   port: env.PORT,
@@ -132,6 +141,8 @@ export const config = {
   logLevel: env.LOG_LEVEL,
   rpcUrls: rpcUrlsMap,
   frontendUrl: env.FRONTEND_URL,
+  frontendUrls: env.FRONTEND_URLS,
+  allowedFrontendOrigins,
   
   // Chain configuration
   chains: chainIds.map(id => ({ 
