@@ -1,3 +1,5 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import nextra from 'nextra'
 
 const getApiUrl = () => {
@@ -20,6 +22,17 @@ const withNextra = nextra({
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
+  },
+  // Pin the Turbopack workspace root to this app — without it Turbopack
+  // walks up and locks onto an unrelated lockfile (C:\Users\USER\...), which
+  // degrades module resolution and cache hits.
+  turbopack: {
+    root: path.dirname(fileURLToPath(import.meta.url)),
+  },
+  experimental: {
+    // Icon barrel imports (25+ files) — granular per-icon modules instead of
+    // pulling the phosphor index into every chunk. Not in Next's default list.
+    optimizePackageImports: ['@phosphor-icons/react'],
   },
   async rewrites() {
     const apiUrl = getApiUrl()
