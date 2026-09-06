@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMarket } from "@/hooks/useMarkets";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { useSession } from "@/context/SessionContext";
+import { usePrivy } from "@privy-io/react-auth";
 import { useChainOrchestrator } from "@/hooks/useChainOrchestrator";
 import { useTxTrail } from "@/store/useTxTrail";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,7 +52,8 @@ export default function MarketDetailPage() {
   const params = useParams();
   const rawId = (params as { marketId?: string | string[] })?.marketId;
   const marketId = Array.isArray(rawId) ? rawId[0] : (rawId as string) || "";
-  const { address: userAddress, isAuthenticated } = useSession();
+  const { address: userAddress, isAuthenticated, ready: sessionReady } = useSession();
+  const { login: privyLogin } = usePrivy();
   const { data: market, isLoading, isFetching, error, refetch } = useMarket(marketId);
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
   const { nudgeChain, isOnChain } = useChainOrchestrator();
@@ -792,25 +794,43 @@ export default function MarketDetailPage() {
                 </div>
               )}
 
-              {/* CTA — state-driven: sign in → switch chain → borrow */}
+              {/* CTA — auth-aware and chain-aware: every state is actionable.
+                  Logged-in users never see a dead "Sign in" wall: the button
+                  fires Privy login when unauthenticated, and fires the chain
+                  switch (silent for embedded wallets) when on the wrong network. */}
               {(() => {
                 const trimmed = collateralAmount.trim();
                 const parsedForGate = trimmed ? parseAmountInput(trimmed, collateralDecimals) : null;
                 const exceedsBalance = parsedForGate?.amount !== undefined && collateralBalance !== null && parsedForGate.amount > collateralBalance;
-                const disabled =
-                  isTxLoading ||
-                  !isAuthenticated ||
-                  !userAddress ||
+                const needsAuth = sessionReady && (!isAuthenticated || !userAddress);
+                const needsSwitch = !needsAuth && wrongChain;
+                const formBlocked =
+                  isPaused ||
+                  !metadataReliable ||
+                  !oracleTrusted ||
                   !trimmed ||
                   !!parsedForGate?.error ||
-                  exceedsBalance ||
-                  isPaused ||
-                  !oracleTrusted ||
-                  !metadataReliable ||
-                  wrongChain;
+                  exceedsBalance;
+                const disabled = isTxLoading || (!needsAuth && !needsSwitch && formBlocked);
+                const handleCta = () => {
+                  if (needsAuth) {
+                    try {
+                      void (privyLogin as (() => unknown) | undefined)?.();
+                    } catch {
+                      // Privy unavailable (plain-wagmi fallback) — session
+                      // bridge will surface the connect CTA instead.
+                    }
+                    return;
+                  }
+                  if (needsSwitch) {
+                    nudgeChain(market.chainId, `This market lives on ${getChainLabel(market.chainId)}`);
+                    return;
+                  }
+                  void handleRequestLoan();
+                };
                 return (
                   <button
-                    onClick={handleRequestLoan}
+                    onClick={handleCta}
                     disabled={disabled}
                     className={cn(
                       "w-full py-3.5 rounded-2xl font-bold text-sm transition-premium active-press",
@@ -821,10 +841,10 @@ export default function MarketDetailPage() {
                   >
                     {isTxLoading
                       ? "Processing..."
-                      : !isAuthenticated || !userAddress
+                      : needsAuth
                       ? "Sign in to borrow"
-                      : wrongChain
-                      ? `Switch to ${getChainLabel(market.chainId)} first`
+                      : needsSwitch
+                      ? `Switch to ${getChainLabel(market.chainId)} to borrow`
                       : isPaused
                       ? "Market Paused"
                       : !metadataReliable

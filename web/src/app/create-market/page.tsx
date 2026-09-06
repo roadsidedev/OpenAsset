@@ -15,6 +15,7 @@ import { useChainOrchestrator } from "@/hooks/useChainOrchestrator";
 import { useTxTrail } from "@/store/useTxTrail";
 import { Confetti } from "@/components/Confetti";
 import { getContracts } from "@/lib/contracts";
+import { buildAssetCatalog, findCatalogAsset } from "@/lib/assetCatalog";
 import { getChainLabel } from "@/lib/chainLabels";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { decodeContractError } from "@/lib/contractErrors";
@@ -33,10 +34,22 @@ export default function CreateMarketPage() {
   const session = useSession();
   const { address: userAddress } = session;
   const publicClient = usePublicClient();
-  const chainId = session.chainId ?? undefined;
+  const walletChainId = session.chainId ?? undefined;
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
   const { createMarket, clearError } = useContractInteraction();
   const { nudgeChain } = useChainOrchestrator();
+
+  // The selected asset's NATIVE chain is the source of truth — not the
+  // wallet's current chain. The wallet may still be mid-switch (or on a
+  // different network entirely); resolving contracts/adapters/metadata against
+  // the wallet chain retains wrong-chain addresses after a switch. Until the
+  // wallet converges, the wizard already targets the asset's chain.
+  const catalog = useMemo(() => buildAssetCatalog(), []);
+  const selectedCatalogAsset = useMemo(
+    () => findCatalogAsset(catalog, formData.collateralAsset),
+    [catalog, formData.collateralAsset],
+  );
+  const chainId = selectedCatalogAsset?.chainId ?? walletChainId;
   const recordTx = useTxTrail((s) => s.record);
   const [isDeploying, setIsDeploying] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -352,25 +365,40 @@ export default function CreateMarketPage() {
           </p>
         </div>
 
-        {/* Chain indicator — actionable, not a dead end */}
+        {/* Chain indicator — asset-native target, actionable when wallet lags */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2 flex-wrap">
           <Wallet className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">
             {session.walletType === 'embedded' ? 'Embedded wallet' : session.walletType === 'external' ? 'External wallet' : 'No wallet'} ·{' '}
-            {getChainLabel(chainId)}
+            {selectedCatalogAsset
+              ? `Target: ${getChainLabel(selectedCatalogAsset.chainId)}`
+              : getChainLabel(chainId)}
+            {walletChainId !== undefined &&
+              selectedCatalogAsset &&
+              walletChainId !== selectedCatalogAsset.chainId && (
+                <span className="text-amber-600 dark:text-amber-400"> (wallet on {getChainLabel(walletChainId)} — switching…)</span>
+              )}
           </span>
-          {!contracts && (
+          {!contracts ? (
             <>
               <span className="text-amber-500 font-medium truncate">(unsupported)</span>
               <button
                 type="button"
-                onClick={() => nudgeChain(84532, 'Market creation is configured on Base Sepolia')}
+                onClick={() => nudgeChain(chainId ?? 84532, `Market creation targets ${getChainLabel(chainId ?? 84532)}`)}
                 className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors shrink-0"
               >
-                Switch to Base Sepolia
+                Switch to {getChainLabel(chainId ?? 84532)}
               </button>
             </>
-          )}
+          ) : walletChainId !== undefined && chainId !== undefined && walletChainId !== chainId ? (
+            <button
+              type="button"
+              onClick={() => nudgeChain(chainId, `${selectedCatalogAsset?.symbol ?? 'Asset'} lives on ${getChainLabel(chainId)}`)}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors shrink-0"
+            >
+              Switch to {getChainLabel(chainId)}
+            </button>
+          ) : null}
         </div>
 
         {/* Step Indicator */}

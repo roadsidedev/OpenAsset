@@ -122,7 +122,9 @@ export function buildAssetCatalog(): CatalogAsset[] {
     });
   }
 
-  // Robinhood stock tokens — Robinhood Chain mainnet catalog.
+  // Robinhood stock tokens.
+  // Mainnet entry is reference-only (no factory deployed yet — surfaces as
+  // "coming soon" in the picker). Testnet mock is the selectable one.
   assets.push({
     address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9',
     symbol: 'AAPL',
@@ -134,6 +136,22 @@ export function buildAssetCatalog(): CatalogAsset[] {
     feed: '0x6B22A786bAa607d76728168703a39Ea9C99f2cD0',
     requiresAllowlist: true,
     assetAdapter: getAssetAdapterForSource('robinhood', getContracts(4663)),
+  });
+  assets.push({
+    address:
+      process.env.NEXT_PUBLIC_ROBINHOOD_AAPL_ADDRESS_46630 ||
+      '0xAf6D6d1F38d50d5C5C8219Be2938774a64E1f948',
+    symbol: 'AAPL',
+    name: 'Apple · Robinhood Stock Token (testnet)',
+    chainId: 46630,
+    decimals: 18,
+    source: 'robinhood',
+    logoUri: getBrandLogoUrl('AAPL'),
+    feed:
+      process.env.NEXT_PUBLIC_ROBINHOOD_AAPL_FEED_46630 ||
+      '0x43a7feb2cfa522000228374cad606b5673C4dAF1',
+    requiresAllowlist: true,
+    assetAdapter: getAssetAdapterForSource('robinhood', getContracts(46630)),
   });
 
   // Curated ERC20s per chain.
@@ -153,6 +171,20 @@ export function buildAssetCatalog(): CatalogAsset[] {
   }
 
   return assets;
+}
+
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+
+/** True when a market factory is deployed on the chain (creation supported). */
+export function isChainDeployable(chainId: number): boolean {
+  const contracts = getContracts(chainId);
+  const factory = contracts?.marketFactory;
+  return !!factory && factory !== ZERO_ADDR;
+}
+
+/** True when the catalog asset can actually be used (adapter deployed). */
+export function isAssetDeployable(asset: Pick<CatalogAsset, 'assetAdapter' | 'chainId'>): boolean {
+  return !!asset.assetAdapter && asset.assetAdapter !== ZERO_ADDR && isChainDeployable(asset.chainId);
 }
 
 /** Deduped list of chains present in the catalog that have a factory deployed. */

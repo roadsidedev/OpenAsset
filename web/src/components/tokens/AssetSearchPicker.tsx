@@ -11,7 +11,6 @@
 
 import { useMemo, useState } from 'react';
 import { MagnifyingGlass, GlobeHemisphereWest, Lock, Info } from '@phosphor-icons/react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { TokenIcon } from './TokenPreview';
@@ -23,7 +22,7 @@ import {
   type AssetSource,
 } from '@/lib/assetCatalog';
 import { getChainLabel } from '@/lib/chainLabels';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { isAssetDeployable, isChainDeployable } from '@/lib/assetCatalog';
 import { cn } from '@/lib/utils';
 
 export interface AssetSelection extends CatalogAsset {
@@ -62,9 +61,17 @@ function SourceBadge({ source }: { source: AssetSource }) {
   return null;
 }
 
-function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
-  const unavailable = !asset.assetAdapter;
-  const onDifferentChain = asset.chainId !== undefined;
+function AssetRow({
+  asset,
+  selected,
+  onSelect,
+  currentChainId,
+}: AssetRowProps & { currentChainId?: number }) {
+  const deployable = isAssetDeployable(asset);
+  const unavailable = !deployable;
+  const onDifferentChain =
+    currentChainId !== undefined && asset.chainId !== currentChainId;
+  const chainDeployable = isChainDeployable(asset.chainId);
 
   return (
     <button
@@ -102,8 +109,17 @@ function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
         >
           <span className="truncate">{getChainLabel(asset.chainId)}</span>
         </span>
-        {onDifferentChain && unavailable && (
-          <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">Unavailable on this chain</div>
+        {unavailable && (
+          <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+            {!chainDeployable
+              ? `Coming soon — no markets on ${getChainLabel(asset.chainId)} yet`
+              : 'Adapter not deployed on this network yet'}
+          </div>
+        )}
+        {deployable && onDifferentChain && (
+          <div className="text-[10px] text-ice-600 dark:text-ice-300 mt-1">
+            Tap to switch to {getChainLabel(asset.chainId)}
+          </div>
         )}
       </div>
     </button>
@@ -115,9 +131,10 @@ interface AssetSearchResultsProps {
   selectedAddress?: string;
   onSelect: (asset: CatalogAsset) => void;
   emptyHint?: string;
+  currentChainId?: number;
 }
 
-export function AssetSearchResults({ assets, selectedAddress, onSelect, emptyHint }: AssetSearchResultsProps) {
+export function AssetSearchResults({ assets, selectedAddress, onSelect, emptyHint, currentChainId }: AssetSearchResultsProps) {
   const grouped = useMemo(() => {
     const groups = new Map<number, CatalogAsset[]>();
     for (const a of assets) {
@@ -155,6 +172,7 @@ export function AssetSearchResults({ assets, selectedAddress, onSelect, emptyHin
                 asset={asset}
                 selected={!!selectedAddress && selectedAddress.toLowerCase() === asset.address.toLowerCase()}
                 onSelect={onSelect}
+                currentChainId={currentChainId}
               />
             ))}
           </div>
@@ -175,6 +193,7 @@ interface AssetSearchPickerProps {
   manualValue?: string;
   onManualChange?: (addr: string) => void;
   manualChainId?: number;
+  currentChainId?: number;
   title?: string;
 }
 
@@ -188,9 +207,9 @@ export function AssetSearchPicker({
   manualValue,
   onManualChange,
   manualChainId,
+  currentChainId,
   title = 'Choose what to lend against',
 }: AssetSearchPickerProps) {
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const [showManual, setShowManual] = useState(false);
   const catalog = useMemo(() => buildAssetCatalog(), []);
   const results = useMemo(() => searchAssetCatalog(catalog, query), [catalog, query]);
@@ -221,6 +240,7 @@ export function AssetSearchPicker({
         <AssetSearchResults
           assets={results}
           selectedAddress={selectedAddress}
+          currentChainId={currentChainId ?? manualChainId}
           onSelect={(asset) => {
             onSelect({ ...asset, curated: true });
             onOpenChange(false);
@@ -263,29 +283,24 @@ export function AssetSearchPicker({
     </div>
   );
 
-  if (isMobile) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[min(92dvh,760px)] max-h-[calc(100dvh-1rem)] rounded-t-3xl p-0 flex flex-col gap-0 overflow-hidden border-t border-border">
+  // Compact floating sheet — same pattern as the hamburger workspace menu:
+  // anchored panel (not full-screen), rounded, dismissible, works on all
+  // viewports so the wizard feels consistent on mobile and desktop.
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="left"
+        showCloseButton
+        className="workspace-menu-panel !inset-y-auto !bottom-auto !left-4 !right-auto !top-20 !h-auto !w-[min(420px,calc(100vw-2rem))] !max-w-none max-h-[calc(100vh-6rem)] rounded-[28px] border border-border/80 p-0 shadow-2xl shadow-black/20"
+      >
+        <div className="flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden">
           <SheetHeader className="sr-only">
             <SheetTitle>{title}</SheetTitle>
             <SheetDescription>Search collateral assets across all networks</SheetDescription>
           </SheetHeader>
           {content}
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl rounded-3xl gap-0 p-0 overflow-hidden max-h-[92vh] flex flex-col">
-        <DialogHeader className="sr-only">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Search collateral assets across all networks</DialogDescription>
-        </DialogHeader>
-        {content}
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

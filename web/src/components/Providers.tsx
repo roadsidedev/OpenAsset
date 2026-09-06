@@ -7,7 +7,7 @@ import { WagmiProvider as WagmiProviderBase } from 'wagmi';
 import { getPublicClient } from '@wagmi/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { config, supportedChains } from '../lib/wagmi';
+import { config, baseConfig, supportedChains } from '../lib/wagmi';
 import { AuthProvider } from '../context/AuthContext';
 import { SessionProviderPrivy, SessionProviderPlain } from '../context/SessionContext';
 import { ChainSwitchBanner } from './ChainSwitchBanner';
@@ -92,7 +92,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   if (!appId || appId === 'test-app-id' || appId.startsWith('clp000')) {
   return (
     <ThemeProvider>
-      <WagmiProviderBase config={config}>
+      <WagmiProviderBase config={baseConfig}>
         <ChainPrewarmer />
         <QueryClientProvider client={queryClient}>
           <SessionProviderPlain>

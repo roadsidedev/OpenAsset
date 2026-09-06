@@ -156,14 +156,20 @@ export function AssetSourceStep({
     );
   }, [formData.collateralAsset, catalog, collateralPreview, chainId]);
 
+  /**
+   * The selected asset's NATIVE chain is the source of truth — never the
+   * wallet's current chain. Resolving adapters against the wallet chain then
+   * switching retains wrong-chain addresses and bricks creation on the target
+   * network. Every branch below reads contracts from `asset.chainId`.
+   */
   const resolveProviderStack = (asset: CatalogAsset): boolean => {
-    if (!chainId) return false;
+    const nativeContracts = getContracts(asset.chainId);
     if (asset.source === 'b20') {
-      const suggested = getSuggestedAdaptersForB20(chainId);
+      const suggested = getSuggestedAdaptersForB20(asset.chainId);
       if (suggested) {
         setFormData({
           collateralAsset: asset.address,
-          assetAdapter: suggested.assetAdapter || formData.assetAdapter,
+          assetAdapter: suggested.assetAdapter || asset.assetAdapter || formData.assetAdapter,
           oracleAdapter: suggested.oracleAdapter || formData.oracleAdapter,
           complianceAdapter: suggested.complianceAdapter || formData.complianceAdapter,
           liquidationAdapter: suggested.liquidationAdapter || formData.liquidationAdapter,
@@ -175,11 +181,11 @@ export function AssetSourceStep({
       }
     }
     if (asset.source === 'robinhood') {
-      const suggested = getSuggestedAdaptersForRobinhood(chainId);
+      const suggested = getSuggestedAdaptersForRobinhood(asset.chainId);
       if (suggested) {
         setFormData({
           collateralAsset: asset.address,
-          assetAdapter: suggested.assetAdapter || formData.assetAdapter,
+          assetAdapter: suggested.assetAdapter || asset.assetAdapter || formData.assetAdapter,
           oracleAdapter: suggested.oracleAdapter || formData.oracleAdapter,
           complianceAdapter: suggested.complianceAdapter || formData.complianceAdapter,
           liquidationAdapter: suggested.liquidationAdapter || formData.liquidationAdapter,
@@ -189,7 +195,16 @@ export function AssetSourceStep({
         toast.success(`${asset.symbol} selected — Robinhood provider bundle applied`);
         return true;
       }
+      // No suggested stack on this chain (e.g. mainnet reference entry):
+      // fall back to the asset's own resolved adapter, if any.
+      if (asset.assetAdapter) {
+        setFormData({ collateralAsset: asset.address, assetAdapter: asset.assetAdapter });
+        toast.success(`${asset.symbol} selected`);
+        return true;
+      }
+      return false;
     }
+    void nativeContracts;
     return false;
   };
 
@@ -203,16 +218,25 @@ export function AssetSourceStep({
       return;
     }
 
+    // Guard: reference-only entries on chains with no deployment stay
+    // unselectable (the row is disabled) — double-guard here in case of a
+    // programmatic call.
+    if (!asset.assetAdapter) {
+      toast.error(`${asset.symbol} is not deployed on ${chainLabel} yet.`);
+      return;
+    }
+
     if (!resolveProviderStack(asset)) {
-      const erc20 = contracts?.erc20Adapter;
+      // Generic ERC-20 / NFT path — resolve against the ASSET's chain.
+      const nativeContracts = getContracts(asset.chainId);
+      const erc20 = nativeContracts?.erc20Adapter;
       setFormData({
         collateralAsset: asset.address,
         assetAdapter:
           asset.source === 'nft'
-            ? contracts?.erc721Adapter || formData.assetAdapter
-            : erc20 && erc20 !== ZERO
-              ? erc20
-              : formData.assetAdapter,
+            ? nativeContracts?.erc721Adapter || asset.assetAdapter || formData.assetAdapter
+            : asset.assetAdapter ||
+              (erc20 && erc20 !== ZERO ? erc20 : formData.assetAdapter),
       });
       toast.success(`${asset.symbol} selected`);
     }
@@ -314,6 +338,7 @@ export function AssetSourceStep({
                 <AssetSearchResults
                   assets={results}
                   selectedAddress={formData.collateralAsset}
+                  currentChainId={chainId}
                   onSelect={(asset) => handleAssetSelected({ ...asset, curated: true })}
                   emptyHint='No assets match. Try "AAPL", "TSLA" or "USDC" — or switch to advanced mode and paste a custom token address.'
                 />
@@ -519,7 +544,7 @@ export function AssetSourceStep({
         )}
       </div>
 
-      {/* Browse-all picker (full catalog) */}
+      {/* Browse-all picker (full catalog, compact sheet) */}
       <AssetSearchPicker
         open={browseOpen && !browseAdapter}
         onOpenChange={(open) => {
@@ -529,6 +554,7 @@ export function AssetSourceStep({
         query={query}
         onQueryChange={setQuery}
         selectedAddress={formData.collateralAsset}
+        currentChainId={chainId}
         onSelect={handleAssetSelected}
         manualValue={manualValue}
         onManualChange={(addr) => {

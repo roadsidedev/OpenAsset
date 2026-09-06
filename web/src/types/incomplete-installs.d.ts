@@ -36,7 +36,7 @@ declare module 'viem/chains' {
 }
 
 declare module 'wagmi' {
-  export function useAccount(): { address?: string; isConnected: boolean; chain?: any; chainId?: number };
+  export function useAccount(): { address?: string; isConnected: boolean; chain?: any; chainId?: number; connector?: { id: string; name: string } };
   export function useWalletClient(): { data?: any };
   export function usePublicClient(config?: { chainId?: number }): any;
   export function useChainId(): number | undefined;
@@ -73,6 +73,7 @@ declare module '@privy-io/react-auth' {
 declare module '@privy-io/wagmi' {
   export function WagmiProvider(props: any): JSX.Element;
   export function usePrivy(): any;
+  export function createConfig(config: any): any;
 }
 
 declare module '@tanstack/react-query' {

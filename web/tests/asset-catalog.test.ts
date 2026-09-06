@@ -58,8 +58,11 @@ async function main() {
   assert(b20.every((a) => !!a.assetAdapter), 'B20 assets resolve the b20AssetAdapter address');
   assert(b20.every((a) => !!a.feed), 'B20 assets carry a Chainlink feed');
   const robinhood = catalog.filter((a) => a.source === 'robinhood');
-  assert(robinhood.length >= 1, `Robinhood stock tokens present (${robinhood.length})`);
-  assert(robinhood.every((a) => a.chainId === 4663), 'Robinhood assets are native to Robinhood Chain (4663)');
+  assert(robinhood.length >= 2, `Robinhood stock tokens present (${robinhood.length})`);
+  assert(robinhood.every((a) => a.chainId === 4663 || a.chainId === 46630), 'Robinhood assets are native to Robinhood chains (4663/46630)');
+  const { isAssetDeployable } = await import('../src/lib/assetCatalog');
+  const robinhoodTestnet = robinhood.filter((a) => a.chainId === 46630);
+  assert(robinhoodTestnet.length >= 1 && robinhoodTestnet.every(isAssetDeployable), 'Robinhood testnet mock is selectable (adapter deployed)');
   const erc20 = catalog.filter((a) => a.source === 'erc20');
   assert(erc20.length >= 5, `Curated ERC20s present (${erc20.length})`);
   assert(catalog.every((a) => /^0x[0-9a-fA-F]{40}$/.test(a.address)), 'All catalog addresses are valid EVM addresses');

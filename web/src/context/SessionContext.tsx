@@ -51,21 +51,35 @@ function resolveWalletType(
   wallets: WalletLike[],
   address: string | null,
   isConnected: boolean,
+  connectorName?: string,
+  privyAuthenticated = false,
 ): WalletType {
   if (!address && !isConnected) return null;
   const active = wallets.find(
     (w) => address && w.address?.toLowerCase() === address.toLowerCase(),
   );
   if (active) {
-    if (active.walletClientType === 'privy' || active.connectorType === 'embedded') return 'embedded';
+    if (
+      active.walletClientType === 'privy' ||
+      active.connectorType === 'embedded' ||
+      active.walletClientType === 'privy-embedded' ||
+      active.connectorType === 'privy'
+    )
+      return 'embedded';
     return 'external';
   }
+  // Privy connector names/ids vary across versions ('io.privy.wallet',
+  // 'privy', 'Privy'). If the active wagmi connector looks like Privy — or
+  // Privy reports authenticated and wagmi has no external wallet — treat as
+  // embedded so silent chain-switching works instead of the banner path.
+  if (connectorName && connectorName.toLowerCase().includes('privy')) return 'embedded';
+  if (privyAuthenticated && (isConnected || address)) return 'embedded';
   if (isConnected || address) return 'external';
   return null;
 }
 
 export function SessionProviderPrivy({ children }: { children: React.ReactNode }) {
-  const { address, chainId, isConnected } = useAccount();
+  const { address, chainId, isConnected, connector } = useAccount();
   const { connectAsync, connectors, isPending: connectPending } = useConnect();
   const { ready, authenticated, user } = usePrivy();
   const { wallets } = useWallets() as { wallets: WalletLike[] };
@@ -78,8 +92,11 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
   const privyAddress = embeddedWallet?.address ?? (user?.wallet?.address as string | undefined) ?? null;
   const attemptedRef = useRef<string | null>(null);
 
-  // Auto-bridge: Privy authenticated but wagmi not connected yet. Attempts once
-  // per address; silent failure falls back to explicit connect CTAs.
+  // Auto-bridge: Privy authenticated but wagmi not connected yet.
+  // Retries as the connector list populates — the Privy connector only appears
+  // after Privy initialises, so a "seen" key must NOT be recorded when the
+  // connector is still missing (otherwise the bridge never retries and the UI
+  // keeps asking logged-in users to sign in).
   useEffect(() => {
     if (!ready || !authenticated) return;
     if (isConnected || connectPending) return;
@@ -92,11 +109,15 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
       connectors.find((c) => c.id === 'io.privy.wallet' || c.id === 'privy' || c.id === 'privy-wallet') ||
       connectors.find((c) => c.name?.toLowerCase().includes('privy'));
 
-    attemptedRef.current = key;
+    // Connector list not populated yet — retry on the next connectors change.
     if (!privyConnector) return;
 
+    attemptedRef.current = key;
+
     connectAsync({ connector: privyConnector }).catch(() => {
-      // Silent — the UI falls back to an explicit connect CTA.
+      // Allow one retry per address on genuine failure: the connector list may
+      // have rotated. Silent — the UI falls back to an explicit connect CTA.
+      attemptedRef.current = null;
     });
   }, [ready, authenticated, privyAddress, isConnected, connectPending, connectors, connectAsync]);
 
@@ -105,12 +126,18 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
       ready,
       isAuthenticated: authenticated || isConnected || !!address || !!privyAddress,
       address: address ?? privyAddress ?? null,
-      walletType: resolveWalletType(wallets, address ?? privyAddress ?? null, isConnected),
+      walletType: resolveWalletType(
+        wallets,
+        address ?? privyAddress ?? null,
+        isConnected,
+        connector?.name ?? connector?.id,
+        authenticated,
+      ),
       chainId: chainId ?? (embeddedWallet?.chainId ? Number(embeddedWallet.chainId) : null),
       isConnected: isConnected || !!address || !!privyAddress,
       switchChain: embeddedWallet?.switchChain,
     }),
-    [ready, authenticated, address, privyAddress, wallets, embeddedWallet, isConnected, chainId],
+    [ready, authenticated, address, privyAddress, wallets, embeddedWallet, isConnected, chainId, connector],
   );
 
   return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
