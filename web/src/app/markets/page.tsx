@@ -15,17 +15,19 @@ import { MarketCard } from "@/components/MarketCard";
 import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 import { PlatformStatsDashboard } from "@/components/PlatformStatsDashboard";
 import { cn } from "@/lib/utils";
-import { assetSearchHaystack } from "@/lib/assetIdentity";
+import { assetSearchHaystack, ASSET_CATEGORY_LABELS } from "@/lib/assetIdentity";
 
-const CATEGORY_TABS = [
-  "All Markets",
-  "RWA",
-  "Tokenized Equities",
-  "Tokens",
-  "NFT",
-] as const;
+// Tab values are canonical AssetCategory values (compared against identity.category).
+// Labels are display-only — 'Tokenized Equities' renders as 'Tokenized Stocks'.
+type Category = "All Markets" | "RWA" | "Tokenized Equities" | "Tokens" | "NFT";
 
-type Category = (typeof CATEGORY_TABS)[number];
+const CATEGORY_TABS: Array<{ value: Category; label: string }> = [
+  { value: "All Markets", label: "All Markets" },
+  { value: "RWA", label: "RWA" },
+  { value: "Tokenized Equities", label: ASSET_CATEGORY_LABELS["Tokenized Equities"] },
+  { value: "Tokens", label: "Tokens" },
+  { value: "NFT", label: "NFT" },
+];
 type SortBy = "liquidity" | "apr-asc" | "apr-desc" | "ltv-desc";
 type Popover = "sort" | "filters" | null;
 type FilterKey =
@@ -527,17 +529,17 @@ export default function MarketsPage() {
             <div className="flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
               {CATEGORY_TABS.map((tab) => (
                 <button
-                  key={tab}
+                  key={tab.value}
                   type="button"
-                  onClick={() => dispatch({ type: "SET_CATEGORY", value: tab })}
+                  onClick={() => dispatch({ type: "SET_CATEGORY", value: tab.value })}
                   className={cn(
                     "shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium leading-none transition-colors",
-                    category === tab
+                    category === tab.value
                       ? "bg-foreground text-background"
                       : "border border-border bg-card text-muted-foreground hover:border-foreground/15 hover:text-foreground",
                   )}
                 >
-                  {tab}
+                  {tab.label}
                 </button>
               ))}
             </div>

@@ -1,0 +1,602 @@
+/* ============================================================
+   OpenAsset landing — "The Stock Certificate" world
+   Direction contract (seed da303c2a, user-pinned fusion):
+   THESIS: the engraved certificate — the most considered surface
+   in finance — carries OpenAsset's promise; the creation flow is
+   an assembled machine inside it. Refuses the dark-neon DeFi
+   template and the plain-SaaS opposite.
+   OWN-WORLD: warm paper #F6F3EC, engraved ink #14251D, hairline
+   rules, engraved-blue accent #1D82D1, guilloché line-work as the
+   background plate, Instrument Serif display, plucked-string
+   physics + spring-assembled market cell.
+   STORY: visitor understands the 95% problem, watches a market
+   assemble from adapters, reads the trust legend, and leaves with
+   the question "what market can I create?"
+   FIRST VIEWPORT: certificate cartouche on paper; guilloché field
+   behind; headline "Any asset. Its own market. Your terms."; a
+   mini certificate-face specimen anchored lower right; primary
+   action "Create a market" below the sub, fee/trust microline
+   beneath on a hairline.
+   FORM: fusion of Stock Certificate world + Machine assembly;
+   seed key da303c2a (user-pinned fusion beats the roll).
+   FINISH: unreviewed and undocumented is unfinished; this build
+   ends with the finish review, the verdict, DESIGN.md, and every
+   shipping raster carrying its provenance.
+   ============================================================ */
+
+/* ---- World tokens (committed paper scene; theme-independent) ---- */
+.cert-page {
+  --oa-paper: #F6F3EC;
+  --oa-paper-deep: #EFEAE0;
+  --oa-paper-card: #FBF9F4;
+  --oa-ink: #14251D;
+  --oa-ink-soft: rgba(20, 37, 29, 0.64);
+  --oa-ink-faint: rgba(20, 37, 29, 0.56);
+  --oa-rule: rgba(20, 37, 29, 0.16);
+  --oa-rule-strong: rgba(20, 37, 29, 0.38);
+  --oa-accent: #1D82D1;
+  --oa-accent-ink: #13619F;
+  --oa-accent-soft: rgba(29, 130, 209, 0.12);
+  --oa-live: #0F7B4F;
+
+  background-color: var(--oa-paper);
+  color: var(--oa-ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cert-page ::selection {
+  background: rgba(29, 130, 209, 0.22);
+  color: var(--oa-ink);
+}
+
+/* Browser surfaces carry the world */
+.cert-page a:focus-visible,
+.cert-page button:focus-visible,
+.cert-page summary:focus-visible {
+  outline: 2px solid var(--oa-accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ---- Shared type voices ---- */
+/* Mono is reserved for measurement and system readouts only:
+   fees, LTV/APR figures, schematic annotations, machine status.
+   Descriptive labels and captions use .cert-cap / .cert-fine. */
+.cert-micro {
+  color: var(--oa-ink-soft);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.cert-display {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 400;
+  color: var(--oa-ink);
+  text-wrap: balance;
+}
+
+/* Engraved-document caps for descriptive labels: letterspaced caps in the
+   UI sans — the certificate voice without spending the mono budget. */
+.cert-cap {
+  color: var(--oa-ink-soft);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.cert-cap-strong {
+  color: var(--oa-ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small legal/meta body copy */
+.cert-fine {
+  color: var(--oa-ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cert-body {
+  color: var(--oa-ink-soft);
+  font-size: 1rem;
+  line-height: 1.65;
+  max-width: 62ch;
+}
+
+/* ---- Actions ---- */
+.cert-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 999px;
+  background: var(--oa-ink);
+  color: var(--oa-paper);
+  padding: 0.8rem 1.4rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 14px 30px -16px rgba(20, 37, 29, 0.55);
+  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 240ms ease, background-color 240ms ease;
+}
+
+.cert-button:hover {
+  background: #1C3328;
+  box-shadow: 0 18px 36px -16px rgba(20, 37, 29, 0.6);
+  transform: translateY(-2px);
+}
+
+.cert-button:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 20px -12px rgba(20, 37, 29, 0.6);
+}
+
+.cert-button-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--oa-rule-strong);
+  color: var(--oa-ink);
+  padding: 0.78rem 1.35rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: border-color 220ms ease, background-color 220ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cert-button-ghost:hover {
+  background: var(--oa-paper-card);
+  border-color: var(--oa-ink);
+  transform: translateY(-2px);
+}
+
+.cert-textlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--oa-accent-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(19, 97, 159, 0.35);
+  padding-bottom: 0.15rem;
+  transition: border-color 200ms ease, color 200ms ease;
+}
+
+.cert-textlink:hover {
+  border-color: var(--oa-accent-ink);
+  color: var(--oa-accent);
+}
+
+/* ---- Certificate frame (cartouche) ---- */
+.cert-frame {
+  position: relative;
+  border: 1px solid var(--oa-rule-strong);
+}
+
+.cert-frame::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px solid var(--oa-rule);
+  pointer-events: none;
+}
+
+.cert-frame-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--oa-rule-strong);
+  border-style: solid;
+  border-width: 0;
+}
+
+.cert-frame-corner.tl { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+.cert-frame-corner.tr { top: -1px; right: -1px; border-top-width: 2px; border-right-width: 2px; }
+.cert-frame-corner.bl { bottom: -1px; left: -1px; border-bottom-width: 2px; border-left-width: 2px; }
+.cert-frame-corner.br { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+
+/* ---- Nav ---- */
+.cert-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--oa-paper) 94%, transparent);
+  backdrop-filter: blur(14px) saturate(115%);
+  -webkit-backdrop-filter: blur(14px) saturate(115%);
+  border-bottom: 1px solid var(--oa-rule);
+}
+
+.cert-nav-link {
+  color: var(--oa-ink-soft);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: color 180ms ease;
+}
+
+.cert-nav-link:hover {
+  color: var(--oa-ink);
+}
+
+/* ---- Sections ---- */
+.cert-section {
+  position: relative;
+}
+
+.cert-hairline {
+  height: 1px;
+  background: var(--oa-rule);
+}
+
+/* ---- Ledger (problem section) ---- */
+.cert-ledger-head {
+  color: var(--oa-ink-faint);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.cert-ledger-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem 2rem;
+  padding: 1.15rem 0;
+  border-top: 1px solid var(--oa-rule);
+}
+
+@media (min-width: 768px) {
+  .cert-ledger-row {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
+
+.cert-ledger-key {
+  color: var(--oa-ink-faint);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cert-ledger-old {
+  color: var(--oa-ink-faint);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.cert-ledger-new {
+  color: var(--oa-ink);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* ---- Assembly (how it works) ---- */
+.cert-cell {
+  position: relative;
+  border: 1px solid var(--oa-rule-strong);
+  background: var(--oa-paper-card);
+}
+
+.cert-cell::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px dashed var(--oa-rule);
+  pointer-events: none;
+}
+
+.cert-slot {
+  position: absolute;
+  border: 1px dashed var(--oa-rule);
+}
+
+.cert-part {
+  position: absolute;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--oa-rule-strong);
+  background: var(--oa-paper);
+  padding: 0.5rem 0.7rem;
+  box-shadow: 0 10px 22px -14px rgba(20, 37, 29, 0.5);
+  will-change: transform, opacity;
+}
+
+.cert-part-label {
+  color: var(--oa-ink);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.cert-part-hint {
+  color: var(--oa-ink-soft);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+@media (min-width: 768px) {
+  .cert-part-label,
+  .cert-part-hint {
+    white-space: nowrap;
+  }
+}
+
+.cert-stamp {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 2px solid var(--oa-live);
+  border-radius: 6px;
+  color: var(--oa-live);
+  padding: 0.55rem 0.9rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transform: rotate(-8deg);
+  box-shadow: 0 12px 26px -16px rgba(15, 123, 79, 0.55);
+  background: color-mix(in srgb, var(--oa-paper) 86%, transparent);
+}
+
+.cert-step {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 0.9rem;
+  padding: 1.05rem 0;
+  border-top: 1px solid var(--oa-rule);
+  scroll-margin-top: 6rem;
+}
+
+.cert-step-num {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding-top: 0.2rem;
+  color: var(--oa-ink-faint);
+  transition: color 300ms ease;
+}
+
+.cert-step[data-active="true"] .cert-step-num {
+  color: var(--oa-accent-ink);
+}
+
+.cert-step-title {
+  color: var(--oa-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  transition: color 300ms ease;
+}
+
+.cert-step[data-active="false"] .cert-step-title {
+  color: var(--oa-ink-faint);
+}
+
+.cert-step-copy {
+  margin-top: 0.3rem;
+  color: var(--oa-ink-soft);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  max-width: 54ch;
+}
+
+/* ---- Spec sheet (adapters) ---- */
+.cert-sheet-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.3rem 1.5rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--oa-rule);
+}
+
+@media (min-width: 768px) {
+  .cert-sheet-row {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) auto;
+    align-items: center;
+  }
+}
+
+.cert-hallmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--oa-accent-ink);
+  color: var(--oa-accent-ink);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
+}
+
+.cert-hallmark-unverified {
+  border-color: var(--oa-rule-strong);
+  border-style: dashed;
+  color: var(--oa-ink-soft);
+}
+
+/* ---- Specimens (what markets exist) ---- */
+.cert-specimen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--oa-rule-strong);
+  background: var(--oa-paper-card);
+  padding: 1.4rem 1.5rem 1.5rem;
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease, border-color 260ms ease;
+}
+
+.cert-specimen:hover {
+  transform: translateY(-3px);
+  border-color: var(--oa-ink);
+  box-shadow: 0 22px 44px -30px rgba(20, 37, 29, 0.55);
+}
+
+.cert-specimen-tag {
+  color: var(--oa-ink-faint);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cert-specimen-detail {
+  color: var(--oa-ink-soft);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Trust legend ---- */
+.cert-trust-row {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr;
+  gap: 1rem;
+  padding: 1.35rem 0;
+  border-top: 1px solid var(--oa-rule);
+}
+
+.cert-trust-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--oa-rule);
+  color: var(--oa-ink);
+}
+
+/* ---- FAQ (prospectus) ---- */
+.cert-faq {
+  border-top: 1px solid var(--oa-rule);
+}
+
+.cert-faq summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.35rem 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cert-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.cert-faq-q {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.3rem;
+  line-height: 1.3;
+  color: var(--oa-ink);
+  transition: color 200ms ease;
+}
+
+.cert-faq summary:hover .cert-faq-q {
+  color: var(--oa-accent-ink);
+}
+
+.cert-faq-mark {
+  position: relative;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 0.3rem;
+}
+
+.cert-faq-mark::before,
+.cert-faq-mark::after {
+  content: "";
+  position: absolute;
+  background: var(--oa-rule-strong);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), background-color 220ms ease;
+}
+
+.cert-faq-mark::before {
+  left: 0;
+  top: 6px;
+  width: 14px;
+  height: 1.5px;
+}
+
+.cert-faq-mark::after {
+  left: 6px;
+  top: 0;
+  width: 1.5px;
+  height: 14px;
+}
+
+.cert-faq[open] .cert-faq-mark::after {
+  transform: scaleY(0);
+}
+
+.cert-faq[open] .cert-faq-mark::before,
+.cert-faq[open] .cert-faq-mark::after {
+  background: var(--oa-accent-ink);
+}
+
+.cert-faq-a {
+  padding: 0 0 1.5rem;
+  color: var(--oa-ink-soft);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+
+/* ---- Footer ---- */
+.cert-footer-link {
+  color: var(--oa-ink-soft);
+  font-size: 0.8125rem;
+  transition: color 180ms ease;
+}
+
+.cert-footer-link:hover {
+  color: var(--oa-ink);
+}
+/* ---- Short viewports: keep the pinned assembly inside the frame ---- */
+@media (max-height: 840px) {
+  .cert-step {
+    padding: 0.72rem 0;
+  }
+
+  .cert-step-copy {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+}
+
+/* ---- Motion discipline ---- */
+@media (prefers-reduced-motion: reduce) {  .cert-button:hover,
+  .cert-button-ghost:hover,
+  .cert-specimen:hover {
+    transform: none;
+  }
+}

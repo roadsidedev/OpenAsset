@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchJson } from '@/lib/apiClient';
 import { useMarkets } from '@/hooks/useMarkets';
-import { resolveAssetIdentity } from '@/lib/assetIdentity';
+import { resolveAssetIdentity, ASSET_CATEGORY_LABELS } from '@/lib/assetIdentity';
 
 export interface AssetDistribution {
   label: string;
@@ -103,11 +103,13 @@ export const usePlatformStats = () => {
     }
 
     const totalMarketCount = Math.max(totalActiveMarkets, 1);
+    // Display labels come from ASSET_CATEGORY_LABELS; count keys below stay the
+    // canonical category values for backward compatibility with stored data.
     const assetDistribution: AssetDistribution[] = [
       { label: 'ERC20 Tokens', count: catCounts.Tokens, color: COLORS[0] },
       { label: 'NFT (ERC721)', count: catCounts.NFT, color: COLORS[1] },
       { label: 'RWA', count: catCounts.RWA, color: COLORS[2] },
-      { label: 'Tokenized Equities', count: catCounts['Tokenized Equities'], color: COLORS[3] },
+      { label: ASSET_CATEGORY_LABELS['Tokenized Equities'], count: catCounts['Tokenized Equities'], color: COLORS[3] },
     ];
 
     const assetCategories: AssetCategory[] = [
@@ -137,7 +139,7 @@ export const usePlatformStats = () => {
       },
       {
         id: 'equities',
-        name: 'Tokenized Equities',
+        name: ASSET_CATEGORY_LABELS['Tokenized Equities'],
         count: catCounts['Tokenized Equities'],
         value: catCounts['Tokenized Equities'],
         percentage: Math.round((catCounts['Tokenized Equities'] / totalMarketCount) * 1000) / 10,

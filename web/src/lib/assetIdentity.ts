@@ -15,6 +15,19 @@ import type { Market } from '@/hooks/useMarkets';
 
 export type AssetCategory = 'RWA' | 'Tokenized Equities' | 'Tokens' | 'NFT';
 
+/**
+ * User-facing category labels. Canonical AssetCategory values are storage and
+ * comparison keys (DB counts, adapter mapping, filter state) and must stay
+ * stable for backward compatibility — only the display label renames.
+ * 'Tokenized Equities' renders as 'Tokenized Stocks' everywhere in the UI.
+ */
+export const ASSET_CATEGORY_LABELS: Record<AssetCategory, string> = {
+  RWA: 'RWA',
+  'Tokenized Equities': 'Tokenized Stocks',
+  Tokens: 'Tokens',
+  NFT: 'NFT',
+};
+
 export interface AssetIdentity {
   /** Raw symbol from token (e.g. NVDAc, USDC, PEPE) */
   symbol: string;
@@ -114,7 +127,7 @@ export function resolveAssetIdentity(params: {
   // Special case: B20 adapter returns Tokenized Equities; if market has B20 collateral but adapter not yet mapped (old DB), still honor
   const finalCategory: AssetCategory = isB20 && category === 'Tokens' ? 'Tokenized Equities' : category;
 
-  const categoryLabel = finalCategory;
+  const categoryLabel = ASSET_CATEGORY_LABELS[finalCategory] ?? finalCategory;
 
   return {
     symbol,
@@ -140,6 +153,7 @@ export function assetSearchHaystack(identity: AssetIdentity, market: Market): st
     identity.issuer || '',
     identity.address,
     identity.category,
+    identity.categoryLabel,
     identity.loanAssetSymbol || '',
     market.marketAddress,
     market.loanAsset || '',
