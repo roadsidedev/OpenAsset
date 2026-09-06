@@ -57,13 +57,13 @@ function CandidateImage({ src, symbol, className, onError }: { src: string; symb
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   return (
-    <span className="relative inline-flex shrink-0">
-      {(!loaded || failed) && <GenericTokenIcon symbol={symbol} className={className} />}
+    <span className={cn('relative inline-flex shrink-0', className)}>
+      {(!loaded || failed) && <GenericTokenIcon symbol={symbol} className="absolute inset-0 m-auto" />}
       {!failed && (
         <img
           src={src}
           alt={`${symbol} logo`}
-          className={cn('absolute inset-0 rounded-full object-contain bg-white p-0.5 shadow-sm transition-opacity duration-200', className, loaded ? 'opacity-100' : 'opacity-0')}
+          className={cn('absolute inset-0 m-auto rounded-full bg-white p-0.5 shadow-sm transition-opacity duration-200 object-contain', loaded ? 'opacity-100' : 'opacity-0')}
           onLoad={() => setLoaded(true)}
           onError={() => { setFailed(true); onError(); }}
           loading="lazy"
