@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { usePublicClient, useWalletClient, useChainId, useSwitchChain, useConfig } from 'wagmi';
+import { usePublicClient, useWalletClient, useChainId, useConfig } from 'wagmi';
 import { getPublicClient } from '@wagmi/core';
 import { parseAbi, type Address, type Hex } from 'viem';
 import { MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
@@ -32,9 +32,7 @@ export const useContractInteraction = () => {
   const fallbackClient = usePublicClient();
   const currentChainId = useChainId();
   const config = useConfig();
-  const { switchChainAsync } = useSwitchChain();
-  const { walletType } = useSession();
-  const isPrivyEmbedded = walletType === 'embedded';
+  const { switchChain: switchEmbeddedChain } = useSession();
 
   const clientForChain = useCallback(
     (targetChainId: number | undefined | null) => {
@@ -53,9 +51,9 @@ export const useContractInteraction = () => {
       if (!targetChainId || !walletClient) return;
       const current = currentChainId ?? walletClient.chain?.id ?? null;
       if (current === targetChainId) return;
-      if (isPrivyEmbedded) {
+      if (switchEmbeddedChain) {
         try {
-          await switchChainAsync({ chainId: targetChainId });
+          await switchEmbeddedChain(targetChainId);
           return;
         } catch {
           // fall through to typed error
@@ -63,7 +61,7 @@ export const useContractInteraction = () => {
       }
       throw new ChainGuardError(targetChainId, current);
     },
-    [walletClient, currentChainId, isPrivyEmbedded, switchChainAsync],
+    [walletClient, currentChainId, switchEmbeddedChain],
   );
 
   const clearError = useCallback(() => setError(null), []);

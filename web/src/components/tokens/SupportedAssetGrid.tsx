@@ -109,7 +109,7 @@ export function SupportedAssetGrid({
           id="supported-asset-list"
           role="listbox"
           aria-label="Supported assets"
-          className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[42vh] overflow-y-auto pr-1"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-h-[42vh] overflow-y-auto overscroll-contain pr-1"
         >
           {filtered.map(asset => {
             const isSelected = selectedAddress?.toLowerCase() === asset.address.toLowerCase();
@@ -120,7 +120,7 @@ export function SupportedAssetGrid({
                 aria-selected={isSelected}
                 onClick={() => onSelect(asset)}
                 className={cn(
-                  'group relative flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all hover-lift focus:outline-none focus:ring-2 focus:ring-ice-400',
+                  'group relative flex min-w-0 flex-col items-start gap-2 rounded-2xl border p-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-ice-400 sm:p-4',
                   isSelected
                     ? 'border-ice-400 bg-ice-50 dark:bg-ice-500/10 ring-2 ring-ice-400/30 dark:ring-ice-400/20'
                     : 'bg-card dark:bg-card hover:border-ice-300/50 dark:hover:border-ice-400/30 hover:bg-accent/50'

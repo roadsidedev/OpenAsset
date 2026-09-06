@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useCallback, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
@@ -65,95 +63,15 @@ export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, cla
   const loanSym = loanAssetSymbol || (market.loanAsset ? shortAddr(market.loanAsset).toUpperCase() : "—");
   const collateralShort = market.collateralAsset ? shortAddr(market.collateralAsset) : shortAddr(market.marketAddress);
 
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewPos, setPreviewPos] = useState<{ x: number; y: number } | null>(null);
-  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cardRef = useRef<HTMLAnchorElement | null>(null);
-  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
-
-  const cleanupTimers = useCallback(() => {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    hoverTimer.current = null;
-    longPressTimer.current = null;
-  }, []);
-
-  useEffect(() => {
-    return () => cleanupTimers();
-  }, [cleanupTimers]);
-
-  const openPreview = useCallback((x: number, y: number) => {
-    cleanupTimers();
-    setPreviewPos({ x, y });
-    setPreviewOpen(true);
-  }, [cleanupTimers]);
-
-  const closePreview = useCallback(() => {
-    cleanupTimers();
-    setPreviewOpen(false);
-    setPreviewPos(null);
-  }, [cleanupTimers]);
-
-  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = rect.right + 12;
-    const y = Math.max(8, Math.min(window.innerHeight - 320, rect.top));
-    hoverTimer.current = setTimeout(() => openPreview(x, y), 200);
-  }, [openPreview]);
-
-  const handleMouseLeave = useCallback(() => {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = null;
-    closePreview();
-  }, [closePreview]);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLAnchorElement>) => {
-    const touch = e.touches?.[0];
-    if (!touch) return;
-    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
-    longPressTimer.current = setTimeout(() => {
-      const x = Math.min(touch.clientX + 16, window.innerWidth - 300);
-      const y = Math.max(8, Math.min(window.innerHeight - 360, touch.clientY - 180));
-      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
-      openPreview(x, y);
-    }, 300);
-  }, [openPreview]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLAnchorElement>) => {
-    const touch = e.touches?.[0];
-    if (!touch || !touchStartPos.current) return;
-    const dx = Math.abs(touch.clientX - touchStartPos.current.x);
-    const dy = Math.abs(touch.clientY - touchStartPos.current.y);
-    if (dx > 10 || dy > 10) {
-      if (longPressTimer.current) clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    longPressTimer.current = null;
-    touchStartPos.current = null;
-    if (previewOpen) closePreview();
-  }, [previewOpen, closePreview]);
-
   return (
     <Link
       href={`/markets/${market.marketAddress}`}
-      ref={cardRef}
       className={cn(
         "group relative flex h-full flex-col justify-between rounded-2xl border border-border/70 bg-card p-5 select-none",
         "transition-colors hover:border-border hover:bg-card",
-        "hover-lift",
         isB20 ? "border-ice-200 dark:border-ice-500/20" : "",
         className
       )}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
     >
       <div className="space-y-3.5">
         <div className="flex items-start justify-between gap-3">
@@ -272,57 +190,6 @@ export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, cla
         </span>
       </div>
 
-      <AnimatePresence>
-        {previewOpen && previewPos && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 8 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="fixed z-50 w-80 max-w-[calc(100vw-24px)] touch-none select-none rounded-xl border border-neutral-800 bg-neutral-900/90 p-4 shadow-2xl backdrop-blur-md"
-            style={{ left: previewPos.x, top: previewPos.y }}
-            onMouseEnter={() => {
-              if (hoverTimer.current) clearTimeout(hoverTimer.current);
-              hoverTimer.current = null;
-            }}
-            onMouseLeave={closePreview}
-          >
-            <div className="flex items-center gap-3">
-              <TokenIcon symbol={displaySymbol} logoUri={logoUri} className="h-10 w-10" />
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-neutral-100">{displayName}</div>
-                <div className="text-xs text-neutral-400">{displaySymbol} · {categoryLabel}</div>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2 text-xs text-neutral-300">
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Liquidity</span>
-                <span className="tabular-nums text-neutral-100">{formatLiquidity(market.liquidity.total)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Borrow APR</span>
-                <span className="tabular-nums text-neutral-100">{formatApr(market.aprBps)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Max LTV</span>
-                <span className="tabular-nums text-neutral-100">{formatLtv(market.ltvBps)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Oracle</span>
-                <span className="tabular-nums text-neutral-100">{oracleLabel || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Pool</span>
-                <span className="font-mono text-neutral-100">{shortAddr(market.marketAddress)}</span>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-800/60 p-2.5 text-xs">
-              <span className="text-neutral-300">Risk</span>
-              <span className="text-neutral-100">{formatLtv(market.ltvBps)} LTV</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </Link>
   );
 }

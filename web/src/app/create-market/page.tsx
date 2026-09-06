@@ -328,8 +328,8 @@ export default function CreateMarketPage() {
   const progress = (step / 8) * 100;
 
   return (
-    <div className="min-h-dvh">
-      <main className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-8 space-y-6 md:space-y-8">
+    <div className="min-h-dvh overflow-x-hidden">
+      <main className="mx-auto min-w-0 max-w-2xl px-3 py-4 sm:px-4 sm:py-6 md:px-8 md:py-8 space-y-5 sm:space-y-6 md:space-y-8">
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
@@ -375,12 +375,12 @@ export default function CreateMarketPage() {
 
         {/* Step Indicator */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {STEP_ICONS.map((s) => (
               <div
                 key={s}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all",
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all",
                   s < step
                     ? "bg-ice-300 dark:bg-ice-400 text-slate-900"
                     : s === step
@@ -404,7 +404,7 @@ export default function CreateMarketPage() {
         </div>
 
         {/* Step Content Card */}
-        <div className="rounded-3xl border border-border bg-card p-5 md:p-8 space-y-6 shadow-soft">
+        <div className="min-w-0 rounded-3xl border border-border bg-card p-4 sm:p-5 md:p-8 space-y-5 sm:space-y-6 shadow-soft">
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-foreground">Collateral Asset</h2>

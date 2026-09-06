@@ -33,6 +33,8 @@ export interface SessionState {
   chainId: number | null;
   /** wagmi-level connection state. */
   isConnected: boolean;
+  /** Native Privy embedded-wallet chain switch, when available. */
+  switchChain?: (chainId: number) => Promise<unknown>;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -41,6 +43,8 @@ interface WalletLike {
   address?: string;
   walletClientType?: string;
   connectorType?: string;
+  chainId?: number | string;
+  switchChain?: (chainId: number) => Promise<unknown>;
 }
 
 function resolveWalletType(
@@ -66,7 +70,12 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
   const { ready, authenticated, user } = usePrivy();
   const { wallets } = useWallets() as { wallets: WalletLike[] };
 
-  const privyAddress = (user?.wallet?.address as string | undefined) ?? null;
+  // Social logins can expose the embedded wallet through useWallets() before
+  // Privy's legacy user.wallet field is populated.
+  const embeddedWallet = wallets.find(
+    (wallet) => wallet.walletClientType === 'privy' || wallet.connectorType === 'embedded',
+  );
+  const privyAddress = embeddedWallet?.address ?? (user?.wallet?.address as string | undefined) ?? null;
   const attemptedRef = useRef<string | null>(null);
 
   // Auto-bridge: Privy authenticated but wagmi not connected yet. Attempts once
@@ -80,7 +89,7 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
     if (attemptedRef.current === key) return;
 
     const privyConnector =
-      connectors.find((c) => c.id === 'io.privy.wallet' || c.id === 'privy') ||
+      connectors.find((c) => c.id === 'io.privy.wallet' || c.id === 'privy' || c.id === 'privy-wallet') ||
       connectors.find((c) => c.name?.toLowerCase().includes('privy'));
 
     attemptedRef.current = key;
@@ -97,10 +106,11 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
       isAuthenticated: authenticated || isConnected || !!address || !!privyAddress,
       address: address ?? privyAddress ?? null,
       walletType: resolveWalletType(wallets, address ?? privyAddress ?? null, isConnected),
-      chainId: chainId ?? null,
+      chainId: chainId ?? (embeddedWallet?.chainId ? Number(embeddedWallet.chainId) : null),
       isConnected: isConnected || !!address || !!privyAddress,
+      switchChain: embeddedWallet?.switchChain,
     }),
-    [ready, authenticated, address, privyAddress, wallets, isConnected, chainId],
+    [ready, authenticated, address, privyAddress, wallets, embeddedWallet, isConnected, chainId],
   );
 
   return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
@@ -136,5 +146,6 @@ export function useSession(): SessionState {
     walletType: null,
     chainId: null,
     isConnected: false,
+    switchChain: undefined,
   };
 }

@@ -133,7 +133,7 @@ export default function AdaptersPage() {
           {filtered.map((adapter) => (
             <div
               key={adapter.adapterAddress}
-              className="group rounded-2xl border border-border bg-card p-5 transition-all hover:border-ice-300/30 hover-lift"
+              className="group rounded-2xl border border-border bg-card p-5 transition-colors hover:border-ice-300/30"
             >
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">

@@ -72,7 +72,7 @@ function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
       onClick={() => !unavailable && onSelect(asset)}
       disabled={unavailable}
       className={cn(
-        'w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all',
+        'w-full min-w-0 flex items-center gap-3 p-3 rounded-2xl border text-left transition-colors',
         selected
           ? 'border-ice-400 bg-ice-50 dark:bg-ice-500/10 ring-2 ring-ice-400/30'
           : 'border-border bg-card hover:border-ice-300/50 hover:bg-accent/50 dark:hover:bg-muted/40',
@@ -91,7 +91,7 @@ function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
         </div>
         <div className="text-xs text-muted-foreground truncate">{asset.name}</div>
       </div>
-      <div className="shrink-0 text-right min-w-0">
+      <div className="shrink-0 max-w-[42%] text-right min-w-0">
         <span
           className={cn(
             'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-medium max-w-full',
@@ -197,7 +197,7 @@ export function AssetSearchPicker({
 
   const content = (
     <div className="flex flex-col h-full min-h-0">
-      <div className="shrink-0 p-5 pb-3 space-y-3">
+      <div className="shrink-0 p-4 pb-3 space-y-3 sm:p-5 sm:pb-3">
         <div>
           <h2 className="text-lg font-bold text-foreground">{title}</h2>
           <p className="text-xs text-muted-foreground mt-1">
@@ -217,7 +217,7 @@ export function AssetSearchPicker({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-0">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-3 sm:px-5">
         <AssetSearchResults
           assets={results}
           selectedAddress={selectedAddress}
@@ -229,7 +229,7 @@ export function AssetSearchPicker({
       </div>
 
       {onManualChange && (
-        <div className="shrink-0 px-5 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
+        <div className="shrink-0 px-4 py-3 border-t border-border bg-muted/30 dark:bg-muted/20 sm:px-5">
           <button
             type="button"
             onClick={() => setShowManual(!showManual)}
@@ -251,7 +251,7 @@ export function AssetSearchPicker({
         </div>
       )}
 
-      <div className="shrink-0 flex flex-col gap-3 p-5 pt-3 border-t border-border bg-card">
+      <div className="shrink-0 flex flex-col gap-3 p-4 pt-3 border-t border-border bg-card sm:p-5 sm:pt-3">
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Info className="h-3.5 w-3.5 shrink-0" />
           Selecting an asset on another network switches you automatically (embedded wallets) or with one click.
@@ -266,7 +266,7 @@ export function AssetSearchPicker({
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[92dvh] rounded-t-3xl p-0 flex flex-col border-t border-border">
+        <SheetContent side="bottom" className="h-[min(92dvh,760px)] max-h-[calc(100dvh-1rem)] rounded-t-3xl p-0 flex flex-col gap-0 overflow-hidden border-t border-border">
           <SheetHeader className="sr-only">
             <SheetTitle>{title}</SheetTitle>
             <SheetDescription>Search collateral assets across all networks</SheetDescription>

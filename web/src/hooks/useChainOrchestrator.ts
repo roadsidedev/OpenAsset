@@ -40,7 +40,7 @@ export type EnsureChainResult =
 export function useChainOrchestrator() {
   const { chainId: walletChainId } = useAccount();
   const currentChainId = useChainId();
-  const { walletType } = useSession();
+  const { walletType, switchChain: switchEmbeddedChain } = useSession();
   const { switchChainAsync } = useSwitchChain();
   const { request: requestBanner, clear: clearBanner } = useChainSwitchStore();
 
@@ -56,9 +56,15 @@ export function useChainOrchestrator() {
       }
 
       if (walletType === 'embedded') {
-        // Privy embedded wallets switch silently — no popup, no user action.
+        // Privy's embedded wallet owns the provider. Calling wagmi's generic
+        // switcher alone can leave the Privy provider on the old chain and the
+        // UI stuck on the same switch prompt, so use its native method first.
         try {
-          await switchChainAsync({ chainId: targetChainId });
+          if (switchEmbeddedChain) {
+            await switchEmbeddedChain(targetChainId);
+          } else {
+            await switchChainAsync({ chainId: targetChainId });
+          }
           clearBanner();
           return { ok: true };
         } catch {
@@ -71,7 +77,7 @@ export function useChainOrchestrator() {
       requestBanner(targetChainId, reason);
       return { ok: false, needsUser: true, targetChainId, reason };
     },
-    [activeChainId, walletType, switchChainAsync, requestBanner, clearBanner],
+    [activeChainId, walletType, switchEmbeddedChain, switchChainAsync, requestBanner, clearBanner],
   );
 
   /** Fire-and-forget nudge used on page mount / selection (never throws). */
