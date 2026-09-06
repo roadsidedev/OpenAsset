@@ -60,6 +60,7 @@ export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, cla
   const category = id?.category || "Tokens";
   const isB20 = !!id?.isB20;
   const hoursOpen = isB20 ? isWithinB20TradingWindow() : true;
+  const showCategoryPill = true;
 
   const loanSym = loanAssetSymbol || (market.loanAsset ? shortAddr(market.loanAsset).toUpperCase() : "—");
   const collateralShort = market.collateralAsset ? shortAddr(market.collateralAsset) : shortAddr(market.marketAddress);
