@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { SquaresFour, Briefcase, Plus, List, Sun, Moon, User, SignOut } from "@phosphor-icons/react";
+import { usePathname, useRouter } from "next/navigation";import { SquaresFour, Briefcase, Plus, List, Sun, Moon, User, SignOut } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { useDisconnect } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
@@ -10,12 +12,13 @@ import { useAuthApi } from "@/hooks/useAuthApi";
 import { useTheme } from "@/components/ThemeProvider";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
 import { UserAvatar } from "@/components/UserAvatar";
-import { useUserIdentity } from "@/hooks/useUserIdentity";
+import { useUserIdentity, type UserIdentity } from "@/hooks/useUserIdentity";
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { login, logout: privyLogout, authenticated, ready: privyReady } = usePrivy();
   const {
     logout: backendLogout,
@@ -23,37 +26,33 @@ export function Navbar() {
   } = useAuthApi();
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement | null>(null);
   const identity = useUserIdentity();
+  const { disconnect } = useDisconnect();
+  const queryClient = useQueryClient();
 
   // When Privy is not configured, privyReady is undefined — treat as ready
   // so the sign-in button is still functional via the fallback auth gate
   const isReady = privyReady !== false && !authLoading;
 
-  // Close the profile menu on outside click / Escape.
-  useEffect(() => {
-    if (!profileOpen) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false);
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setProfileOpen(false);
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [profileOpen]);
-
-  const handleLogout = () => {
-    setProfileOpen(false);
+  /**
+   * Real sign-out: clear the backend JWT, await Privy logout (its promise was
+   * previously dropped — failures were silent and left `authenticated` true),
+   * disconnect the wagmi connector (otherwise the persisted wagmi connection
+   * keeps `session.isConnected` alive and the UI stays logged in), clear any
+   * cached per-user queries, and leave protected pages.
+   */
+  const handleLogout = async () => {
+    const wasProtected = pathname?.startsWith("/account") || pathname?.startsWith("/portfolio");
     backendLogout();
-    privyLogout();
+    try {
+      await privyLogout();
+    } catch (err) {
+      console.error("Privy logout failed:", err);
+    }
+    disconnect();
+    queryClient.clear();
+    toast.success("Signed out");
+    if (wasProtected) router.push("/");
   };
 
   const NAV_ITEMS = [
@@ -97,70 +96,7 @@ export function Navbar() {
     }
     // Signed in — show the user's avatar (social pfp or generated identicon)
     // with a compact account menu; sign-out lives inside it.
-    const avatarSize = compact ? "h-8 w-8" : "h-9 w-9";
-    return (
-      <div className="relative" ref={profileRef}>
-        <button
-          type="button"
-          onClick={() => setProfileOpen((o) => !o)}
-          aria-expanded={profileOpen}
-          aria-haspopup="menu"
-          aria-label="Account menu"
-          className={cn(
-            "block overflow-hidden rounded-full ring-1 ring-border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ice-400 hover:ring-ice-400/60",
-            avatarSize,
-          )}
-        >
-          <UserAvatar
-            address={identity.address}
-            avatarUrl={identity.avatarUrl}
-            alt={identity.displayName ?? "Your profile"}
-            className={avatarSize}
-          />
-        </button>
-        {profileOpen && (
-          <div
-            role="menu"
-            className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-border bg-card p-4 shadow-xl shadow-black/10 space-y-3"
-          >
-            <div className="flex items-center gap-3">
-              <UserAvatar
-                address={identity.address}
-                avatarUrl={identity.avatarUrl}
-                alt={identity.displayName ?? "Your profile"}
-                className="h-11 w-11 rounded-full shrink-0"
-              />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {identity.displayName ?? "OpenAsset user"}
-                </p>
-                {identity.address && (
-                  <p className="truncate font-mono text-[11px] text-muted-foreground">
-                    {identity.address.slice(0, 6)}…{identity.address.slice(-4)}
-                  </p>
-                )}
-              </div>
-            </div>
-            <Link
-              href="/account"
-              onClick={() => setProfileOpen(false)}
-              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground/90 transition-colors hover:bg-muted"
-            >
-              <User className="h-4 w-4 text-muted-foreground" />
-              Your account
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <SignOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </div>
-        )}
-      </div>
-    );
+    return <ProfileMenu compact={compact} identity={identity} onLogout={handleLogout} />;
   };
 
   return (
@@ -304,5 +240,121 @@ export function Navbar() {
         <Plus className="h-6 w-6 stroke-[2.5]" />
       </Link>
     </>
+  );
+}
+
+/**
+ * Self-contained avatar + account menu. Rendered once per navbar breakpoint
+ * (desktop + mobile headers are both in the DOM), so each instance owns its
+ * open state and outside-click ref — sharing one ref/state across copies
+ * caused the visible menu to close on mousedown before the click landed,
+ * which made "Your account" and "Sign out" appear dead.
+ */
+function ProfileMenu({
+  compact = false,
+  identity,
+  onLogout,
+}: {
+  compact?: boolean;
+  identity: UserIdentity;
+  onLogout: () => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside click / touch / Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e: Event) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("touchstart", onOutside);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("touchstart", onOutside);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const avatarSize = compact ? "h-8 w-8" : "h-9 w-9";
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="Account menu"
+        className={cn(
+          "block overflow-hidden rounded-full ring-1 ring-border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ice-400 hover:ring-ice-400/60",
+          avatarSize,
+        )}
+      >
+        <UserAvatar
+          address={identity.address}
+          avatarUrl={identity.avatarUrl}
+          alt={identity.displayName ?? "Your profile"}
+          className={avatarSize}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-border bg-card p-4 shadow-xl shadow-black/10 space-y-3"
+        >
+          <div className="flex items-center gap-3">
+            <UserAvatar
+              address={identity.address}
+              avatarUrl={identity.avatarUrl}
+              alt={identity.displayName ?? "Your profile"}
+              className="h-11 w-11 rounded-full shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-foreground">
+                {identity.displayName ?? "OpenAsset user"}
+              </p>
+              {identity.address && (
+                <p className="truncate font-mono text-[11px] text-muted-foreground">
+                  {identity.address.slice(0, 6)}…{identity.address.slice(-4)}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              router.push("/account");
+            }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground/90 transition-colors hover:bg-muted"
+          >
+            <User className="h-4 w-4 text-muted-foreground" />
+            Your account
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            <SignOut className="h-4 w-4" />
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

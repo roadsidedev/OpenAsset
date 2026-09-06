@@ -43,6 +43,7 @@ declare module 'wagmi' {
   export function useConfig(): any;
   export function useConnect(): { connectAsync: (args?: any) => Promise<any>; connectors: any[]; isPending: boolean };
   export function useSwitchChain(): { switchChainAsync: (args: { chainId: number }) => Promise<any>; switchChain: (args?: any) => void; isPending: boolean };
+  export function useDisconnect(): { disconnect: () => void; disconnectAsync: () => Promise<void>; isPending: boolean };
   export function http(url?: string): any;
   export function createConfig(config: any): any;
   export const WagmiProvider: any;
