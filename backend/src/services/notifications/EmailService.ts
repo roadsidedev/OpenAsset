@@ -11,10 +11,14 @@ export class EmailService {
     }
   }
 
-  async sendEmail(to: string, subject: string, text: string, html?: string) {
+  /**
+   * Sends an email. Returns true when actually delivered, false when skipped
+   * (transport unconfigured) or failed — callers can degrade gracefully.
+   */
+  async sendEmail(to: string, subject: string, text: string, html?: string): Promise<boolean> {
     if (!config.alerts.sendgrid.apiKey || !config.alerts.sendgrid.fromEmail) {
       logger.warn('Email service not configured, skipping email');
-      return;
+      return false;
     }
 
     try {
@@ -26,9 +30,11 @@ export class EmailService {
         html: html || text,
       });
       logger.info({ to, subject }, 'Email sent successfully');
+      return true;
     } catch (error) {
       logger.error({ err: error, to }, 'Failed to send email');
       // We don't throw here to prevent stopping other alerts, but in a robust system we might want a retry queue.
+      return false;
     }
   }
 }

@@ -124,7 +124,50 @@ export default function AdaptersPage() {
 
   const chainClient = useMemo(() => createChainClient(selectedChain), [selectedChain]);
 
-  const loadRegistry = useCallback(async () => {
+/**
+ * Defensive tuple parsing. viem decodes struct returns positionally AND with
+ * named properties, but older deployed registries may return narrower structs
+ * (fields missing → undefined). Every field is read name-first with an index
+ * fallback and coerced safely — a malformed row must degrade, never crash the
+ * whole page with "Cannot read properties of undefined (reading 'toString')".
+ */
+
+interface DecodedLike {
+  [key: string]: unknown;
+}
+
+function field(tuple: unknown, index: number, name?: string): unknown {
+  const arr = tuple as unknown[] | null | undefined;
+  const obj = tuple as DecodedLike | null | undefined;
+  if (name && obj && obj[name] !== undefined && obj[name] !== null) return obj[name];
+  return Array.isArray(arr) ? arr[index] : undefined;
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  if (value === undefined || value === null) return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toCountString(value: unknown): string {
+  if (value === undefined || value === null) return "0";
+  if (typeof value === "bigint") return value.toString();
+  try {
+    return BigInt(value as string | number | boolean).toString();
+  } catch {
+    return "0";
+  }
+}
+
+function toSafeBool(value: unknown): boolean {
+  return value === true || value === "true";
+}
+
+function toSafeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+const loadRegistry = useCallback(async () => {
     setLoading(true);
     setError(null);
     if (!registryAddress || !chainClient) {
@@ -144,15 +187,19 @@ export default function AdaptersPage() {
         functionName: "getAllAdapters",
       })) as string[];
 
-      const settled = await Promise.allSettled(
+      const next: AdapterRow[] = [];
+
+      await Promise.all(
         addresses.map(async (addr) => {
-          const [info, meta, selectable] = await Promise.all([
+          // Each adapter resolves independently; one malformed/rate-limited
+          // row degrades to a minimal entry instead of emptying the list.
+          const [infoRes, metaRes, selectableRes] = await Promise.allSettled([
             chainClient.readContract({
               address: registryAddress as Address,
               abi: ADAPTER_REGISTRY_ABI_TYPED,
               functionName: "getAdapterInfo",
               args: [addr as Address],
-            }) as Promise<readonly [string, number, string, boolean, boolean, string, bigint, bigint]>,
+            }),
             chainClient
               .readContract({
                 address: registryAddress as Address,
@@ -160,7 +207,7 @@ export default function AdaptersPage() {
                 functionName: "getAdapterMetadata",
                 args: [addr as Address],
               })
-              .catch(() => null) as Promise<readonly [string, string, string, string, string, string, string, string, number, bigint] | null>,
+              .catch(() => null),
             chainClient
               .readContract({
                 address: registryAddress as Address,
@@ -168,33 +215,57 @@ export default function AdaptersPage() {
                 functionName: "isSelectable",
                 args: [addr as Address],
               })
-              .catch(() => true) as Promise<boolean>,
+              .catch(() => false),
           ]);
-          return { addr, info, meta, selectable };
+
+          // Minimal row so the adapter still shows even if info read failed
+          // (e.g. registry version gap) — enriched with local metadata below.
+          const row: AdapterRow = {
+            adapterAddress: addr,
+            adapterType: -1,
+            registeredBy: "",
+            verified: false,
+            deprecated: false,
+            auditReference: "",
+            registeredAt: 0,
+            totalValueSecured: "0",
+            selectable: false,
+          };
+
+          if (infoRes.status === "fulfilled" && infoRes.value) {
+            const info = infoRes.value as unknown;
+            row.adapterType = toSafeNumber(field(info, 1, "adapterType"), -1);
+            row.registeredBy = toSafeString(field(info, 2, "registeredBy"));
+            row.verified = toSafeBool(field(info, 3, "verified"));
+            row.deprecated = toSafeBool(field(info, 4, "deprecated"));
+            row.auditReference = toSafeString(field(info, 5, "auditReference"));
+            row.registeredAt = toSafeNumber(field(info, 6, "registeredAt"));
+            row.totalValueSecured = toCountString(field(info, 7, "totalValueSecured"));
+          }
+          if (metaRes.status === "fulfilled" && metaRes.value) {
+            const meta = metaRes.value as unknown;
+            row.metaName = toSafeString(field(meta, 0, "name")) || undefined;
+            row.metaVersion = toSafeString(field(meta, 1, "version")) || undefined;
+            const status = field(meta, 8, "reviewStatus");
+            row.reviewStatus = status === undefined || status === null ? undefined : toSafeNumber(status);
+            row.usageCount = toCountString(field(meta, 9, "usageCount"));
+          }
+          if (selectableRes.status === "fulfilled") {
+            row.selectable = selectableRes.value === true && !row.deprecated;
+          }
+
+          // Local metadata (generated from contracts.ts) fills gaps for
+          // reference deployments the on-chain record doesn't describe.
+          const localMeta = getAdapterMeta(selectedChain, addr);
+          if (!row.metaName && localMeta) {
+            row.metaName = localMeta.name;
+            row.metaVersion = localMeta.version;
+          }
+          next.push(row);
         }),
       );
 
-      const next: AdapterRow[] = [];
-      for (const r of settled) {
-        if (r.status !== "fulfilled") continue;
-        const { addr, info, meta, selectable } = r.value;
-        next.push({
-          adapterAddress: addr,
-          adapterType: Number(info[1]),
-          registeredBy: info[2],
-          verified: info[3],
-          deprecated: info[4],
-          auditReference: info[5],
-          registeredAt: Number(info[6]),
-          totalValueSecured: (info[7] as bigint).toString(),
-          selectable: selectable && !info[4],
-          metaName: meta?.[0] || undefined,
-          metaVersion: meta?.[1] || undefined,
-          reviewStatus: meta ? Number(meta[8]) : undefined,
-          usageCount: meta ? (meta[9] as bigint).toString() : undefined,
-        });
-      }
-      // Newest first.
+      // Newest first; unknown-age rows sink to the bottom.
       next.sort((a, b) => b.registeredAt - a.registeredAt);
       setRows(next);
     } catch (err) {
@@ -518,9 +589,9 @@ export default function AdaptersPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {ADAPTER_TYPES[adapter.adapterType]}
-                      </span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {ADAPTER_TYPES[adapter.adapterType] ?? "Unknown"}
+                    </span>
                       <p className="mt-1 text-sm font-semibold text-foreground truncate">{displayName}</p>
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground truncate">
                         {adapter.adapterAddress.slice(0, 10)}...{adapter.adapterAddress.slice(-6)}
@@ -543,7 +614,11 @@ export default function AdaptersPage() {
                   </div>
                   <div className="mt-2 text-[11px] text-muted-foreground space-y-0.5">
                     <p>
-                      By <span className="font-mono">{adapter.registeredBy.slice(0, 10)}…</span>
+                      {adapter.registeredBy ? (
+                        <>By <span className="font-mono">{adapter.registeredBy.slice(0, 10)}…</span></>
+                      ) : (
+                        <>Registry record unavailable</>
+                      )}
                       {adapter.registeredAt > 0 && (
                         <> · {new Date(adapter.registeredAt * 1000).toLocaleDateString()}</>
                       )}
@@ -582,9 +657,9 @@ export default function AdaptersPage() {
       {/* Register sheet — compact floating panel, same pattern as the workspace menu */}
       <Sheet open={registerOpen} onOpenChange={setRegisterOpen}>
         <SheetContent
-          side="left"
+          side="right"
           showCloseButton
-          className="workspace-menu-panel !inset-y-auto !bottom-auto !left-4 !right-auto !top-20 !h-auto !w-[min(440px,calc(100vw-2rem))] !max-w-none max-h-[calc(100vh-6rem)] rounded-[28px] border border-border/80 p-0 shadow-2xl shadow-black/20"
+          className="workspace-menu-panel workspace-menu-panel-right !inset-y-auto !bottom-auto !left-auto !right-4 !top-20 !h-auto !w-[min(440px,calc(100vw-2rem))] !max-w-none max-h-[calc(100vh-6rem)] rounded-[28px] border border-border/80 p-0 shadow-2xl shadow-black/20"
         >
           <div className="flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden">
             <SheetHeader className="sr-only">

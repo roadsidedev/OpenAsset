@@ -9,6 +9,7 @@ import { createLoanRoutes } from './routes/loanRoutes';
 import { createUserRoutes } from './routes/userRoutes';
 import { createAuthRoutes } from './routes/authRoutes';
 import { createAdapterRoutes } from './routes/adapterRoutes';
+import { createSupportRoutes } from './routes/supportRoutes';
 import { prisma } from './bootstrap/prisma';
 import { lifecycle } from './bootstrap/lifecycle';
 
@@ -42,6 +43,7 @@ app.use('/api/v1/markets', createMarketRoutes(prisma));
 app.use('/api/v1/loans', createLoanRoutes(prisma));
 app.use('/api/v1/users', createUserRoutes(prisma));
 app.use('/api/v1/adapters', createAdapterRoutes(prisma));
+app.use('/api/v1/support', createSupportRoutes(prisma));
 
 // Health endpoint with worker status
 app.get('/health', async (req, res) => {
