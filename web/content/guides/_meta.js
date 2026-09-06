@@ -6,6 +6,7 @@ export default {
   'create-market': 'Create a market',
   borrow: 'Borrow against collateral',
   adapters: 'Use adapters',
+  'register-adapter': 'Register an adapter',
   'rwa-market': 'Launch an RWA market',
   liquidation: 'Async liquidation flow',
 }

@@ -343,6 +343,112 @@ export const useContractInteraction = () => {
     [walletClient, clientForChain, clearError, ensureChain]
   );
 
+  /**
+   * Register an adapter permissionlessly (AdapterRegistry.registerAdapter).
+   * Anyone can call it; the entry starts unverified (verified=false) until
+   * audit governance reviews it. Mirrors the createMarket write pattern:
+   * chain-guarded, wallet-signed, receipt-awaited, errors decoded.
+   */
+  const registerAdapter = useCallback(
+    async (registryAddress: string, adapterAddress: string, adapterType: number, targetChainId?: number) => {
+      setIsLoading(true);
+      clearError();
+      try {
+        if (!walletClient) throw new Error('Wallet not connected');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
+
+        const hash = await walletClient.writeContract({
+          address: registryAddress as Address,
+          abi: ADAPTER_REGISTRY_ABI_TYPED,
+          functionName: 'registerAdapter',
+          args: [adapterAddress as Address, adapterType],
+        });
+
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
+      } catch (err) {
+        const error = new Error(decodeContractError(err));
+        setError(error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [walletClient, clientForChain, clearError, ensureChain]
+  );
+
+  /**
+   * Register with the developer catalog record shown to market creators
+   * (AdapterRegistry.registerAdapterWithMetadata). Same write pattern;
+   * metadata starts UNREVIEWED on-chain.
+   */
+  const registerAdapterWithMetadata = useCallback(
+    async (
+      registryAddress: string,
+      input: {
+        adapterAddress: string;
+        adapterType: number;
+        name: string;
+        version: string;
+        category: string;
+        supportedAssets: string;
+        documentationURI: string;
+        repositoryURI: string;
+      },
+      targetChainId?: number,
+    ) => {
+      setIsLoading(true);
+      clearError();
+      try {
+        if (!walletClient) throw new Error('Wallet not connected');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
+
+        const hash = await walletClient.writeContract({
+          address: registryAddress as Address,
+          abi: ADAPTER_REGISTRY_ABI_TYPED,
+          functionName: 'registerAdapterWithMetadata',
+          args: [
+            input.adapterAddress as Address,
+            input.adapterType,
+            input.name,
+            input.version,
+            input.category,
+            input.supportedAssets,
+            input.documentationURI,
+            input.repositoryURI,
+          ],
+        });
+
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
+      } catch (err) {
+        const error = new Error(decodeContractError(err));
+        setError(error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [walletClient, clientForChain, clearError, ensureChain]
+  );
+
+  const getAdapterMetadata = useCallback(
+    async (registryAddress: string, adapterAddress: string) => {
+      if (!fallbackClient) throw new Error('Public client not available');
+      return fallbackClient.readContract({
+        address: registryAddress as Address,
+        abi: ADAPTER_REGISTRY_ABI_TYPED,
+        functionName: 'getAdapterMetadata',
+        args: [adapterAddress as Address],
+      });
+    },
+    [fallbackClient]
+  );
+
   // Adapter Registry read functions
   const getAdapterRegistryInfo = useCallback(
     async (registryAddress: string, adapterAddress: string) => {
@@ -402,6 +508,9 @@ export const useContractInteraction = () => {
     requestLoan,
     repay,
     liquidate,
+    registerAdapter,
+    registerAdapterWithMetadata,
+    getAdapterMetadata,
     getAdapterRegistryInfo,
     getAdaptersByType,
     getAllAdapters,

@@ -1,0 +1,59 @@
+---
+title: Register an adapter
+description: Deploy an adapter contract and register it permissionlessly so market creators can select it.
+---
+
+# Register an adapter
+
+Anyone can register an adapter. Registration is a single permissionless transaction — no allowlist, no fee beyond gas. New entries start **Unverified / Unreviewed** until audit governance reviews them.
+
+The fastest path is the **Register adapter** button on the [Adapter Registry](/adapters) page, which handles the whole flow: validation, wallet signing, network switching, and confirmation.
+
+## 1. Implement one of the five interfaces
+
+| Type | Interface | Reference |
+|---|---|---|
+| ASSET | `IAssetAdapter` | `ERC20Adapter`, `ERC721Adapter`, `B20AssetAdapter` |
+| ORACLE | `IOracleAdapter` | `ChainlinkAdapter`, `UniswapV3TWAPAdapter`, `ChainlinkEquityFeedAdapter` |
+| COMPLIANCE | `IComplianceAdapter` | `B20PolicyComplianceAdapter`, `ManagedAllowlistComplianceAdapter` |
+| LIQUIDATION | `ILiquidationAdapter` | `DEXSwapLiquidationAdapter`, `NFTAuctionLiquidationAdapter` |
+| POSITION | `IPositionAdapter` | `StandardPositionAdapter`, `SoulboundPositionAdapter`, `TransferablePositionAdapter` |
+
+Keep the exact function signatures — the engine calls verified and unverified adapters identically and independently verifies their outputs, so design honestly.
+
+## 2. Deploy your adapter
+
+Deploy to the network you want to serve. Use a testnet first (Base Sepolia `84532` or Robinhood Testnet `46630`): the registry page lets you switch networks before registering. The registration form checks that your address actually hosts contract bytecode on the selected chain.
+
+## 3. Register with metadata
+
+Call `registerAdapterWithMetadata` (or use the registry page form):
+
+```solidity
+registerAdapterWithMetadata(
+    adapter,          // your deployed contract
+    adapterType,      // 0 ASSET · 1 ORACLE · 2 COMPLIANCE · 3 LIQUIDATION · 4 POSITION
+    name,             // e.g. "My Oracle Adapter"
+    version,          // semantic version, e.g. "1.0.0"
+    category,         // human category label
+    supportedAssets,  // e.g. "USDC, WETH"
+    documentationURI, // docs link shown to market creators
+    repositoryURI     // source link for reviewers
+);
+```
+
+Prefer a minimal registration? `registerAdapter(adapter, adapterType)` records the same entry with a placeholder catalog record — you can flesh it out later with `updateMetadata` (developer only).
+
+Reading it back: `getAdapterInfo(adapter)` returns the trust record (verified, deprecated, audit reference, secured value); `getAdapterMetadata(adapter)` returns your catalog record and review status.
+
+## 4. Get verified (optional, recommended)
+
+Verification is a governance review of your committed source, tests, dependencies and assumptions — not insurance and not an economic-safety claim. Ask for review, address findings, and governance calls `markVerified(adapter, auditReference)` on approval. A rejection is recorded with a reason reference; fix and resubmit.
+
+## 5. What happens next
+
+- Markets can select your adapter immediately — unverified adapters show an explicit acknowledgment in the creation wizard.
+- Usage and secured value accrue automatically as markets adopt it.
+- If a critical issue appears, governance can `markDeprecated`: new markets can no longer select it, while existing markets keep running with warning banners. Deprecation never pauses your users' markets retroactively.
+
+Deep dive: [Registry spec](/docs/protocol/adapter-registry) · [Adapter system](/docs/protocol/adapter-system) · [Reference adapters](/docs/guides/reference-adapters)

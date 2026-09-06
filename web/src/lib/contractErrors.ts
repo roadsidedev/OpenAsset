@@ -68,6 +68,8 @@ const CUSTOM_ERROR_MESSAGES: Record<string, string> = {
 };
 
 const REQUIRE_MESSAGES: Array<[RegExp, string]> = [
+  [/AlreadyRegistered/i, 'This adapter is already registered on this network.'],
+  [/NotRegistered/i, 'This adapter is not registered on this network yet.'],
   [/Collateral must be a contract/i, 'The collateral asset address is not a smart contract. Check you are using a valid token address on the current network.'],
   [/Invalid LP address/i, 'The LP address is invalid.'],
   [/Asset adapter required/i, 'An asset adapter is required.'],

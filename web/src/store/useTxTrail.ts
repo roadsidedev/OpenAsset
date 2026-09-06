@@ -13,7 +13,8 @@ export type TxTrailType =
   | 'MARKET_CREATED'
   | 'LOAN_REQUESTED'
   | 'LOAN_REPAID'
-  | 'LIQUIDITY_DEPOSITED';
+  | 'LIQUIDITY_DEPOSITED'
+  | 'ADAPTER_REGISTERED';
 
 export interface TxTrailEntry {
   id: string;

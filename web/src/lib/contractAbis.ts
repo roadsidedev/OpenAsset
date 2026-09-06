@@ -174,6 +174,68 @@ export const LENDING_MARKET_ABI = [
 
 export const ADAPTER_REGISTRY_ABI = [
   {
+    name: 'registerAdapter',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'adapter', type: 'address' }, { name: 'adapterType', type: 'uint8' }],
+    outputs: [],
+  },
+  {
+    name: 'registerAdapterWithMetadata',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'adapter', type: 'address' },
+      { name: 'adapterType', type: 'uint8' },
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'category', type: 'string' },
+      { name: 'supportedAssets', type: 'string' },
+      { name: 'documentationURI', type: 'string' },
+      { name: 'repositoryURI', type: 'string' },
+    ],
+    outputs: [],
+  },
+  {
+    name: 'updateMetadata',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'adapter', type: 'address' },
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'category', type: 'string' },
+      { name: 'supportedAssets', type: 'string' },
+      { name: 'documentationURI', type: 'string' },
+      { name: 'repositoryURI', type: 'string' },
+    ],
+    outputs: [],
+  },
+  {
+    name: 'getAdapterMetadata',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'adapter', type: 'address' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'developer', type: 'address' },
+          { name: 'category', type: 'string' },
+          { name: 'supportedAssets', type: 'string' },
+          { name: 'documentationURI', type: 'string' },
+          { name: 'repositoryURI', type: 'string' },
+          { name: 'auditURI', type: 'string' },
+          { name: 'reviewStatus', type: 'uint8' },
+          { name: 'usageCount', type: 'uint256' },
+        ],
+      },
+    ],
+  },
+  {
     name: 'getAdapterInfo',
     type: 'function',
     stateMutability: 'view',
