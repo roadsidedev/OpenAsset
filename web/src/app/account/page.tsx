@@ -7,6 +7,8 @@ import { useMarkets } from "@/hooks/useMarkets";
 import { useLoans } from "@/hooks/useLoans";
 import { useActivity } from "@/hooks/useActivity";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/UserAvatar";
+import { useUserIdentity } from "@/hooks/useUserIdentity";
 import { cn } from "@/lib/utils";
 import { DepositModal } from "@/components/modals/DepositModal";
 import { WithdrawModal } from "@/components/modals/WithdrawModal";
@@ -91,6 +93,7 @@ function AccountContent() {
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const { user, exportWallet, logout: privyLogout } = usePrivy();
   const { address } = useAccount();
+  const identity = useUserIdentity();
 
   // Detect embedded wallet (Privy-managed) vs external wallet (MetaMask, etc.)
   const isEmbeddedWallet = user?.wallet?.walletClientType === "privy" || user?.wallet?.connectorType === "embedded";
@@ -141,16 +144,21 @@ function AccountContent() {
         {/* Account Header */}
         <div className="p-6 md:p-8 rounded-3xl border border-border bg-card flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-soft">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-ice-100 dark:bg-ice-500/15 text-ice-600 dark:text-ice-300 flex items-center justify-center font-extrabold text-xl border border-ice-200/50 dark:border-ice-400/20">
-              oA
+            <div className="w-14 h-14 rounded-2xl overflow-hidden border border-ice-200/50 dark:border-ice-400/20 shrink-0 bg-ice-100/40 dark:bg-ice-500/10">
+              <UserAvatar
+                address={address}
+                avatarUrl={identity.avatarUrl}
+                alt={identity.displayName ?? "Account avatar"}
+                className="h-full w-full"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1
                   className="max-w-[220px] truncate text-xs font-semibold text-muted-foreground md:max-w-[280px] md:text-sm"
-                  title={user?.email?.address || "Account"}
+                  title={identity.displayName ?? user?.email?.address ?? "Account"}
                 >
-                  {user?.email?.address || "Account"}
+                  {identity.displayName ?? user?.email?.address ?? "Account"}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold">
                   Connected

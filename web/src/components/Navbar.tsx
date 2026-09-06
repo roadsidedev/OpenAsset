@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SquaresFour, Briefcase, Plus, List, Sun, Moon, User } from "@phosphor-icons/react";
+import { SquaresFour, Briefcase, Plus, List, Sun, Moon, User, SignOut } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAuthApi } from "@/hooks/useAuthApi";
 import { useTheme } from "@/components/ThemeProvider";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
-import { useState } from "react";
+import { UserAvatar } from "@/components/UserAvatar";
+import { useUserIdentity } from "@/hooks/useUserIdentity";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 
 export function Navbar() {
@@ -21,12 +23,35 @@ export function Navbar() {
   } = useAuthApi();
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+  const identity = useUserIdentity();
 
   // When Privy is not configured, privyReady is undefined — treat as ready
   // so the sign-in button is still functional via the fallback auth gate
   const isReady = privyReady !== false && !authLoading;
 
+  // Close the profile menu on outside click / Escape.
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProfileOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [profileOpen]);
+
   const handleLogout = () => {
+    setProfileOpen(false);
     backendLogout();
     privyLogout();
   };
@@ -70,18 +95,71 @@ export function Navbar() {
         </button>
       );
     }
+    // Signed in — show the user's avatar (social pfp or generated identicon)
+    // with a compact account menu; sign-out lives inside it.
+    const avatarSize = compact ? "h-8 w-8" : "h-9 w-9";
     return (
-      <button
-        type="button"
-        onClick={handleLogout}
-        className={cn(
-          "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl font-medium transition-all active-press",
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-          compact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm"
+      <div className="relative" ref={profileRef}>
+        <button
+          type="button"
+          onClick={() => setProfileOpen((o) => !o)}
+          aria-expanded={profileOpen}
+          aria-haspopup="menu"
+          aria-label="Account menu"
+          className={cn(
+            "block overflow-hidden rounded-full ring-1 ring-border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ice-400 hover:ring-ice-400/60",
+            avatarSize,
+          )}
+        >
+          <UserAvatar
+            address={identity.address}
+            avatarUrl={identity.avatarUrl}
+            alt={identity.displayName ?? "Your profile"}
+            className={avatarSize}
+          />
+        </button>
+        {profileOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-border bg-card p-4 shadow-xl shadow-black/10 space-y-3"
+          >
+            <div className="flex items-center gap-3">
+              <UserAvatar
+                address={identity.address}
+                avatarUrl={identity.avatarUrl}
+                alt={identity.displayName ?? "Your profile"}
+                className="h-11 w-11 rounded-full shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {identity.displayName ?? "OpenAsset user"}
+                </p>
+                {identity.address && (
+                  <p className="truncate font-mono text-[11px] text-muted-foreground">
+                    {identity.address.slice(0, 6)}…{identity.address.slice(-4)}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Link
+              href="/account"
+              onClick={() => setProfileOpen(false)}
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground/90 transition-colors hover:bg-muted"
+            >
+              <User className="h-4 w-4 text-muted-foreground" />
+              Your account
+            </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <SignOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </div>
         )}
-      >
-        Sign Out
-      </button>
+      </div>
     );
   };
 
