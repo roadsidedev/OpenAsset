@@ -240,12 +240,22 @@ function PortfolioContent() {
                           <p className="font-medium text-foreground">{formatAmount(loan.principal)} USDC</p>
                           <p className="text-sm text-muted-foreground">Collateral: {formatAmount(loan.collateralAmount)}</p>
                         </div>
-                        <Link
-                          href={`/markets/${loan.marketAddress}`}
-                          className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
-                        >
-                          Manage <ArrowSquareOut className="h-3.5 w-3.5" />
-                        </Link>
+                        <div className="flex flex-wrap gap-2">
+                          {(loan.status === "ACTIVE" || loan.status === "GRACE_PERIOD" || loan.status === "LIQUIDATION_CURE") && (
+                            <Link
+                              href={`/repay/${loan.address}`}
+                              className="inline-flex items-center justify-center gap-1 rounded-xl bg-ice-300 dark:bg-ice-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-premium active-press"
+                            >
+                              Repay
+                            </Link>
+                          )}
+                          <Link
+                            href={`/markets/${loan.marketAddress}`}
+                            className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
+                          >
+                            Manage <ArrowSquareOut className="h-3.5 w-3.5" />
+                          </Link>
+                        </div>
                       </div>
                       );
                     })}

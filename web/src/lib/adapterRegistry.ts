@@ -125,7 +125,7 @@ const ADAPTER_DEFS: AdapterDef[] = [
     key: 'dexSwapLiquidationAdapter',
     category: 'LIQUIDATION',
     name: 'DEX Swap Liquidation',
-    description: 'Liquidates collateral via DEX swap (Uniswap/SushiSwap). Fast execution and gas-efficient.',
+    description: 'Liquidates collateral via a single-hop swap on a Uniswap V3-compatible router (Uniswap V3, Aerodrome Slipstream). Router, pool fee, and slippage are configured per market.',
     icon: 'Swap',
     version: 'v2.0.0',
   },

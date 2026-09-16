@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /**
  * @title IAssetAdapter
  * @notice Handles collateral custody for the lending engine
- * @dev Implementations: ERC20Adapter, ERC721Adapter, ERC1155Adapter
+ * @dev Implementations: ERC20Adapter, ERC721Adapter
  *
  * The core engine never touches collateral directly — it delegates all
  * escrow and release operations to the market's configured AssetAdapter.
@@ -27,7 +27,7 @@ interface IAssetAdapter {
      *      to the calling LendingMarket contract. The engine will verify
      *      the actual balance delta matches the requested amount.
      * @param from Address sending the collateral
-     * @param amountOrId Amount (ERC20/ERC1155) or token ID (ERC721)
+     * @param amountOrId Amount (ERC20) or token ID (ERC721)
      */
     function escrow(address from, uint256 amountOrId) external;
 
@@ -36,7 +36,7 @@ interface IAssetAdapter {
      * @dev Must transfer `amountOrId` of the collateral asset from the
      *      calling LendingMarket contract to `to`.
      * @param to Address receiving the collateral
-     * @param amountOrId Amount (ERC20/ERC1155) or token ID (ERC721)
+     * @param amountOrId Amount (ERC20) or token ID (ERC721)
      */
     function release(address to, uint256 amountOrId) external;
 
@@ -44,10 +44,10 @@ interface IAssetAdapter {
      * @notice Check if the collateral asset is transferable from sender to market
      * @dev Called before escrow to verify the transfer will succeed.
      *      For ERC20: checks allowance and balance.
-     *      For ERC721/ERC1155: checks ownership and operator approval.
+     *      For ERC721: checks ownership and operator approval.
      * @param from Address sending the collateral
      * @param to Address receiving the collateral (the LendingMarket)
-     * @param amountOrId Amount (ERC20/ERC1155) or token ID (ERC721)
+     * @param amountOrId Amount (ERC20) or token ID (ERC721)
      * @return transferable True if the transfer would succeed
      */
     function isTransferable(address from, address to, uint256 amountOrId) external view returns (bool);

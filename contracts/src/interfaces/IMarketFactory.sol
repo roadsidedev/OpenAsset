@@ -8,7 +8,7 @@ import {OracleType} from "./IOracle.sol";
  * @title AssetType
  * @notice Asset type enumeration
  */
-enum AssetType { ERC20, ERC721, ERC1155 }
+ enum AssetType { ERC20, ERC721 }
 
 /**
  * @title IMarketFactory

@@ -62,38 +62,6 @@ contract MockERC721 {
     }
 }
 
-// Minimal ERC1155 for testing
-contract MockERC1155 {
-    mapping(uint256 => mapping(address => uint256)) private _balances;
-    mapping(address => mapping(address => bool)) private _operatorApprovals;
-
-    function mint(address to, uint256 id, uint256 amount) external {
-        _balances[id][to] += amount;
-    }
-
-    function balanceOf(address owner, uint256 id) external view returns (uint256) {
-        return _balances[id][owner];
-    }
-
-    function setApprovalForAll(address operator, bool approved) external {
-        _operatorApprovals[msg.sender][operator] = approved;
-    }
-
-    function isApprovedForAll(address owner, address operator) external view returns (bool) {
-        return _operatorApprovals[owner][operator];
-    }
-
-    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata) external {
-        require(_balances[id][from] >= amount, "insufficient");
-        _balances[id][from] -= amount;
-        _balances[id][to] += amount;
-    }
-
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == 0xd9b67a26;
-    }
-}
-
 // Mock lending market for LoanContract testing
 contract MockLendingMarket is ILendingMarket {
     address public collateralAsset;
@@ -126,7 +94,7 @@ contract MockLendingMarket is ILendingMarket {
 
     function depositLiquidity(uint256) external pure returns (uint256) { return 0; }
     function withdrawLiquidity(uint256) external pure returns (uint256) { return 0; }
-    function requestLoan(uint256, uint256, uint256) external pure returns (address) { return address(0); }
+    function requestLoan(uint256, uint256) external pure returns (address) { return address(0); }
     function getAvailableLiquidity() external pure returns (uint256) { return 0; }
     function isCircuitBreakerTriggered() external pure returns (bool) { return false; }
     function removeLoan(address, uint256) external {} // no-op
@@ -149,7 +117,6 @@ contract LoanContractLiquidationsTest is Test {
     MockERC20 public collateralToken;
     MockERC20 public loanToken;
     MockERC721 public nftToken;
-    MockERC1155 public erc1155Token;
 
     address public treasury = makeAddr("treasury");
     address public liquidator = makeAddr("liquidator");
@@ -160,13 +127,10 @@ contract LoanContractLiquidationsTest is Test {
         collateralToken = new MockERC20(address(this), 1_000_000, "COL", "COL", 18);
         loanToken = new MockERC20(address(this), 1_000_000, "LOAN", "LOAN", 18);
         nftToken = new MockERC721();
-        erc1155Token = new MockERC1155();
 
         // Seed tokens to test addresses
         collateralToken.deal(borrower, 100_000e18);
         loanToken.deal(liquidator, 1_000_000e6);
-        // Collateral token for ERC1155
-        erc1155Token.mint(borrower, 1, 1000);
     }
 
     // ─── helpers ───
@@ -187,27 +151,17 @@ contract LoanContractLiquidationsTest is Test {
         address loanAddr = address(implementation).clone();
         loan = LoanContract(loanAddr);
 
-        // For ERC20: collateralAmount = amount; tokenId = 0; erc1155Amount = 0
-        // For ERC721: collateralAmount = 0; tokenId = NFT id; erc1155Amount = 0
-        // For ERC1155: collateralAmount = tokenID; tokenId = 0; erc1155Amount = amount
+        // For ERC20: collateralAmount = amount; tokenId = 0
+        // For ERC721: collateralAmount = 0; tokenId = NFT id
         uint256 erc20collateral = _atype == AssetType.ERC20 ? 100e18 : 0;
         uint256 erc721tokenId  = _atype == AssetType.ERC721 ? 42 : 0;
-        uint256 erc1155tokenId = _atype == AssetType.ERC1155 ? 1 : 0;
-        // For ERC1155, collateralAmount stores the token ID
-        uint256 erc1155collateralTokenId = _atype == AssetType.ERC1155 ? erc1155tokenId : 0;
-        uint256 erc1155Amount = _atype == AssetType.ERC1155 ? 100 : 0;
 
         // Fund collateral to loan contract
         if (_atype == AssetType.ERC20) {
             vm.prank(borrower);
             collateralToken.transfer(address(loan), erc20collateral);
-        } else if (_atype == AssetType.ERC721) {
-            nftToken.mint(address(loan), erc721tokenId);
         } else {
-            erc1155Token.mint(address(loan), erc1155tokenId, erc1155Amount);
-            // Also approve the loan contract to spend
-            vm.prank(address(loan));
-            erc1155Token.setApprovalForAll(address(loan), true);
+            nftToken.mint(address(loan), erc721tokenId);
         }
 
         loanToken.deal(address(loan), 1_000_000e6);
@@ -218,9 +172,8 @@ contract LoanContractLiquidationsTest is Test {
         vm.prank(address(market));
         loan.initialize(
             borrower,
-            erc20collateral + erc1155collateralTokenId, // collateralAmount: ERC20 amount or ERC1155 token ID
+            erc20collateral,
             erc721tokenId,
-            erc1155Amount,
             principal,
             interest,
             block.timestamp + 30 days
@@ -267,34 +220,6 @@ contract LoanContractLiquidationsTest is Test {
     // ─── ERC721 liquidation ───
     function test_ERC721_liquidate() public {
         LoanContract loan = _getLoan(address(nftToken), address(loanToken), AssetType.ERC721, 200e18);
-        skip(31 days);
-
-        vm.prank(liquidator);
-        loanToken.approve(address(loan), type(uint256).max);
-
-        vm.prank(liquidator);
-        loan.liquidate();
-
-        assertTrue(uint256(loan.status()) == 2, "should be LIQUIDATED");
-    }
-
-    // ─── ERC1155 underwater liquidation ───
-    function test_ERC1155_underwater_liquidate() public {
-        LoanContract loan = _getLoan(address(erc1155Token), address(loanToken), AssetType.ERC1155, 1e18);
-        skip(31 days);
-
-        vm.prank(liquidator);
-        loanToken.approve(address(loan), type(uint256).max);
-
-        vm.prank(liquidator);
-        loan.liquidate();
-
-        assertTrue(uint256(loan.status()) == 2, "should be LIQUIDATED");
-    }
-
-    // ─── ERC1155 solvent liquidation ───
-    function test_ERC1155_solvent_liquidate() public {
-        LoanContract loan = _getLoan(address(erc1155Token), address(loanToken), AssetType.ERC1155, 200e18);
         skip(31 days);
 
         vm.prank(liquidator);

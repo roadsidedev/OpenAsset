@@ -29,11 +29,10 @@ abstract contract LendingMarketHandler is Properties {
         lendingMarket_removeLoan(loanContract, principal);
     }
 
-    function lendingMarket_requestLoan_clamped(uint256 collateralAmount, uint256 tokenId, uint256 erc1155Amount) public {
+    function lendingMarket_requestLoan_clamped(uint256 collateralAmount, uint256 tokenId) public {
         // TODO: clamp collateralAmount — e.g. collateralAmount = clampBetween(collateralAmount, min, max);
         // TODO: clamp tokenId — e.g. tokenId = clampBetween(tokenId, min, max);
-        // TODO: clamp erc1155Amount — e.g. erc1155Amount = clampBetween(erc1155Amount, min, max);
-        lendingMarket_requestLoan(collateralAmount, tokenId, erc1155Amount);
+        lendingMarket_requestLoan(collateralAmount, tokenId);
     }
 
     function lendingMarket_resetCircuitBreaker_clamped() public {
@@ -71,8 +70,8 @@ abstract contract LendingMarketHandler is Properties {
         // TODO: wire call — lendingMarket.removeLoan(loanContract, principal);
     }
 
-    function lendingMarket_requestLoan(uint256 collateralAmount, uint256 tokenId, uint256 erc1155Amount) public asActor {
-        // TODO: wire call — lendingMarket.requestLoan(collateralAmount, tokenId, erc1155Amount);
+    function lendingMarket_requestLoan(uint256 collateralAmount, uint256 tokenId) public asActor {
+        // TODO: wire call — lendingMarket.requestLoan(collateralAmount, tokenId);
     }
 
     function lendingMarket_resetCircuitBreaker() public asActor {

@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/adapters/IAssetAdapter.sol";
@@ -266,12 +267,21 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
             string(abi.encodePacked("oALP-", p.collateralAsset))
         );
 
-        // Approve the asset adapter to move ERC20 collateral from this market.
-        // Guarded by Address.isContract so non-ERC20 collateral (EOA, ERC721, etc.)
-        // does not cause the constructor to revert. For ERC721 collateral the
-        // adapter-specific approval (setApprovalForAll) is handled by the ERC721Adapter.
+        // Approve the asset adapter to move collateral from this market.
+        // Standard detection: ERC20 collateral gets an unlimited ERC20 approval; ERC721
+        // collateral gets setApprovalForAll — both are what release() needs. The ERC20
+        // `approve(address,uint256)` selector also exists on ERC721 with token-ID
+        // semantics, so probing totalSupply() first avoids approving garbage on NFTs.
         if (p.collateralAsset.isContract()) {
-            IERC20(p.collateralAsset).safeApprove(p.assetAdapter, type(uint256).max);
+            try IERC20(p.collateralAsset).totalSupply() returns (uint256) {
+                IERC20(p.collateralAsset).safeApprove(p.assetAdapter, type(uint256).max);
+            } catch {
+                try IERC721(p.collateralAsset).setApprovalForAll(p.assetAdapter, true) {
+                    // ERC721 collateral: adapter may release on repay / hand off on liquidation
+                } catch {
+                    // Neither standard detected: leave unapproved; escrow fails loudly.
+                }
+            }
         }
 
         status = MarketStatus.ACTIVE;

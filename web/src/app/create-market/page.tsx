@@ -8,6 +8,7 @@ import { parseUnits, formatUnits, isAddress, encodeAbiParameters, type Address }
 import { toast } from "sonner";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
 import { TokenAddressInput } from "@/components/tokens/TokenAddressInput";
+import { getSupportedStablecoins } from "@/lib/stablecoins";
 import { AssetSourceStep } from "@/components/create-market/AssetSourceStep";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { useSession } from "@/context/SessionContext";
@@ -72,6 +73,44 @@ export default function CreateMarketPage() {
 
   const isB20Chain = chainId === 8453;
   const isRobinhoodChain = chainId === 4663;
+
+  const stablecoins = useMemo(() => getSupportedStablecoins(chainId), [chainId]);
+  const lendingDecimals = lendingToken?.decimals ?? 6;
+
+  // Default to the first listed stablecoin when nothing is selected yet
+  useEffect(() => {
+    if (!formData.lendingAsset && stablecoins.length > 0) {
+      setFormData({ lendingAsset: stablecoins[0].address });
+    }
+  }, [chainId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mark each listed stablecoin as factory-allowlisted or not (Rule 1)
+  const [allowlistMap, setAllowlistMap] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    let cancelled = false;
+    if (!publicClient || !contracts?.marketFactory || stablecoins.length === 0) {
+      setAllowlistMap({});
+      return;
+    }
+    (async () => {
+      const results: Record<string, boolean> = {};
+      await Promise.all(stablecoins.map(async (s) => {
+        try {
+          const allowed = await publicClient.readContract({
+            address: contracts.marketFactory as Address,
+            abi: [{ name: 'isAllowedLendingAsset', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] }],
+            functionName: 'isAllowedLendingAsset',
+            args: [s.address as Address],
+          }) as boolean;
+          results[s.address.toLowerCase()] = allowed;
+        } catch {
+          results[s.address.toLowerCase()] = false;
+        }
+      }));
+      if (!cancelled) setAllowlistMap(results);
+    })();
+    return () => { cancelled = true; };
+  }, [publicClient, contracts?.marketFactory, chainId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -223,7 +262,7 @@ export default function CreateMarketPage() {
       args: [formData.lendingAsset as Address],
     }).catch(() => false);
     if (!allowed) {
-      return "The lending asset is not allowlisted by the factory. Use USDC on this network.";
+      return "The lending asset is not allowlisted by the factory. Pick one of the supported stablecoins (USDC, USDT, USDG) listed in the Lending Asset step.";
     }
 
     return null;
@@ -277,7 +316,7 @@ export default function CreateMarketPage() {
       };
 
       const initialLiquidity = formData.liquidity
-        ? parseUnits(formData.liquidity, 6)
+        ? parseUnits(formData.liquidity, lendingDecimals)
         : BigInt(0);
 
       const b20Config = isB20Selected && b20Info
@@ -880,17 +919,71 @@ export default function CreateMarketPage() {
               <p className="text-sm text-muted-foreground">
                 Select the stablecoin for lending and provide initial liquidity.
               </p>
-              <TokenAddressInput
-                label="Lending Asset (Stablecoin)"
-                placeholder={contracts?.usdc || DEFAULT_USDC}
-                value={formData.lendingAsset}
-                onChange={(addr) => setFormData({ lendingAsset: addr })}
-                chainId={chainId}
-                required
-              />
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground">Supported stablecoin</label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {stablecoins.map((s) => {
+                    const isSelected = (formData.lendingAsset || '').toLowerCase() === s.address.toLowerCase();
+                    return (
+                      <button
+                        key={s.address}
+                        type="button"
+                        onClick={() => setFormData({ lendingAsset: s.address })}
+                        className={cn(
+                          "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-premium active-press",
+                          isSelected
+                            ? "border-ice-400/60 bg-ice-400/10 ring-2 ring-ice-400/30"
+                            : "border-border bg-muted/30 hover:border-ice-400/40 hover:bg-muted/50",
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-foreground">{s.symbol}</span>
+                            {s.note && (
+                              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-300">
+                                {s.note}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{s.name}</p>
+                          <p className="text-[11px] text-muted-foreground/70 font-mono truncate">{s.address.slice(0, 18)}…</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {allowlistMap[s.address.toLowerCase()] === false ? (
+                            <span className="text-[11px] font-medium text-amber-600 dark:text-amber-300">Not allowlisted</span>
+                          ) : (
+                            <span className={cn(
+                              "text-[11px] font-semibold",
+                              isSelected ? "text-ice-600 dark:text-ice-300" : "text-muted-foreground",
+                            )}>
+                              {isSelected ? "Selected" : "Select"}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <details className="text-xs">
+                  <summary className="cursor-pointer font-medium text-muted-foreground hover:text-foreground">
+                    Advanced: custom lending asset
+                  </summary>
+                  <div className="mt-3">
+                    <TokenAddressInput
+                      label="Lending Asset (Stablecoin)"
+                      placeholder={contracts?.usdc || DEFAULT_USDC}
+                      value={formData.lendingAsset}
+                      onChange={(addr) => setFormData({ lendingAsset: addr })}
+                      chainId={chainId}
+                      required
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Must be allowlisted by the factory (Rule 1) — non-allowlisted assets are rejected at deployment.</p>
+                  </div>
+                </details>
+              </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground">
-                  Initial Liquidity (tokens, 6 decimals for USDC) — minimum ${MIN_INITIAL_LIQUIDITY_USD.toLocaleString()}
+                  Initial Liquidity (tokens, {lendingDecimals} decimals for {lendingToken?.symbol || 'USDC'}) — minimum ${MIN_INITIAL_LIQUIDITY_USD.toLocaleString()}
                 </label>
                 <input
                   type="text"
@@ -909,10 +1002,10 @@ export default function CreateMarketPage() {
                 )}
                 {formData.liquidity && (() => {
                   try {
-                    const raw = parseUnits(formData.liquidity, 6);
+                    const raw = parseUnits(formData.liquidity, lendingDecimals);
                     const fee = raw * BigInt(50) / BigInt(10000);
                     const net = raw - fee;
-                    const fmt = (v: bigint) => formatUnits(v, 6);
+                    const fmt = (v: bigint) => formatUnits(v, lendingDecimals);
                     return (
                       <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-xs space-y-1">
                         <div className="flex justify-between"><span className="text-muted-foreground">Creation fee (0.5%)</span><span className="font-medium font-mono">{fmt(fee)} {lendingToken?.symbol || 'USDC'}</span></div>
@@ -929,7 +1022,7 @@ export default function CreateMarketPage() {
                     type="button"
                     onClick={async () => {
                       try {
-                        const raw = parseUnits(formData.liquidity, 6);
+                        const raw = parseUnits(formData.liquidity, lendingDecimals);
                         if (userAddress && formData.lendingAsset && publicClient && contracts.marketFactory) {
                           const allowance = await publicClient.readContract({
                             address: formData.lendingAsset as Address,
@@ -1088,7 +1181,7 @@ export default function CreateMarketPage() {
                       <div className="flex justify-between"><span className="text-muted-foreground">Collateral</span><span className="font-medium text-foreground">{collateralToken?.isValid ? `${collateralToken.name} (${collateralToken.symbol})` : formData.collateralAsset.slice(0,10)+"..."}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Lending Asset</span><span className="font-medium text-foreground">{lendingToken?.isValid ? `${lendingToken.name} (${lendingToken.symbol})` : formData.lendingAsset.slice(0,10)+"..."}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Initial Liquidity</span><span className="font-medium text-foreground">{formData.liquidity} {lendingToken?.symbol || "tokens"}</span></div>
-                      {formData.liquidity && (() => { try { const raw = parseUnits(formData.liquidity, 6); const fee = raw * BigInt(50) / BigInt(10000); const net = raw - fee; return <><div className="flex justify-between text-xs"><span className="text-muted-foreground">Protocol fee (0.5%)</span><span className="font-mono text-foreground">{formatUnits(fee, 6)} {lendingToken?.symbol || "USDC"}</span></div><div className="flex justify-between text-xs"><span className="text-muted-foreground">Net to market</span><span className="font-mono font-bold text-foreground">{formatUnits(net, 6)} {lendingToken?.symbol || "USDC"}</span></div></>; } catch { return null; }})()}
+                      {formData.liquidity && (() => { try { const raw = parseUnits(formData.liquidity, lendingDecimals); const fee = raw * BigInt(50) / BigInt(10000); const net = raw - fee; return <><div className="flex justify-between text-xs"><span className="text-muted-foreground">Protocol fee (0.5%)</span><span className="font-mono text-foreground">{formatUnits(fee, lendingDecimals)} {lendingToken?.symbol || "USDC"}</span></div><div className="flex justify-between text-xs"><span className="text-muted-foreground">Net to market</span><span className="font-mono font-bold text-foreground">{formatUnits(net, lendingDecimals)} {lendingToken?.symbol || "USDC"}</span></div></>; } catch { return null; }})()}
                       {isB20Selected && b20Info && <><div className="flex justify-between text-xs"><span className="text-muted-foreground">B20 Feed</span><span className="font-mono text-foreground">{b20Info.feed.slice(0,10)}...</span></div><div className="flex justify-between text-xs"><span className="text-muted-foreground">Staleness / Sequencer</span><span className="font-medium text-foreground">90000s / 0xBCF8…6433</span></div></>}
                     </div>
                   </div>

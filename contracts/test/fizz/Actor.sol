@@ -41,23 +41,4 @@ contract Actor {
     {
         return this.onERC721Received.selector;
     }
-
-    // ―――――――――――――――――――― ERC-1155 receiver ―――――――――――――――――――――
-
-    function onERC1155Received(address operator, address from, uint256 id, uint256 value, bytes calldata data)
-        external
-        returns (bytes4)
-    {
-        return this.onERC1155Received.selector;
-    }
-
-    function onERC1155BatchReceived(
-        address operator,
-        address from,
-        uint256[] calldata ids,
-        uint256[] calldata values,
-        bytes calldata data
-    ) external returns (bytes4) {
-        return this.onERC1155BatchReceived.selector;
-    }
 }

@@ -12,7 +12,6 @@ interface ILoanContract {
         address borrower_,
         uint256 collateralAmount_,
         uint256 tokenId_,
-        uint256 erc1155Amount_,
         uint256 principal_,
         uint256 interestAmount_,
         uint256 expiryTime_

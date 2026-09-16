@@ -1,17 +1,22 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { X, MagnifyingGlass, Info } from '@phosphor-icons/react';
+import { X, MagnifyingGlass, Info, CheckCircle } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SupportedAssetGrid } from './SupportedAssetGrid';
 import { TokenPreview } from './TokenPreview';
-import { TokenAddressInput } from './TokenAddressInput';
-import { fetchSupportedAssetsForAdapter, getSuggestedAdaptersForB20 } from '@/lib/supportedAssets';
+import { useAssetDiscovery, type DiscoveredAsset } from '@/lib/tokenMetadata';
+import {
+  fetchSupportedAssetsForAdapter,
+  getSuggestedAdaptersForB20,
+  adapterAssetType,
+  type SupportedAsset,
+} from '@/lib/supportedAssets';
+import { getProviderAsset } from '@/lib/providerBundles';
 import { B20_RISK_DISCLOSURE, isWithinB20TradingWindow, b20MarketHoursLabel } from '@/lib/b20';
-import type { SupportedAsset } from '@/lib/supportedAssets';
 import { cn } from '@/lib/utils';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 
@@ -42,9 +47,43 @@ export function SupportedAssetPicker({
   const [assets, setAssets] = useState<SupportedAsset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selected, setSelected] = useState<SupportedAsset | null>(null);
-  const [showManual, setShowManual] = useState(false);
+  const [caInput, setCaInput] = useState('');
 
   const effectiveChainId = chainId || 84532;
+  const acceptedType = adapterAssetType(adapterAddress, effectiveChainId);
+
+  const caIsValid = /^0x[a-fA-F0-9]{40}$/.test(caInput.trim());
+  const { data: discovered, isFetching: discoveryLoading } = useAssetDiscovery(
+    caIsValid ? caInput.trim() : undefined,
+    effectiveChainId,
+  );
+
+  // Adapter compatibility of a discovered asset with THIS picker's adapter
+  const discoveryCompat = useMemo(() => {
+    if (!discovered || discovered.kind === 'unknown') return null;
+    if (acceptedType === 'unknown') return { ok: true, message: 'Adapter accepts both ERC20 and ERC721 collateral' };
+    if (acceptedType === discovered.kind) return { ok: true, message: `Compatible — accepts ${acceptedType.toUpperCase()} collateral` };
+    return { ok: false, message: `This adapter accepts ${acceptedType.toUpperCase()} collateral; pasted asset is ${discovered.kind.toUpperCase()}` };
+  }, [discovered, acceptedType]);
+
+  // Build a selectable SupportedAsset from a discovered result
+  const discoveryAsset: SupportedAsset | null = useMemo(() => {
+    if (!discovered || discovered.kind === 'unknown' || discovered.error) return null;
+    const providerAsset = getProviderAsset(effectiveChainId, discovered.address);
+    return {
+      address: discovered.address,
+      symbol: discovered.symbol,
+      name: discovered.name,
+      decimals: discovered.decimals ?? 0,
+      logoUri: discovered.logoUri,
+      marketCount: 0,
+      totalLiquidity: '0',
+      isB20: providerAsset?.provider === 'b20',
+      provider: providerAsset?.provider,
+      requiresAllowlist: providerAsset?.requiresAllowlist,
+      assetType: discovered.kind,
+    };
+  }, [discovered, effectiveChainId]);
 
   useEffect(() => {
     if (!open || !adapterAddress) return;
@@ -69,7 +108,7 @@ export function SupportedAssetPicker({
     if (open) {
       setSelected(null);
       setQuery('');
-      setShowManual(false);
+      setCaInput('');
     }
   }, [open, adapterAddress]);
 
@@ -88,6 +127,12 @@ export function SupportedAssetPicker({
   const suggested = useMemo(() => getSuggestedAdaptersForB20(effectiveChainId), [effectiveChainId]);
   const isB20Selected = selected?.isB20;
 
+  const handleDiscoveryConfirm = () => {
+    if (!discoveryAsset) return;
+    setSelected(discoveryAsset);
+    onManualChange?.(discoveryAsset.address);
+  };
+
   const content = (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -101,7 +146,7 @@ export function SupportedAssetPicker({
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Preview all assets supported by this adapter on chain {effectiveChainId}. No need to paste addresses.
+          Pick from the supported list, or paste any contract address to find and verify an asset.
         </p>
       </div>
 
@@ -155,26 +200,64 @@ export function SupportedAssetPicker({
         )}
       </div>
 
-      {/* Advanced manual */}
-      <div className="shrink-0 px-5 py-3 border-t border-border bg-muted/30 dark:bg-muted/20">
-        <button
-          onClick={() => setShowManual(!showManual)}
-          className="text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          {showManual ? 'Hide' : 'Advanced:'} Paste custom address
-        </button>
-        {showManual && onManualChange && (
-          <div className="mt-3">
-            <TokenAddressInput
-              label="Custom collateral address"
-              placeholder="0x…"
-              value={manualValue || ''}
-              onChange={onManualChange}
-              chainId={effectiveChainId}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">Will validate via `getBytecode` and `useTokenMetadata` before enabling Confirm.</p>
-          </div>
+      {/* Find asset by contract address */}
+      <div className="shrink-0 px-5 py-3 border-t border-border bg-muted/30 dark:bg-muted/20 space-y-2">
+        <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+          <MagnifyingGlass className="h-3.5 w-3.5" /> Find asset by contract address
+        </label>
+        <input
+          type="text"
+          value={caInput}
+          onChange={(e) => setCaInput(e.target.value)}
+          placeholder="Paste 0x contract address…"
+          autoComplete="off"
+          spellCheck={false}
+          className={cn(
+            'w-full rounded-2xl border bg-muted/50 px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 transition-colors placeholder:text-muted-foreground',
+            caInput && !caIsValid ? 'border-destructive/50' : caIsValid && discoveryCompat?.ok ? 'border-emerald-500/30' : 'border-border focus:ring-ice-400',
+          )}
+        />
+        {caInput && !caIsValid && (
+          <p className="text-xs text-destructive">Invalid address format — must be a 0x address.</p>
         )}
+        {caIsValid && (discoveryLoading ? (
+          <p className="text-xs text-muted-foreground animate-pulse">Resolving asset on-chain…</p>
+        ) : discovered?.error ? (
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+            {discovered.error}
+          </div>
+        ) : discoveryAsset && discoveryCompat ? (
+          <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-foreground text-sm">{discovered.symbol}</span>
+                  <Badge variant="secondary" className="text-[11px]">
+                    {discovered.kind === 'erc721' ? 'ERC721 collection' : 'ERC20 token'}
+                  </Badge>
+                  {discovered.curatedMatch && (
+                    <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20 text-[11px]">
+                      <CheckCircle className="h-3 w-3 mr-0.5" /> Known asset
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{discovered.name} · {discovered.address.slice(0, 12)}…</p>
+              </div>
+              <TokenPreview name={discovered.name} symbol={discovered.symbol} decimals={discovered.decimals ?? 0} logoUri={discovered.logoUri} compact />
+            </div>
+            <div className={cn('text-xs flex items-start gap-1.5', discoveryCompat.ok ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300')}>
+              {discoveryCompat.ok ? <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+              <span>{discoveryCompat.message}</span>
+            </div>
+            <button
+              onClick={handleDiscoveryConfirm}
+              disabled={!discoveryCompat.ok}
+              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {discoveryCompat.ok ? 'Use this asset' : 'Not compatible with this adapter'}
+            </button>
+          </div>
+        ) : null)}
       </div>
 
       {/* Footer */}

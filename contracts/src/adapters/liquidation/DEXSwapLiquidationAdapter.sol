@@ -53,9 +53,24 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
 
     uint24 public constant DEFAULT_POOL_FEE = 3000;
 
+    event AdapterRouterUpdated(address indexed oldRouter, address indexed newRouter);
+    event MarketRouterUpdated(address indexed market, address indexed routerOverride);
+    event LiquidationExecuted(
+        address indexed market,
+        uint256 indexed loanId,
+        address indexed router,
+        uint256 collateralSwapped,
+        uint256 amountOut,
+        uint256 minOutput,
+        uint256 returnedToHolder
+    );
+
     struct MarketConfig {
         address assetAdapter;
         address oracleAdapter;
+        // Per-market router override (e.g., Aerodrome Slipstream vs Uniswap V3 on the same chain).
+        // address(0) → fall back to the adapter-wide `router`.
+        address router;
         uint24 poolFee;
         uint16 maxSlippageBps;
         bool isActive;
@@ -90,8 +105,36 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
     }
 
     function setRouter(address newRouter) external onlyOwner {
-        require(newRouter != address(0) && newRouter.code.length > 0, "Invalid router");
+        require(newRouter == address(0) || newRouter.code.length > 0, "Invalid router");
+        emit AdapterRouterUpdated(router, newRouter);
         router = newRouter;
+    }
+
+    /// @notice Set the swap router for one market (factory or adapter owner)
+    /// @dev Enables one adapter instance to serve markets on different venues
+    ///      (e.g., B20 stocks → Aerodrome Slipstream, RH stocks → Uniswap V3).
+    ///      router == address(0) clears the override (fall back to global router).
+    function setMarketRouter(address market, address routerOverride) external {
+        require(msg.sender == factory || msg.sender == owner, "Not authorized");
+        require(marketConfigs[market].isActive, "Unconfigured market");
+        require(routerOverride == address(0) || routerOverride.code.length > 0, "Invalid router");
+        marketConfigs[market].router = routerOverride;
+        emit MarketRouterUpdated(market, routerOverride);
+    }
+
+    /// @notice Effective swap routing config for a market (factory validation + monitoring)
+    /// @return effectiveRouter Per-market override if set, else the global router
+    /// @return poolFee Current per-market pool fee tier
+    /// @return maxSlippageBps Current per-market slippage bound
+    /// @return isActive Whether the market is configured
+    function getMarketLiquidationConfig(address market)
+        external
+        view
+        returns (address effectiveRouter, uint24 poolFee, uint16 maxSlippageBps, bool isActive)
+    {
+        MarketConfig storage config = marketConfigs[market];
+        effectiveRouter = config.router != address(0) ? config.router : router;
+        return (effectiveRouter, config.poolFee, config.maxSlippageBps, config.isActive);
     }
 
     function configure(address market, address assetAdapter) external onlyFactory {
@@ -100,6 +143,7 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
         marketConfigs[market] = MarketConfig({
             assetAdapter: assetAdapter,
             oracleAdapter: address(0),
+            router: address(0), // inherit global router until a per-market override is set
             poolFee: DEFAULT_POOL_FEE,
             maxSlippageBps: 0,
             isActive: true
@@ -136,6 +180,12 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
         require(collateralToken != address(0) && lendingToken != address(0), "Invalid market assets");
         require(collateralToken != lendingToken, "Identical market assets");
 
+        // Effective router: per-market override takes precedence over the global default
+        address effectiveRouter = marketConfigs[msg.sender].router != address(0)
+            ? marketConfigs[msg.sender].router
+            : router;
+        require(effectiveRouter != address(0), "Router not configured");
+
         (uint256 collateralAmount,,,,,,, address holder) = market.getLoanDetails(loanId);
         require(collateralAmount > 0 && holder != address(0), "Invalid loan collateral");
         (uint256 minimumOutput, bool oracleTrusted) = market.getLiquidationMinOutput(
@@ -147,13 +197,13 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
 
         IERC20 collateral = IERC20(collateralToken);
         require(collateral.balanceOf(address(this)) >= collateralAmount, "Collateral not handed off");
-        collateral.safeApprove(router, 0);
-        collateral.safeApprove(router, collateralAmount);
+        collateral.safeApprove(effectiveRouter, 0);
+        collateral.safeApprove(effectiveRouter, collateralAmount);
 
         // Deadline with 15-minute grace to prevent grief on congested blocks;
         // capped to avoid indefinite pending. minimumOutput already enforces slippage.
         uint256 swapDeadline = block.timestamp + 900;
-        uint256 amountOut = IUniswapV3SwapRouter(router).exactInputSingle(
+        uint256 amountOut = IUniswapV3SwapRouter(effectiveRouter).exactInputSingle(
             IUniswapV3SwapRouter.ExactInputSingleParams({
                 tokenIn: collateralToken,
                 tokenOut: lendingToken,
@@ -175,6 +225,16 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
             lending.safeTransfer(holder, returnedToHolder);
         }
         recoveredForLP = debtOwed;
+
+        emit LiquidationExecuted(
+            msg.sender,
+            loanId,
+            effectiveRouter,
+            collateralAmount,
+            amountOut,
+            minimumOutput,
+            returnedToHolder
+        );
     }
 
     /// @inheritdoc ILiquidationAdapter

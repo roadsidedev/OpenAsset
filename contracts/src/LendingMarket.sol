@@ -44,7 +44,7 @@ contract LPToken is ERC20 {
  * - Deploys isolated LoanContract per loan (minimal proxy)
  * - Uniswap V3 TWAP primary oracle + Chainlink fallback
  * - Circuit breaker with on-chain volatility tracking
- * - Multi-asset support (ERC20/721/1155)
+ * - Multi-asset support (ERC20/721)
  * - Revenue sharing (90% LP, 10% protocol)
  * - Comprehensive loan registry
  * 
@@ -288,21 +288,19 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     
     /**
      * @notice Request a loan by depositing collateral
-     * @param collateralAmount Amount of collateral (for ERC20/1155)
+     * @param collateralAmount Amount of collateral (for ERC20)
      * @param tokenId Token ID (for ERC721)
-     * @param erc1155Amount Amount (for ERC1155)
      * @return loanContract Address of created LoanContract
      */
     function requestLoan(
         uint256 collateralAmount,
-        uint256 tokenId,
-        uint256 erc1155Amount
-    ) 
-        external 
+        uint256 tokenId
+    )
+        external
         override
-        nonReentrant 
-        whenNotPaused 
-        returns (address loanContract) 
+        nonReentrant
+        whenNotPaused
+        returns (address loanContract)
     {
         // 1. CHECKS: Circuit breaker
         uint256 currentPrice = getCollateralPrice();
@@ -323,7 +321,6 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
         uint256 collateralValue = _calculateCollateralValue(
             collateralAmount,
             tokenId,
-            erc1155Amount,
             currentPrice
         );
         
@@ -347,7 +344,6 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
             msg.sender,
             collateralAmount,
             tokenId,
-            erc1155Amount,
             maxLoan,
             interestAmount,
             expiryTime
@@ -367,8 +363,7 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
             collateralAsset,
             msg.sender,
             loanContract,
-            assetType == AssetType.ERC721 ? tokenId : collateralAmount,
-            erc1155Amount
+            assetType == AssetType.ERC721 ? tokenId : collateralAmount
         );
         
         // 5. INTERACTIONS: Transfer loan to borrower and fee to treasury
@@ -436,15 +431,12 @@ contract LendingMarket is ILendingMarket, ReentrancyGuard, Pausable {
     function _calculateCollateralValue(
         uint256 collateralAmount,
         uint256 tokenId,
-        uint256 erc1155Amount,
         uint256 price
     ) internal view returns (uint256 value) {
         if (assetType == AssetType.ERC20) {
             value = (collateralAmount * price) / 1e18;
-        } else if (assetType == AssetType.ERC721) {
-            value = price; // Floor price
         } else {
-            value = (erc1155Amount * price) / 1e18;
+            value = price; // Floor price
         }
     }
     

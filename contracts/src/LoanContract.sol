@@ -49,7 +49,6 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
     
     uint256 public collateralAmount;
     uint256 public tokenId; // For ERC721
-    uint256 public erc1155Amount; // For ERC1155
     uint256 public principal;
     uint256 public interestAmount;
     uint256 public startTime;
@@ -123,9 +122,8 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
      * @notice Initialize loan contract (replaces constructor for minimal proxy)
      * @dev Can only be called once by LendingMarket
      * @param borrower_ Borrower address
-     * @param collateralAmount_ Amount of collateral (for ERC20/1155)
+     * @param collateralAmount_ Amount of collateral (for ERC20)
      * @param tokenId_ Token ID (for ERC721)
-     * @param erc1155Amount_ Amount (for ERC1155)
      * @param principal_ Loan principal before fees
      * @param interestAmount_ Interest amount to be paid
      * @param expiryTime_ Loan expiry timestamp
@@ -134,7 +132,6 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         address borrower_,
         uint256 collateralAmount_,
         uint256 tokenId_,
-        uint256 erc1155Amount_,
         uint256 principal_,
         uint256 interestAmount_,
         uint256 expiryTime_
@@ -160,7 +157,6 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         borrower = borrower_;
         collateralAmount = collateralAmount_;
         tokenId = tokenId_;
-        erc1155Amount = erc1155Amount_;
         principal = principal_;
         interestAmount = interestAmount_;
         startTime = block.timestamp;
@@ -215,10 +211,9 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             AssetHandler.AssetType(uint8(assetType)),
             collateralAsset,
             borrower,
-            assetType == AssetType.ERC20 ? collateralAmount : tokenId,
-            erc1155Amount
+            assetType == AssetType.ERC20 ? collateralAmount : tokenId
         );
-        
+
         emit LoanRepaid(borrower, totalRepayment, block.timestamp);
     }
     
@@ -242,10 +237,8 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         // INTERACTIONS - Asset-specific liquidation (already safe, but now extra secure)
         if (assetType == AssetType.ERC20) {
             _liquidateERC20(totalDebt, collateralValue);
-        } else if (assetType == AssetType.ERC721) {
-            _liquidateERC721(totalDebt, collateralValue);
         } else {
-            _liquidateERC1155(totalDebt, collateralValue);
+            _liquidateERC721(totalDebt, collateralValue);
         }
     }
     
@@ -282,8 +275,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
                 AssetHandler.AssetType(uint8(assetType)),
                 collateralAsset,
                 msg.sender,
-                collateralAmount,
-                0
+                collateralAmount
             );
             
             emit LoanLiquidated(msg.sender, borrower, collateralAmount, repaymentAmount, block.timestamp);
@@ -351,8 +343,7 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
             AssetHandler.AssetType(uint8(assetType)),
             collateralAsset,
             msg.sender,
-            tokenId,
-            0
+            tokenId
         );
         
         // If NFT value > debt, liquidator pays surplus to borrower
@@ -364,96 +355,9 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         
         emit LoanLiquidated(msg.sender, borrower, 1, totalDebt, block.timestamp);
     }
-    
-    /**
-     * @notice Liquidate ERC1155 collateral (gradual like ERC20)
-     * @param totalDebt Total debt owed
-     * @param collateralValue Current collateral value
-     */
-    function _liquidateERC1155(uint256 totalDebt, uint256 collateralValue) internal {
-        IERC20 loanToken = IERC20(loanAsset);
-        
-        if (collateralValue <= totalDebt) {
-            // Underwater: Liquidator gets all collateral
-            uint256 repaymentAmount = collateralValue;
-            
-            // Pull debt repayment from liquidator
-            loanToken.safeTransferFrom(msg.sender, address(this), repaymentAmount);
-            
-            // Calculate revenue split
-            uint256 platformShare = (interestAmount * 1000) / BPS_DENOMINATOR; // 10%
-            uint256 remaining = repaymentAmount > principal ? repaymentAmount - principal : 0;
-            uint256 lpShare = remaining > platformShare ? remaining - platformShare : 0;
-            
-            // Send to lending market and treasury
-            loanToken.safeTransfer(lendingMarket, principal + lpShare);
-            if (platformShare > 0) {
-                loanToken.safeTransfer(protocolTreasury, platformShare);
-            }
-            
-            // Transfer all collateral to liquidator
-            AssetHandler.transferAssetOut(
-                AssetHandler.AssetType(uint8(assetType)),
-                collateralAsset,
-                msg.sender,
-                tokenId,
-                erc1155Amount
-            );
-            
-            emit LoanLiquidated(msg.sender, borrower, erc1155Amount, repaymentAmount, block.timestamp);
-        } else {
-            // Sufficient collateral: Gradual liquidation
-            // Calculate exact collateral needed
-            uint256 collateralPrice = _getCollateralPrice();
-            uint256 collateralNeeded = (totalDebt * 1e18) / collateralPrice;
-            
-            // Add 5% liquidation penalty
-            uint256 penalty = (collateralNeeded * 500) / BPS_DENOMINATOR;
-            uint256 totalCollateralSeized = collateralNeeded + penalty;
-            
-            if (totalCollateralSeized > erc1155Amount) {
-                totalCollateralSeized = erc1155Amount;
-            }
-            
-            uint256 surplus = erc1155Amount - totalCollateralSeized;
-            
-            // Pull debt repayment
-            loanToken.safeTransferFrom(msg.sender, address(this), totalDebt);
-            
-            // Calculate revenue split
-            uint256 platformShare = (interestAmount * 1000) / BPS_DENOMINATOR;
-            uint256 lpShare = interestAmount - platformShare;
-            
-            // Send to market and treasury
-            loanToken.safeTransfer(lendingMarket, principal + lpShare);
-            loanToken.safeTransfer(protocolTreasury, platformShare);
-            
-            // Transfer seized collateral to liquidator
-            AssetHandler.transferAssetOut(
-                AssetHandler.AssetType(uint8(assetType)),
-                collateralAsset,
-                msg.sender,
-                tokenId,
-                totalCollateralSeized
-            );
-            
-            // Return surplus to borrower
-            if (surplus > 0) {
-                AssetHandler.transferAssetOut(
-                    AssetHandler.AssetType(uint8(assetType)),
-                    collateralAsset,
-                    borrower,
-                    tokenId,
-                    surplus
-                );
-            }
-            
-            emit LoanLiquidated(msg.sender, borrower, totalCollateralSeized, totalDebt, block.timestamp);
-        }
-    }
-    
+
     // ============ View Functions ============
-    
+
     /**
      * @notice Get current health factor
      * @return healthFactor Health factor with 18 decimals (1e18 = 100%)
@@ -525,10 +429,8 @@ contract LoanContract is ILoanContract, ReentrancyGuard {
         
         if (assetType == AssetType.ERC20) {
             value = (collateralAmount * price) / 1e18;
-        } else if (assetType == AssetType.ERC721) {
-            value = price; // NFT floor price in loan asset
         } else {
-            value = (erc1155Amount * price) / 1e18;
+            value = price; // NFT floor price in loan asset
         }
     }
     

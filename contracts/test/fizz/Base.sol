@@ -88,7 +88,7 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
 
     function _deployAdaptersAndFactory() internal {
         registry = new AdapterRegistry(admin);
-        MarketDeployer deployer = new MarketDeployer();
+        MarketDeployer deployer = new MarketDeployer(address(new LendingMarketV2()));
         factory = new MarketFactoryV2(admin, admin, address(registry), deployer);
         factory.addLendingAsset(address(lendingAsset));
 

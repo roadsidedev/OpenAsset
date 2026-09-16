@@ -147,7 +147,7 @@ contract MarketFactory is IMarketFactory, Ownable, ReentrancyGuard, Pausable {
      * @notice Create a new isolated lending market
      * @param collateralAsset Collateral token address
      * @param loanAsset Loan token address (must be whitelisted stablecoin)
-     * @param assetType Type of collateral (ERC20/721/1155)
+     * @param assetType Type of collateral (ERC20/721)
      * @param oracleType Type of oracle (Uniswap V3 TWAP/Chainlink/NFT)
      * @param primaryOracle Primary oracle address (Uni V3 pool or Chainlink feed)
      * @param nftOracle NFT oracle address (if applicable)

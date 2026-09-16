@@ -354,6 +354,22 @@ contract MarketFactoryV2 is ReentrancyGuard {
                 );
                 require(success, "Liquidation risk configuration failed");
             }
+
+            // Rule 6: DEX-routed liquidation adapters must expose a resolvable swap route.
+            // Adapters that don't implement getMarketLiquidationConfig (non-DEX paths like
+            // NFT auction or issuer redemption) are exempt — the low-level call reverts and we skip.
+            (bool configCheckOk, bytes memory configCheckData) = config.liquidationAdapter.staticcall(
+                abi.encodeWithSignature("getMarketLiquidationConfig(address)", marketAddress)
+            );
+            if (configCheckOk && configCheckData.length >= 96) {
+                (address effectiveRouter, uint24 poolFee, , ) = abi.decode(
+                    configCheckData,
+                    (address, uint24, uint16, bool)
+                );
+                require(effectiveRouter != address(0), "Liquidation router unset");
+                require(effectiveRouter.code.length > 0, "Liquidation router has no code");
+                require(poolFee > 0, "Liquidation pool fee unset");
+            }
         }
 
         // Configure Position Adapter — if cloned, the clone was already initialized with compliance adapter

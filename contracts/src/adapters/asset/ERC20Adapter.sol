@@ -24,6 +24,12 @@ contract ERC20Adapter is IAssetAdapter {
 
     mapping(address => MarketConfig) public marketConfigs;
 
+    event MarketConfigured(address indexed market, address indexed token);
+    event CollateralEscrowed(address indexed market, address indexed from, uint256 amount);
+    event CollateralReleased(address indexed market, address indexed to, uint256 amount);
+
+    error NotAnERC20(address token);
+
     modifier onlyFactory() {
         require(msg.sender == factory, "Only factory");
         _;
@@ -34,10 +40,21 @@ contract ERC20Adapter is IAssetAdapter {
         factory = _factory;
     }
 
-    function configure(address market, address collateralToken) external onlyFactory {
+    function configure(address market, address collateralToken) external override onlyFactory {
         require(market != address(0), "Invalid market");
         require(collateralToken != address(0), "Invalid token");
+
+        // Fail-closed: reject collateral that doesn't implement ERC20. Low-level probe
+        // with explicit returndata-length guard (a plain try/catch on an EOA target
+        // panics on empty returndata instead of entering the catch block).
+        if (collateralToken.code.length == 0) revert NotAnERC20(collateralToken);
+        (bool probeOk, bytes memory probeData) = collateralToken.staticcall(
+            abi.encodeWithSignature("decimals()")
+        );
+        if (!probeOk || probeData.length < 32) revert NotAnERC20(collateralToken);
+
         marketConfigs[market] = MarketConfig({ token: IERC20(collateralToken) });
+        emit MarketConfigured(market, collateralToken);
     }
 
     /// @notice Escrow ERC20 collateral from borrower to the calling market
@@ -45,6 +62,7 @@ contract ERC20Adapter is IAssetAdapter {
         IERC20 token = marketConfigs[msg.sender].token;
         require(address(token) != address(0), "Unconfigured market");
         token.safeTransferFrom(from, msg.sender, amountOrId);
+        emit CollateralEscrowed(msg.sender, from, amountOrId);
     }
 
     /// @notice Release ERC20 collateral from market to recipient
@@ -52,12 +70,14 @@ contract ERC20Adapter is IAssetAdapter {
         IERC20 token = marketConfigs[msg.sender].token;
         require(address(token) != address(0), "Unconfigured market");
         token.safeTransferFrom(msg.sender, to, amountOrId);
+        emit CollateralReleased(msg.sender, to, amountOrId);
     }
 
     /// @notice Check if ERC20 transfer would succeed
     /// @dev Allowance is checked against this adapter (address(this)), which is the
     ///      actual spender in `escrow` (adapter calls token.safeTransferFrom).
-    ///      For fee-on-transfer or rebasing tokens, also verify via balance delta in escrow.
+    ///      For fee-on-transfer or rebasing tokens, the market additionally verifies
+    ///      delivered balance delta in escrow (fail-closed invariant).
     function isTransferable(address from, address to, uint256 amountOrId) external view override returns (bool) {
         if (from == address(0) || to == address(0)) return false;
         if (amountOrId == 0) return false;

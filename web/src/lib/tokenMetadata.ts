@@ -13,6 +13,28 @@ const ERC20_READ_ABI = parseAbi([
   'function decimals() external view returns (uint8)',
 ]);
 
+const ERC721_PROBE_ABI = parseAbi([
+  'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
+  'function name() external view returns (string)',
+  'function symbol() external view returns (string)',
+  'function ownerOf(uint256 tokenId) external view returns (address)',
+]);
+
+export type DiscoveredAssetKind = 'erc20' | 'erc721' | 'unknown';
+
+export interface DiscoveredAsset {
+  address: string;
+  kind: DiscoveredAssetKind;
+  name: string;
+  symbol: string;
+  decimals: number | null;
+  logoUri: string | null;
+  // true when the pasted CA is a curated/provider asset (B20, Robinhood stock, env-curated NFT)
+  curatedMatch: boolean;
+  provider?: string;
+  error: string | null;
+}
+
 interface TokenMetadata {
   name: string;
   symbol: string;
@@ -88,6 +110,144 @@ function getLocalLogo(symbol: string): string | null {
   const brand = getBrandLogoUrl(symbol);
   if (brand) return brand;
   return null;
+}
+
+export function useAssetDiscovery(address: string | undefined, chainId?: number) {
+  const effectiveChainId = chainId || 84532;
+  const publicClient = useMemo(() => createChainClient(effectiveChainId), [effectiveChainId]);
+  const enabled = !!address && isAddress(address) && !!publicClient;
+
+  return useQuery<DiscoveredAsset>({
+    queryKey: ['assetDiscovery', address?.toLowerCase(), effectiveChainId],
+    queryFn: async (): Promise<DiscoveredAsset> => {
+      if (!address || !publicClient) {
+        return { address: address || '', kind: 'unknown', name: '', symbol: '', decimals: null, logoUri: null, curatedMatch: false, error: 'No address' };
+      }
+
+      let checksumAddr: string;
+      try {
+        checksumAddr = getAddress(address);
+      } catch {
+        return { address, kind: 'unknown', name: '', symbol: '', decimals: null, logoUri: null, curatedMatch: false, error: 'Invalid address format.' };
+      }
+      const target = checksumAddr as `0x${string}`;
+
+      // Standard detection: ERC20 first (metadata trio), then ERC721 (ERC-165 probe)
+      try {
+        const [nameResult, symbolResult, decimalsResult] = await Promise.allSettled([
+          publicClient.readContract({ address: target, abi: ERC20_READ_ABI, functionName: 'name' }),
+          publicClient.readContract({ address: target, abi: ERC20_READ_ABI, functionName: 'symbol' }),
+          publicClient.readContract({ address: target, abi: ERC20_READ_ABI, functionName: 'decimals' }),
+        ]);
+        if (nameResult.status === 'fulfilled' && symbolResult.status === 'fulfilled' && decimalsResult.status === 'fulfilled') {
+          const name = String(nameResult.value);
+          const symbol = String(symbolResult.value);
+          const decimals = Number(decimalsResult.value);
+          const match = await matchCurated(effectiveChainId, checksumAddr, symbol);
+          return {
+            address: checksumAddr,
+            kind: 'erc20',
+            name,
+            symbol,
+            decimals,
+            logoUri: (await resolveLogo(effectiveChainId, checksumAddr, symbol)) || match?.logo || null,
+            curatedMatch: !!match,
+            provider: match?.provider,
+            error: null,
+          };
+        }
+      } catch {
+        // fall through to ERC721 detection
+      }
+
+      // ERC721 detection: ERC-165 interface id
+      try {
+        const is721 = await publicClient.readContract({
+          address: target,
+          abi: ERC721_PROBE_ABI,
+          functionName: 'supportsInterface',
+          args: ['0x80ac58cd' as `0x${string}`],
+        });
+        if (is721) {
+          const [nameResult, symbolResult] = await Promise.allSettled([
+            publicClient.readContract({ address: target, abi: ERC721_PROBE_ABI, functionName: 'name' }),
+            publicClient.readContract({ address: target, abi: ERC721_PROBE_ABI, functionName: 'symbol' }),
+          ]);
+          const name = nameResult.status === 'fulfilled' ? String(nameResult.value) : 'Unknown Collection';
+          const symbol = symbolResult.status === 'fulfilled' ? String(symbolResult.value) : 'NFT';
+          const match = await matchCurated(effectiveChainId, checksumAddr, symbol);
+          return {
+            address: checksumAddr,
+            kind: 'erc721',
+            name,
+            symbol,
+            decimals: null,
+            logoUri: (await resolveLogo(effectiveChainId, checksumAddr, symbol)) || match?.logo || null,
+            curatedMatch: !!match,
+            provider: match?.provider,
+            error: null,
+          };
+        }
+      } catch {
+        // not ERC721 either
+      }
+
+      return {
+        address: checksumAddr,
+        kind: 'unknown',
+        name: '',
+        symbol: '',
+        decimals: null,
+        logoUri: null,
+        curatedMatch: false,
+        error: 'Contract does not implement ERC20 or ERC721 interfaces.',
+      };
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+async function matchCurated(
+  chainId: number,
+  address: string,
+  symbol: string
+): Promise<{ provider?: string; logo?: string | null } | undefined> {
+  try {
+    const { getProviderAsset } = await import('./providerBundles');
+    const providerAsset = getProviderAsset(chainId, address);
+    if (providerAsset) {
+      return { provider: providerAsset.provider, logo: getBrandLogoUrl(providerAsset.symbol) };
+    }
+  } catch {}
+  // env-curated NFT list (kept local to avoid a circular import with supportedAssets)
+  try {
+    const raw = process.env[`NEXT_PUBLIC_CURATED_NFTS_${chainId}`];
+    if (raw) {
+      const nft = raw
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean)
+        .map((e) => {
+          const [addr, sym] = e.split('|').map((s) => s.trim());
+          return { address: addr, symbol: sym || 'NFT' };
+        })
+        .find((n) => n.address.toLowerCase() === address.toLowerCase());
+      if (nft) return { provider: undefined, logo: getBrandLogoUrl(nft.symbol) };
+    }
+  } catch {}
+  const brand = getBrandLogoUrl(symbol);
+  return brand ? { provider: undefined, logo: brand } : undefined;
+}
+
+async function resolveLogo(chainId: number, address: string, symbol: string): Promise<string | null> {
+  try {
+    const logos = await fetchTokenListLogos(chainId);
+    return logos.get(address.toLowerCase()) || getLocalLogo(symbol);
+  } catch {
+    return getLocalLogo(symbol);
+  }
 }
 
 export function useTokenMetadata(address: string | undefined, chainId?: number) {

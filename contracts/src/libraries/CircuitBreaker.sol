@@ -4,7 +4,6 @@ pragma solidity 0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 /**
  * @title CircuitBreaker
@@ -183,88 +182,78 @@ library CircuitBreaker {
 
 /**
  * @title AssetHandler
- * @notice Multi-asset transfer handler for ERC20/721/1155
+ * @notice Multi-asset transfer handler for ERC20/721
  */
 library AssetHandler {
     using SafeERC20 for IERC20;
-    
-    enum AssetType { ERC20, ERC721, ERC1155 }
-    
+
+    enum AssetType { ERC20, ERC721 }
+
     error InvalidAssetType();
     error InvalidTransfer();
     error ZeroAmount();
     error ZeroAddress();
-    
+
     /**
      * @notice Transfer asset from sender to recipient
      * @param assetType Type of asset
      * @param asset Asset contract address
      * @param from Sender address
      * @param to Recipient address
-     * @param amountOrTokenId Amount (ERC20/1155) or Token ID (ERC721)
-     * @param erc1155Amount Amount for ERC1155 (ignored for others)
+     * @param amountOrTokenId Amount (ERC20) or Token ID (ERC721)
      */
     function transferAsset(
         AssetType assetType,
         address asset,
         address from,
         address to,
-        uint256 amountOrTokenId,
-        uint256 erc1155Amount
+        uint256 amountOrTokenId
     ) internal {
         if (asset == address(0)) revert ZeroAddress();
         if (to == address(0)) revert ZeroAddress();
-        
+
         if (assetType == AssetType.ERC20) {
             if (amountOrTokenId == 0) revert ZeroAmount();
             IERC20(asset).safeTransferFrom(from, to, amountOrTokenId);
         } else if (assetType == AssetType.ERC721) {
             IERC721(asset).safeTransferFrom(from, to, amountOrTokenId);
-        } else if (assetType == AssetType.ERC1155) {
-            if (erc1155Amount == 0) revert ZeroAmount();
-            IERC1155(asset).safeTransferFrom(from, to, amountOrTokenId, erc1155Amount, "");
         } else {
             revert InvalidAssetType();
         }
     }
-    
+
     /**
      * @notice Transfer asset from this contract to recipient
      * @param assetType Type of asset
      * @param asset Asset contract address
      * @param to Recipient address
-     * @param amountOrTokenId Amount (ERC20/1155) or Token ID (ERC721)
-     * @param erc1155Amount Amount for ERC1155
+     * @param amountOrTokenId Amount (ERC20) or Token ID (ERC721)
      */
     function transferAssetOut(
         AssetType assetType,
         address asset,
         address to,
-        uint256 amountOrTokenId,
-        uint256 erc1155Amount
+        uint256 amountOrTokenId
     ) internal {
         if (asset == address(0)) revert ZeroAddress();
         if (to == address(0)) revert ZeroAddress();
-        
+
         if (assetType == AssetType.ERC20) {
             if (amountOrTokenId == 0) revert ZeroAmount();
             IERC20(asset).safeTransfer(to, amountOrTokenId);
         } else if (assetType == AssetType.ERC721) {
             IERC721(asset).safeTransferFrom(address(this), to, amountOrTokenId);
-        } else if (assetType == AssetType.ERC1155) {
-            if (erc1155Amount == 0) revert ZeroAmount();
-            IERC1155(asset).safeTransferFrom(address(this), to, amountOrTokenId, erc1155Amount, "");
         } else {
             revert InvalidAssetType();
         }
     }
-    
+
     /**
      * @notice Get balance of asset for an address
      * @param assetType Type of asset
      * @param asset Asset contract address
      * @param account Account to check
-     * @param tokenId Token ID (for ERC721/1155)
+     * @param tokenId Token ID (for ERC721)
      * @return balance Balance amount
      */
     function getBalance(
@@ -277,31 +266,29 @@ library AssetHandler {
             balance = IERC20(asset).balanceOf(account);
         } else if (assetType == AssetType.ERC721) {
             balance = IERC721(asset).ownerOf(tokenId) == account ? 1 : 0;
-        } else if (assetType == AssetType.ERC1155) {
-            balance = IERC1155(asset).balanceOf(account, tokenId);
         }
     }
-    
+
     /**
      * @notice Validate asset contract implements expected interface
      * @param assetType Type of asset
      * @param asset Asset contract address
      * @return isValid True if asset contract is valid
      */
-    function validateAsset(AssetType assetType, address asset) 
-        internal 
-        view 
-        returns (bool isValid) 
+    function validateAsset(AssetType assetType, address asset)
+        internal
+        view
+        returns (bool isValid)
     {
         if (asset == address(0)) return false;
-        
+
         // Check contract has code
         uint256 size;
         assembly {
             size := extcodesize(asset)
         }
         if (size == 0) return false;
-        
+
         if (assetType == AssetType.ERC20) {
             try IERC20(asset).totalSupply() returns (uint256) {
                 return true;
@@ -315,11 +302,7 @@ library AssetHandler {
                 return false;
             }
         } else {
-            try IERC1155(asset).supportsInterface(0xd9b67a26) returns (bool isSupported) {
-                return isSupported;
-            } catch {
-                return false;
-            }
+            return false;
         }
     }
 }

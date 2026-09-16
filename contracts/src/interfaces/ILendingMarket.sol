@@ -13,8 +13,7 @@ interface ILendingMarket {
     
     function requestLoan(
         uint256 collateralAmount,
-        uint256 tokenId,
-        uint256 erc1155Amount
+        uint256 tokenId
     ) external returns (address loanContract);
     
     function getAvailableLiquidity() external view returns (uint256 available);

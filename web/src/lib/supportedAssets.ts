@@ -20,6 +20,7 @@ export interface SupportedAsset {
   isB20: boolean;
   provider?: ProviderFamily;
   requiresAllowlist?: boolean;
+  assetType?: 'erc20' | 'erc721';
   extraMetadata?: Record<string, string>;
 }
 
@@ -132,6 +133,7 @@ function getCuratedFallback(adapterAddress: string, chainId: number): SupportedA
       marketCount: 0,
       totalLiquidity: '0',
       isB20: true,
+      assetType: 'erc20' as const,
     }));
   }
   if (isERC20Adapter) {
@@ -148,9 +150,23 @@ function getCuratedFallback(adapterAddress: string, chainId: number): SupportedA
       marketCount: 0,
       totalLiquidity: '0',
       isB20: false,
+      assetType: 'erc20' as const,
     }));
   }
-  // For other adapters (ERC721 etc), return empty — picker will show manual input only
+  if (contracts?.erc721Adapter && lower === contracts.erc721Adapter.toLowerCase()) {
+    const list = [...(CURATED_ERC721[chainId] || []), ...loadEnvCuratedNfts(chainId)];
+    return list.map(t => ({
+      address: t.address,
+      symbol: t.symbol,
+      name: t.name,
+      decimals: 0,
+      marketCount: 0,
+      totalLiquidity: '0',
+      isB20: false,
+      assetType: 'erc721' as const,
+    }));
+  }
+  // For other adapters, return empty — picker will show discovery search only
   return [];
 }
 
@@ -166,6 +182,7 @@ function providerAssetToSupportedAsset(asset: ProviderAsset): SupportedAsset {
     isB20: asset.provider === 'b20',
     provider: asset.provider,
     requiresAllowlist: asset.requiresAllowlist,
+    assetType: 'erc20' as const,
   };
 }
 
@@ -181,13 +198,56 @@ async function enrichWithLogos(assets: SupportedAsset[], _chainId: number): Prom
   });
 }
 
+// Curated ERC721 (NFT collection) fallback for the ERC721 asset adapter.
+// Extensible via NEXT_PUBLIC_CURATED_NFTS_<chainId> as CSV entries `address|symbol|name`.
+const CURATED_ERC721: Record<number, Array<{ address: string; symbol: string; name: string }>> = {};
+
+function loadEnvCuratedNfts(chainId: number): Array<{ address: string; symbol: string; name: string }> {
+  const raw = process.env[`NEXT_PUBLIC_CURATED_NFTS_${chainId}`];
+  if (!raw) return [];
+  try {
+    return raw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const [address, symbol, name] = entry.split('|').map((s) => s.trim());
+        if (!address?.startsWith('0x')) return null;
+        return { address, symbol: symbol || 'NFT', name: name || symbol || 'Collection' };
+      })
+      .filter((x): x is { address: string; symbol: string; name: string } => x !== null);
+  } catch {
+    return [];
+  }
+}
+
 // Helper to determine if adapter supports picker (has curated list)
 export function adapterSupportsPicker(adapterAddress: string | undefined, chainId?: number): boolean {
   if (!adapterAddress || !chainId) return false;
   const contracts = getContracts(chainId);
   if (!contracts) return false;
   const lower = adapterAddress.toLowerCase();
-  return lower === contracts.b20AssetAdapter?.toLowerCase() || lower === contracts.erc20Adapter?.toLowerCase();
+  return (
+    lower === contracts.b20AssetAdapter?.toLowerCase() ||
+    lower === contracts.erc20Adapter?.toLowerCase() ||
+    lower === contracts.erc721Adapter?.toLowerCase()
+  );
+}
+
+// Helper to determine the asset standard an adapter accepts
+export function adapterAssetType(adapterAddress: string | undefined, chainId?: number): 'erc20' | 'erc721' | 'unknown' {
+  if (!adapterAddress || !chainId) return 'unknown';
+  const contracts = getContracts(chainId);
+  if (!contracts) return 'unknown';
+  const lower = adapterAddress.toLowerCase();
+  if (lower === contracts.erc721Adapter?.toLowerCase()) return 'erc721';
+  if (
+    lower === contracts.erc20Adapter?.toLowerCase() ||
+    lower === contracts.b20AssetAdapter?.toLowerCase()
+  ) {
+    return 'erc20';
+  }
+  return 'unknown';
 }
 
 // Auto-select companion adapters for B20 (suggest stack)
