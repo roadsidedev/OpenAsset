@@ -72,9 +72,17 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
         owner = msg.sender;
     }
 
+    // Review M9: emit on every privileged mutation — feed swaps, session changes,
+    // and ownership/configurator rotations must leave an on-chain audit trail.
+    event FeedRegistered(address indexed market, address indexed feed, uint256 maxStaleness, address l2Sequencer);
+    event TradingWindowUpdated(address indexed market, bool enforced);
+    event OwnerTransferred(address indexed oldOwner, address indexed newOwner);
+    event ConfiguratorUpdated(address indexed configurator, bool authorized);
+
     function transferOwner(address newOwner) external {
         require(msg.sender == owner, "Only owner");
         require(newOwner != address(0), "Invalid owner");
+        emit OwnerTransferred(owner, newOwner);
         owner = newOwner;
     }
 
@@ -106,6 +114,7 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
             checkTokenOraclePause: false,
             enforceTradingWindow: true
         });
+        emit FeedRegistered(market, _feed, _maxStaleness, _l2Sequencer);
     }
 
     /**
@@ -132,6 +141,7 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
             checkTokenOraclePause: true,
             enforceTradingWindow: true
         });
+        emit FeedRegistered(market, _feed, _maxStaleness, _l2Sequencer);
     }
 
     /// @notice Toggle trading window enforcement per market (e.g., disable for 24/7 NAV)
@@ -140,11 +150,13 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
         MarketConfig storage cfg = marketConfigs[market];
         require(address(cfg.feed) != address(0), "Market not configured");
         cfg.enforceTradingWindow = enforce;
+        emit TradingWindowUpdated(market, enforce);
     }
 
     function setAuthorizedConfigurator(address configurator, bool authorized) external onlyFactoryOrOwner {
         require(configurator != address(0), "Invalid configurator");
         authorizedConfigurators[configurator] = authorized;
+        emit ConfiguratorUpdated(configurator, authorized);
     }
 
     /// @inheritdoc IOracleAdapter
@@ -184,6 +196,9 @@ contract ChainlinkEquityFeedAdapter is IOracleAdapter {
     }
 
     /// @inheritdoc IOracleAdapter
+    /// @dev Review M14 note: informational only — ignores `secondsAgo` and returns
+    /// the latest feed reading with NO staleness, window, or trust checks. The
+    /// circuit breaker keeps its own price baseline; never use this for consensus.
     function getHistoricalPrice(uint256) external view override returns (uint256) {
         MarketConfig storage config = marketConfigs[msg.sender];
         if (address(config.feed) == address(0)) return 0;

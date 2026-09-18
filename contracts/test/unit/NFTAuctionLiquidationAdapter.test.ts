@@ -96,16 +96,61 @@ describe("NFTAuctionLiquidationAdapter", function () {
     expect(holderAfter - holderBefore).to.be.at.least(250n * 10n ** 6n - 100_000n); // ≤ ~25s decay drift
   });
 
-  it("validates EIP-1271 for registered Seaport orders and invalidates after native sale", async function () {
-    const { operator, buyer, lending, nft, market, adapter } = await deployFixture();
+  function makeOrderComponents(
+    adapterAddress: string,
+    nftAddress: string,
+    lendingAddress: string,
+    marketAddress: string,
+    holderAddress: string,
+    tokenId: bigint,
+    debtOwed: bigint,
+    surplus: bigint
+  ) {
+    return {
+      offerer: adapterAddress,
+      zone: ethers.ZeroAddress,
+      offer: [
+        { itemType: 2n, token: nftAddress, identifierOrCriteria: tokenId, startAmount: 1n, endAmount: 1n },
+      ],
+      consideration: [
+        { itemType: 1n, token: lendingAddress, identifierOrCriteria: 0n, startAmount: debtOwed, endAmount: debtOwed, recipient: marketAddress },
+        { itemType: 1n, token: lendingAddress, identifierOrCriteria: 0n, startAmount: surplus, endAmount: surplus, recipient: holderAddress },
+      ],
+      orderType: 0n,
+      startTime: 0n,
+      endTime: ethers.MaxUint256,
+      zoneHash: ethers.ZeroHash,
+      salt: 1n,
+      conduitKey: ethers.ZeroHash,
+      totalOriginalConsiderationItems: 2n,
+      counter: 0n,
+    };
+  }
+
+  it("validates EIP-1271 for registered Seaport orders (hash derived on-chain) and invalidates after native sale", async function () {
+    const { operator, buyer, lending, nft, market, adapter, holder } = await deployFixture();
 
     const debtOwed = 500n * 10n ** 6n;
     await market.invokeSettle(await adapter.getAddress(), 1, debtOwed);
 
-    const orderHash = ethers.id("seaport-order-1");
-    await adapter
-      .connect(operator)
-      .registerOrder(await market.getAddress(), 1, orderHash, ethers.toUtf8Bytes("order-components"));
+    const components = makeOrderComponents(
+      await adapter.getAddress(),
+      await nft.getAddress(),
+      await lending.getAddress(),
+      await market.getAddress(),
+      holder.address,
+      7n,
+      debtOwed,
+      250n * 10n ** 6n
+    );
+
+    // H3: the hash is DERIVED on-chain from the verified components — the operator
+    // can no longer pair safe components with the hash of an underpaying order.
+    const tx = await adapter.connect(operator).registerOrder(await market.getAddress(), 1, components);
+    const receipt = await tx.wait();
+    const registered = receipt!.logs.map((l: any) => l.fragment?.name === "OrderRegistered" ? l : null).find(Boolean);
+    const orderHash = registered!.args[2] as string;
+    expect(orderHash).to.not.equal(ethers.ZeroHash);
 
     const magic = await adapter.isValidSignature(orderHash, "0x");
     expect(magic).to.equal("0x1626ba7e");
@@ -120,15 +165,64 @@ describe("NFTAuctionLiquidationAdapter", function () {
     expect(await nft.ownerOf(7)).to.equal(buyer.address);
   });
 
+  it("H3 regression: registerOrder enforces proceeds routing on-chain", async function () {
+    const { operator, lending, nft, market, adapter, holder, nobody } = await deployFixture();
+    const debtOwed = 500n * 10n ** 6n;
+    await market.invokeSettle(await adapter.getAddress(), 1, debtOwed);
+
+    const base = makeOrderComponents(
+      await adapter.getAddress(),
+      await nft.getAddress(),
+      await lending.getAddress(),
+      await market.getAddress(),
+      holder.address,
+      7n,
+      debtOwed,
+      250n * 10n ** 6n
+    );
+
+    // underpays the market
+    const underpay = structuredClone(base);
+    underpay.consideration[0].startAmount = 100n * 10n ** 6n;
+    underpay.consideration[0].endAmount = 100n * 10n ** 6n;
+    await expect(
+      adapter.connect(operator).registerOrder(await market.getAddress(), 1, underpay)
+    ).to.be.revertedWithCustomError(adapter, "InvalidOrder");
+
+    // surplus routed to a third party instead of the holder
+    const stolen = structuredClone(base);
+    stolen.consideration[1].recipient = nobody.address;
+    await expect(
+      adapter.connect(operator).registerOrder(await market.getAddress(), 1, stolen)
+    ).to.be.revertedWithCustomError(adapter, "InvalidOrder");
+
+    // wrong offer token
+    const wrongToken = structuredClone(base);
+    wrongToken.offer[0].token = await lending.getAddress();
+    await expect(
+      adapter.connect(operator).registerOrder(await market.getAddress(), 1, wrongToken)
+    ).to.be.revertedWithCustomError(adapter, "InvalidOrder");
+
+    // consideration not in the lending asset
+    const wrongCurrency = structuredClone(base);
+    wrongCurrency.consideration[0].token = await nft.getAddress();
+    await expect(
+      adapter.connect(operator).registerOrder(await market.getAddress(), 1, wrongCurrency)
+    ).to.be.revertedWithCustomError(adapter, "InvalidOrder");
+  });
+
   it("rejects unregistered orders and non-operator registration", async function () {
-    const { holder, nobody, market, adapter } = await deployFixture();
+    const { holder, nobody, lending, nft, market, adapter } = await deployFixture();
     const debtOwed = 500n * 10n ** 6n;
     await market.invokeSettle(await adapter.getAddress(), 1, debtOwed);
 
     const orderHash = ethers.id("seaport-order-2");
     // non-operator cannot register
     await expect(
-      adapter.connect(nobody).registerOrder(await market.getAddress(), 1, orderHash, "0x1234")
+      adapter.connect(nobody).registerOrder(
+        await market.getAddress(), 1,
+        makeOrderComponents(await adapter.getAddress(), await nft.getAddress(), await lending.getAddress(), await market.getAddress(), holder.address, 7n, debtOwed, 0n)
+      )
     ).to.be.revertedWithCustomError(adapter, "NotOperator");
 
     // unregistered hash → EIP-1271 fail value
@@ -159,6 +253,47 @@ describe("NFTAuctionLiquidationAdapter", function () {
     expect(await nft.ownerOf(7)).to.equal(await adapter.getAddress());
     // double-settle is blocked: the NFT is no longer in escrow, so the handoff itself reverts
     await expect(market.invokeSettle(await adapter.getAddress(), 1, debtOwed)).to.be.reverted;
+  });
+
+  it("cancelRegisteredOrder (H4 regression): invokes the market's Seaport and binds hash to the loan", async function () {
+    const { governance, operator, lending, nft, holder, market, adapter } = await deployFixture();
+
+    const Seaport = await ethers.getContractFactory("MockSeaport");
+    const seaport = await Seaport.deploy();
+    await adapter.connect(governance).setSeaport(await market.getAddress(), await seaport.getAddress(), ethers.ZeroAddress);
+
+    const debtOwed = 500n * 10n ** 6n;
+    await market.invokeSettle(await adapter.getAddress(), 1, debtOwed);
+
+    const components = makeOrderComponents(
+      await adapter.getAddress(),
+      await nft.getAddress(),
+      await lending.getAddress(),
+      await market.getAddress(),
+      holder.address,
+      7n,
+      debtOwed,
+      0n
+    );
+
+    // Register via the verified-components path; hash is derived on-chain
+    const regTx = await adapter.connect(operator).registerOrder(await market.getAddress(), 1, components);
+    const regReceipt = await regTx.wait();
+    const registered = regReceipt!.logs.map((l: any) => l.fragment?.name === "OrderRegistered" ? l : null).find(Boolean);
+    const orderHash = registered!.args[2] as string;
+
+    // Wrong loan binding reverts
+    await expect(
+      adapter.connect(operator).cancelRegisteredOrder(await market.getAddress(), 999, orderHash, components)
+    ).to.be.revertedWithCustomError(adapter, "InvalidOrder");
+
+    // Correct binding: on-chain Seaport cancel is invoked (was permanently dead pre-fix)
+    expect(await seaport.cancelCalls()).to.equal(0n);
+    await adapter.connect(operator).cancelRegisteredOrder(await market.getAddress(), 1, orderHash, components);
+    expect(await seaport.cancelCalls()).to.equal(1n);
+
+    // Locally invalidated: EIP-1271 fails after cancel
+    expect(await adapter.isValidSignature(orderHash, "0x")).to.equal("0xffffffff");
   });
 
   it("is configured as an async, handoff-taking adapter with a 72h cure window", async function () {

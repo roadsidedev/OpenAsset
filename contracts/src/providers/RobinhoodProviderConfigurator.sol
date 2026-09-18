@@ -27,6 +27,9 @@ interface IRobinhoodFeedRegistrar {
 contract RobinhoodProviderConfigurator is IProviderConfigurator {
     address public immutable factory;
 
+    /// @notice Review H7: staleness cap (24h) — matches the B20 configurator.
+    uint256 public constant MAX_STALENESS_SECONDS = 24 hours;
+
     event RobinhoodMarketConfigured(address indexed market, address indexed collateralAsset, address indexed feed);
 
     modifier onlyFactory() {
@@ -60,7 +63,8 @@ contract RobinhoodProviderConfigurator is IProviderConfigurator {
             (address, uint256, address)
         );
         require(feed != address(0) && feed.code.length > 0, "Robinhood feed has no code");
-        require(maxStaleness > 0, "Robinhood staleness required");
+        // Review H7: unbounded caller-supplied staleness could disable freshness detection.
+        require(maxStaleness > 0 && maxStaleness <= MAX_STALENESS_SECONDS, "Robinhood staleness out of bounds");
         require(l2Sequencer != address(0), "Robinhood sequencer required");
         require(l2Sequencer.code.length > 0, "Robinhood sequencer has no code");
 

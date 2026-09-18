@@ -1,0 +1,24 @@
+{
+  "network": "robinhoodTestnet",
+  "deployer": "0xE8D04D8645f74445F73c07E5a0fBC30B82b7c663",
+  "timestamp": "2026-08-29T10:43:23.469Z",
+  "contracts": {
+    "adapterRegistry": "0xf142745dF011174b76A3FdfEf26eA6bD9caF9A2C",
+    "marketDeployer": "0x0d1356F679138282D46555B945629A750Fb98852",
+    "lendingMarketV2Template": "0x1221CD20402B7A024c8A96cA64FF8f66baD9dc36",
+    "marketFactory": "0xcBE4887BAd58BA63F2bff486B113E97876F74AAE",
+    "erc20Adapter": "0x72C84eE4DCec148dd5673e26F11CE0ED25691a9F",
+    "erc721Adapter": "0x43c4Dd1975B7AEcE2c0b632D2Ff2d8576d31C49F",
+    "chainlinkEquityFeedAdapter": "0x6436b7146caf14Ccbae9DdAddc8643966dE8AAbc",
+    "robinhoodComplianceAdapter": "0x95FCF755fd1fd025e3E63256471E5C28F1Ba748f",
+    "robinhoodProviderConfigurator": "0x1E730BA3A02Eea051e61E10Fbe6820655E00Ca5E",
+    "chainlinkAdapter": "0x47518aBb5eDE5e05BcF428c397a0998b68Ed939b",
+    "uniswapV3TWAPAdapter": "0x526fDa6a075aA93da7D1A20Ea4527586c7cBB5E4",
+    "standardPosition": "0xc7A66B00Caf947c73FD3be061C5482675b35a7Bd",
+    "soulboundPosition": "0x5151F5679625646C3a9833BC8283259D9aCac8e4",
+    "transferablePosition": "0xbeBEBc245645f1aC59fE13F634E01dcBd0502Cfe",
+    "dexSwapLiquidation": "0xF2312f5a6d40BDaEf637B66A29C8219f2A7f9f28",
+    "nftAuctionLiquidation": "0x95Be233Bf5D1956C66E1b5E841c63987bf445973"
+  },
+  "note": "A1 fixes 2026-08-29: clone deployer, repayPartial, reserve, DEX +900, TWAP fallback, position clone"
+}

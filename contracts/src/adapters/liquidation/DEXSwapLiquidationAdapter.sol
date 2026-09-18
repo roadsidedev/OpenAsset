@@ -101,11 +101,43 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
 
     function transferOwner(address newOwner) external onlyOwner {
         require(newOwner != address(0), "Invalid owner");
+        emit AdapterOwnerTransferred(owner, newOwner);
         owner = newOwner;
     }
 
-    function setRouter(address newRouter) external onlyOwner {
-        require(newRouter == address(0) || newRouter.code.length > 0, "Invalid router");
+    // ---- Router allowlist (review H2) -----------------------------------------
+    // Approving collateral to an arbitrary contract is a total asset-drain
+    // authority, so the router must be on the owner-managed allowlist before it
+    // can be set as the global default or a per-market override.
+
+    mapping(address => bool) public approvedRouters;
+
+    event RouterApproved(address indexed router);
+    event RouterRevoked(address indexed router);
+    event AdapterOwnerTransferred(address indexed oldOwner, address indexed newOwner);
+
+    function addApprovedRouter(address routerToApprove) external onlyOwner {
+        require(routerToApprove != address(0), "Invalid router");
+        require(routerToApprove.code.length > 0, "Invalid router");
+        if (!approvedRouters[routerToApprove]) {
+            approvedRouters[routerToApprove] = true;
+            emit RouterApproved(routerToApprove);
+        }
+    }
+
+    function removeApprovedRouter(address routerToRevoke) external onlyOwner {
+        if (approvedRouters[routerToRevoke]) {
+            delete approvedRouters[routerToRevoke];
+            emit RouterRevoked(routerToRevoke);
+        }
+    }
+
+    modifier routerAllowed(address routerAddr) {
+        require(routerAddr != address(0) && approvedRouters[routerAddr], "Router not allowlisted");
+        _;
+    }
+
+    function setRouter(address newRouter) external onlyOwner routerAllowed(newRouter) {
         emit AdapterRouterUpdated(router, newRouter);
         router = newRouter;
     }
@@ -117,7 +149,7 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
     function setMarketRouter(address market, address routerOverride) external {
         require(msg.sender == factory || msg.sender == owner, "Not authorized");
         require(marketConfigs[market].isActive, "Unconfigured market");
-        require(routerOverride == address(0) || routerOverride.code.length > 0, "Invalid router");
+        if (routerOverride != address(0)) require(approvedRouters[routerOverride], "Router not allowlisted");
         marketConfigs[market].router = routerOverride;
         emit MarketRouterUpdated(market, routerOverride);
     }

@@ -218,7 +218,7 @@ function loadExistingDeployment(networkName: string): Record<string, string> | n
   }
 }
 
-/** Retry on transient RPC errors (headers timeouts, connection resets, connect timeouts). */
+/** Retry on transient RPC errors (headers timeouts, connection resets, connect timeouts, node propagation lag). */
 async function retry<T>(fn: () => Promise<T>, label: string, attempts = 6): Promise<T> {
   for (let i = 1; ; i++) {
     try {
@@ -226,7 +226,7 @@ async function retry<T>(fn: () => Promise<T>, label: string, attempts = 6): Prom
     } catch (e: any) {
       if (i >= attempts) throw e;
       const msg = (e?.code || e?.message || String(e)).slice(0, 80);
-      if (!/UND_ERR|ETIMEDOUT|ECONNRESET|timeout|Timeout|ConnectTimeout/i.test(msg)) throw e;
+      if (!/UND_ERR|ETIMEDOUT|ECONNRESET|timeout|Timeout|ConnectTimeout|BAD_DATA|could not decode/i.test(msg)) throw e;
       console.log(`    [retry ${i}/${attempts}] ${label} (${msg})`);
       await new Promise((r) => setTimeout(r, 3000));
     }
@@ -462,6 +462,16 @@ async function deployReferenceAdapters(factoryAddress: string, config: Deploymen
       throw new Error(
         `Existing DEX adapter at ${deployed.dexSwapLiquidation} is the pre-router stub; redeploy with FORCE_REDEPLOY_KEYS=dexSwapLiquidation`,
       );
+    }
+    // H2: routers must be allowlisted before use — approve first, then set
+    let allowlisted = false;
+    try {
+      allowlisted = await dex.approvedRouters(config.uniswapV3Router);
+    } catch {
+      allowlisted = false;
+    }
+    if (!allowlisted) {
+      await waitTx(await dex.addApprovedRouter(config.uniswapV3Router), "DEXSwapLiquidationAdapter.addApprovedRouter");
     }
     if (currentRouter === ethers.ZeroAddress || currentRouter.toLowerCase() !== config.uniswapV3Router.toLowerCase()) {
       await waitTx(await dex.setRouter(config.uniswapV3Router), "DEXSwapLiquidationAdapter.setRouter");

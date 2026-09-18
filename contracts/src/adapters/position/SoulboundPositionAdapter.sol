@@ -34,6 +34,8 @@ contract SoulboundPositionAdapter is ERC721, IPositionAdapterInit, Initializable
 
     /// @notice Template constructor — sentinel; real factory set via initialize() on clones
     constructor() ERC721("OpenAsset Market Soulbound Position", "rcSBP") {
+        // Review M8: lock the template against direct initialization
+        _disableInitializers();
         factory = address(0xdead);
         _adapterName = "OpenAsset Market Soulbound Position";
         _adapterSymbol = "rcSBP";
@@ -84,6 +86,10 @@ contract SoulboundPositionAdapter is ERC721, IPositionAdapterInit, Initializable
         uint256 tokenId,
         uint256 batchSize
     ) internal pure override {
-        require(to == address(0), "Soulbound: transfer not allowed");
+        // Soulbound: block peer-to-peer transfers but permit market-driven mint
+        // (from == address(0)) and burn (to == address(0)). The previous guard
+        // (`to == address(0)`) also reverted on every _safeMint, making loan
+        // origination impossible for any market using this adapter.
+        require(from == address(0) || to == address(0), "Soulbound: transfer not allowed");
     }
 }

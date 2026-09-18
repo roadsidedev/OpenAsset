@@ -376,14 +376,13 @@ contract MarketFactoryV2 is ReentrancyGuard {
         // and is market-specific, so we only need to authorize the market. For shared instances, register.
         if (positionAdapterForMarket != address(0)) {
             if (positionWasCloned) {
-                // Clone is already initialized; authorize the market via registerMarket
+                // Clone is already initialized; authorize the market via registerMarket.
+                // Review M6: fail-fast — a permanently unauthorized position adapter
+                // breaks every borrow/repay/liquidation with no signal, so don't tolerate.
                 (bool success, ) = positionAdapterForMarket.call(
                     abi.encodeWithSignature("registerMarket(address)", marketAddress)
                 );
-                // Some clones (Soulbound) initialize without registerMarket; tolerate failure if already authorized
-                if (!success) {
-                    // Fallback: try authorizedMarkets check via initialize path
-                }
+                require(success, "Position adapter registration failed");
             } else {
                 (bool success, ) = config.positionAdapter.call(
                     abi.encodeWithSignature("registerMarket(address)", marketAddress)

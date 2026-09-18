@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/adapters/IAssetAdapter.sol";
@@ -40,7 +41,7 @@ contract LPTokenV2 is ERC20 {
 
 /**
  * @title LendingMarketV2
- * @notice Adapter-based isolated lending market — the core engine
+ * @notice Adapter-based isolated lending market â€” the core engine
  * @dev Delegates all asset-specific logic to pluggable adapters.
  *      The engine knows exactly four verbs: escrow, price, check eligibility, liquidate.
  *
@@ -54,11 +55,11 @@ contract LPTokenV2 is ERC20 {
  * What's pluggable per market:
  * - How collateral is held/released (IAssetAdapter)
  * - Where price comes from (IOracleAdapter)
- * - Who's eligible (IComplianceAdapter — optional)
+ * - Who's eligible (IComplianceAdapter â€” optional)
  * - How liquidation executes (ILiquidationAdapter)
  * - How positions are represented (IPositionAdapter)
  */
-contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
+contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable, IERC721Receiver {
     using SafeERC20 for IERC20;
     using Address for address;
 
@@ -138,7 +139,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     uint8 public lendingDecimals;
     LPTokenV2 public lpToken;
 
-    // The five adapters — the core of the V2 architecture
+    // The five adapters â€” the core of the V2 architecture
     IAssetAdapter public assetAdapter;
     IOracleAdapter public oracleAdapter;
     IComplianceAdapter public complianceAdapter; // may be address(0)
@@ -151,6 +152,11 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     uint256 public gracePeriodHours;
     bool public enableHealthFactor;
     uint256 public healthFactorThreshold;
+
+    // Collateral standard detected at initialization (review C4): ERC20 collateral
+    // is a divisible quantity; ERC721 collateral is one token whose id is stored
+    // in Loan.collateralAmount. Drives the escrow invariant and valuation.
+    bool public collateralIsERC20;
 
     // Circuit breaker config (stored, not immutable, because it's a struct)
     CircuitBreakerConfig public cbConfig;
@@ -209,6 +215,9 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     event LiquidityWithdrawn(address indexed provider, uint256 amount, uint256 shares);
     event CircuitBreakerTriggered(string reason, uint256 timestamp);
     event MarketResumed(uint256 timestamp);
+    // Review M9: manual pause previously left no trail (CB auto-pauses emit,
+    // manual pauses were silent) â€” monitoring needs both
+    event MarketPaused(uint256 timestamp);
 
     // ============ Errors ============
 
@@ -232,6 +241,15 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     error LoanNotSettling();
     error AdapterUnderDelivered();
     error AdapterAccountingMismatch();
+    error SettlementNotClaimed();
+    error AlreadyInitialized();
+    error InsufficientAvailableLiquidity();
+    error ReservedForSettling();
+    error EscrowUnderDelivery();
+    error ExceedsTotalDebt();
+    error RepayBelowAccruedInterest();
+    error OutOfBounds();
+    error InvalidRange();
 
     // ============ Constructor / Initializer ============
 
@@ -240,6 +258,9 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     }
 
     function initialize(ConstructorParams memory p) external initializer {
+        // Review M3/M4: fail-closed parameter validation lives in MarketDeployer.deploy
+        // (kept out of the template to stay under the 24KB deploy limit â€” every market
+        // clone is created through the deployer, so the check cannot be bypassed).
         factory = p.factory;
         marketOwner = p.marketOwner;
         collateralAsset = p.collateralAsset;
@@ -267,15 +288,24 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
             string(abi.encodePacked("oALP-", p.collateralAsset))
         );
 
-        // Approve the asset adapter to move collateral from this market.
-        // Standard detection: ERC20 collateral gets an unlimited ERC20 approval; ERC721
-        // collateral gets setApprovalForAll — both are what release() needs. The ERC20
-        // `approve(address,uint256)` selector also exists on ERC721 with token-ID
-        // semantics, so probing totalSupply() first avoids approving garbage on NFTs.
+        // Approve the asset adapter to move collateral from this market, with
+        // standard detection (review C4): ERC20 collateral gets an unlimited ERC20
+        // approval; ERC721 collateral gets setApprovalForAll â€” both are what
+        // release() needs. The ERC20 `approve(address,uint256)` selector also exists
+        // on ERC721 with token-ID semantics, so probing totalSupply() first avoids
+        // approving garbage on NFTs. The detected standard is stored and drives the
+        // escrow invariant and collateral valuation.
         if (p.collateralAsset.isContract()) {
+            bool isErc20;
             try IERC20(p.collateralAsset).totalSupply() returns (uint256) {
-                IERC20(p.collateralAsset).safeApprove(p.assetAdapter, type(uint256).max);
+                isErc20 = true;
             } catch {
+                isErc20 = false;
+            }
+            collateralIsERC20 = isErc20;
+            if (isErc20) {
+                IERC20(p.collateralAsset).safeApprove(p.assetAdapter, type(uint256).max);
+            } else {
                 try IERC721(p.collateralAsset).setApprovalForAll(p.assetAdapter, true) {
                     // ERC721 collateral: adapter may release on repay / hand off on liquidation
                 } catch {
@@ -309,8 +339,8 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
      * @param recipient Address to mint LP shares to
      */
     function initializeLiquidity(uint256 amount, address recipient) external {
-        require(msg.sender == factory, "Only factory");
-        require(totalLiquidity == 0, "Already initialized");
+        if (msg.sender != factory) revert NotOwner();
+        if (totalLiquidity != 0) revert AlreadyInitialized();
 
         totalLiquidity = amount;
         availableLiquidity = amount;
@@ -339,48 +369,23 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         emit LiquidityDeposited(msg.sender, amount, shares);
     }
 
-    // Maximum number of loans whose status we scan to compute reserved liquidity for async settlement.
-    // Gas-bounded: scanning stops after this many iterations; beyond that, withdrawals are
-    // conservatively blocked until loans are finalized.
-    uint256 private constant WITHDRAW_SCAN_LIMIT = 500;
+    // M1 design note: recovery for an async loan is measured against this
+    // settle-time lending-asset snapshot (set in settleLiquidation, consumed and
+    // cleared in finalizeRedemptionSettlement).
+    mapping(uint256 => uint256) public settleBalance;
 
-    /// @notice Compute liquidity reserved for async-settling loans (principal that may need to be written off)
-    /// @dev Scans up to WITHDRAW_SCAN_LIMIT most recent loans.
-    function _reservedForSettling() internal view returns (uint256 reserved) {
-        uint256 count = nextLoanId;
-        if (count == 0) return 0;
-        uint256 start = count > WITHDRAW_SCAN_LIMIT ? count - WITHDRAW_SCAN_LIMIT : 0;
-        for (uint256 i = start; i < count; i++) {
-            LoanStatus s = loans[i].status;
-            if (s == LoanStatus.LIQUIDATION_CURE || s == LoanStatus.LIQUIDATION_SETTLING) {
-                // Reserve the full principal that is at risk of being written off
-                reserved += loans[i].principal;
-            }
-        }
-        if (count > WITHDRAW_SCAN_LIMIT) {
-            // Scan was truncated; if any of the unscanned older loans are in settling, we cannot know.
-            // Conservatively signal full reservation to block large withdrawals.
-            // Caller will check: if reserved == max, block unless caller finalizes old loans first.
-            // For gas efficiency we don't scan entire history; this is a safety rail, not a precision tool.
-        }
-        return reserved;
-    }
+    // Review M2: O(1) settling-loan reserve. The previous implementation scanned up
+    // to 500 recent loans per withdrawal (~1M gas) and silently under-counted older
+    // settling loans â€” enabling pre-write-off exits. The reserve is now maintained
+    // exactly at state-transition time (CURE repay clears the loan without reserve;
+    // SETTLING entry adds; finalize subtracts), covering ALL loans regardless of
+    // book size.
+    uint256 public reservedSettling;
 
-    /// @notice View helper for UI: reserved liquidity for settling loans + count of such loans
-    function getReservedLiquidity() external view returns (uint256 reserved, uint256 settlingCount) {
-        uint256 count = nextLoanId;
-        uint256 start = count > WITHDRAW_SCAN_LIMIT ? count - WITHDRAW_SCAN_LIMIT : 0;
-        for (uint256 i = start; i < count; i++) {
-            LoanStatus s = loans[i].status;
-            if (s == LoanStatus.LIQUIDATION_CURE || s == LoanStatus.LIQUIDATION_SETTLING) {
-                reserved += loans[i].principal;
-                settlingCount++;
-            }
-        }
-        if (count > WITHDRAW_SCAN_LIMIT && settlingCount == 0) {
-            // Truncated scan without findings — still 0
-        }
-    }
+    /// @notice Liquidity reserved for async-settling loans (principal at risk of write-off)
+    /// @dev Maintained incrementally: settleLiquidation adds, finalize subtracts.
+    ///      CURE loans are not reserved until they enter SETTLING — a repaid CURE loan
+    ///      never reserves anything, so no decrement path is needed on the repay curve.
 
     /**
      * @notice Withdraw liquidity by burning LP shares
@@ -391,15 +396,12 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         if (shares == 0) revert InvalidAmount();
 
         amount = _calculateAmount(shares);
-        require(amount <= availableLiquidity, "Insufficient available liquidity");
+        if (amount > availableLiquidity) revert InsufficientAvailableLiquidity();
 
-        // Enterprise guard: if any loan is in CURE/SETTLING, reserve its principal
-        // so LP cannot rug the surplus needed for async redemption or write-off accounting.
-        // Scanning is bounded; if we truncated, we conservatively block if amount would leave < reserved.
-        uint256 reserved = _reservedForSettling();
-        if (reserved > 0) {
-            // Ensure withdrawal leaves at least `reserved` available for settling loans
-            require(availableLiquidity >= amount + reserved, "Reserved for settling loans");
+        // Enterprise guard (M2): settlement reserve is enforced exactly â€” withdrawals
+        // cannot leave less than the reserved principal available for async write-offs.
+        if (reservedSettling > 0) {
+            if (availableLiquidity < amount + reservedSettling) revert ReservedForSettling();
         }
 
         totalLiquidity -= amount;
@@ -472,13 +474,22 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         if (principal == 0 || principal > maxLoan) revert InvalidLoanSize();
         if (principal > availableLiquidity) revert InsufficientLiquidity();
 
-        // 5. Escrow collateral via asset adapter
-        uint256 balanceBefore = IERC20(collateralAsset).balanceOf(address(this));
-        assetAdapter.escrow(msg.sender, collateralAmount);
-        uint256 balanceAfter = IERC20(collateralAsset).balanceOf(address(this));
+        // 5. Escrow collateral via asset adapter, with a standard-aware delivery
+        // invariant (review C4). For ERC20 collateral, `amountOrId` is a quantity
+        // and delivery is verified by balance delta. For ERC721 collateral,
+        // `amountOrId` is the tokenId and delivery means the market owns it.
+        if (collateralIsERC20) {
+            uint256 balanceBefore = IERC20(collateralAsset).balanceOf(address(this));
+            assetAdapter.escrow(msg.sender, collateralAmount);
+            uint256 balanceAfter = IERC20(collateralAsset).balanceOf(address(this));
 
-        // Defensive invariant: verify adapter delivered the actual collateral amount
-        require(balanceAfter >= balanceBefore + collateralAmount, "Escrow under-delivery");
+            // Defensive invariant: verify adapter delivered the actual collateral amount
+            if (balanceAfter < balanceBefore + collateralAmount) revert EscrowUnderDelivery();
+        } else {
+            assetAdapter.escrow(msg.sender, collateralAmount);
+            // Defensive invariant: the market now owns exactly the escrowed NFT
+            if (IERC721(collateralAsset).ownerOf(collateralAmount) != address(this)) revert EscrowUnderDelivery();
+        }
 
         // 6. Create loan
         loanId = nextLoanId++;
@@ -527,7 +538,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         // Transfer debt from repayer
         lendingAsset.safeTransferFrom(msg.sender, address(this), totalDebt);
 
-        // Split INTEREST (and any penalty above principal) only — never skim principal
+        // Split INTEREST (and any penalty above principal) only â€” never skim principal
         uint256 revenue = totalDebt - loan.principal;
         uint256 protocolShare = (revenue * REVENUE_SHARE_PROTOCOL_BPS) / BPS_DENOMINATOR;
         uint256 lpRevenue = revenue - protocolShare;
@@ -554,10 +565,14 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Partial repayment — reduces outstanding principal and pays accrued interest/penalty first
+     * @notice Partial repayment â€” reduces outstanding principal after paying the full
+     *         accrued interest/penalty first
      * @dev Enterprise feature: allows borrowers to de-risk without closing the position.
      *      - If `repayAmount >= totalDebt`, is equivalent to `repay` (full close).
-     *      - Otherwise, interest + penalty are paid first, remainder reduces principal.
+     *      - Partial repayments MUST cover the entire accrued revenue (interest +
+     *        CURE penalty) before any principal is reduced â€” otherwise accrued
+     *        interest could be wiped by repeated dust payments (pre-mainnet review C2)
+     *        and frozen interest would be double-charged (C3).
      *      - Collateral remains escrowed; position not burned until full repayment.
      *      - Emits LoanRepaid with interest portion for indexing; collateral not released.
      * @param loanId The loan to partially repay
@@ -572,11 +587,12 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
 
         uint256 interest = _calculateInterest(loan);
         uint256 totalDebt = loan.principal + interest;
+        uint256 penalty = 0;
         if (loan.status == LoanStatus.LIQUIDATION_CURE) {
-            uint256 penalty = (loan.principal * 500) / BPS_DENOMINATOR;
+            penalty = (loan.principal * 500) / BPS_DENOMINATOR;
             totalDebt += penalty;
         }
-        require(repayAmount <= totalDebt, "Exceeds total debt");
+        if (repayAmount > totalDebt) revert ExceedsTotalDebt();
 
         // If repaying full debt, delegate to full repay (burn + release)
         if (repayAmount == totalDebt) {
@@ -597,16 +613,23 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
             return;
         }
 
+        uint256 revenue = totalDebt - loan.principal; // interest + penalty
+
+        // Review C2/C3 fix: the payment must settle the full accrued revenue before
+        // any principal reduction. Previously a dust payment was accepted as partial
+        // revenue while `startTime` was reset â€” permanently erasing the unpaid
+        // accrued interest (LP revenue theft). Requiring full coverage first also
+        // removes the CURE double-charge path.
+        if (repayAmount < revenue) revert RepayBelowAccruedInterest();
+
         // Partial: transfer repayAmount first
         lendingAsset.safeTransferFrom(msg.sender, address(this), repayAmount);
 
-        // Split: interest+penalty first, remainder to principal
-        uint256 revenue = totalDebt - loan.principal; // interest + penalty
-        uint256 revenuePaid = repayAmount > revenue ? revenue : repayAmount;
-        uint256 principalPaid = repayAmount > revenue ? repayAmount - revenue : 0;
+        // Full revenue is paid; remainder reduces principal
+        uint256 principalPaid = repayAmount - revenue;
 
-        uint256 protocolSharePartial = (revenuePaid * REVENUE_SHARE_PROTOCOL_BPS) / BPS_DENOMINATOR;
-        uint256 lpRevenuePartial = revenuePaid - protocolSharePartial;
+        uint256 protocolSharePartial = (revenue * REVENUE_SHARE_PROTOCOL_BPS) / BPS_DENOMINATOR;
+        uint256 lpRevenuePartial = revenue - protocolSharePartial;
 
         if (protocolSharePartial > 0) {
             lendingAsset.safeTransfer(protocolTreasury, protocolSharePartial);
@@ -623,26 +646,23 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         availableLiquidity += principalPaid + lpRevenuePartial;
         totalLiquidity += lpRevenuePartial;
 
-        // Rebase interest: set startTime to now so interest accrues from reduced principal onward
-        // Keep frozenInterestAt as 0 unless in CURE (penalty already accounted)
-        if (loan.status != LoanStatus.LIQUIDATION_CURE) {
+        // Rebase interest: the full accrued revenue has been paid, so the clock
+        // restarts cleanly on the reduced principal.
+        if (loan.status == LoanStatus.LIQUIDATION_CURE) {
+            // Re-freeze on the remaining principal: startTime = frozenInterestAt = now
+            // means the frozen elapsed window is empty again â€” the remaining cure debt
+            // is principal + fresh 5% penalty, with no double-charged frozen interest.
             loan.startTime = block.timestamp;
-            // Clear any partial interest already paid by not carrying over; future interest starts fresh
+            loan.frozenInterestAt = block.timestamp;
         } else {
-            // In CURE, penalty already charged via revenue; keep frozenInterestAt unchanged
-            // but reduce principal so cure repayment target drops
+            loan.startTime = block.timestamp;
         }
 
-        // If principal becomes 0 (should have been full repay path), mark repaid
-        if (loan.principal == 0) {
-            // Should not happen without full repay, but handle
-            address holderZero = positionAdapter.ownerOf(loanId);
-            assetAdapter.release(holderZero, loan.collateralAmount);
-            positionAdapter.burn(loanId);
-            loan.status = LoanStatus.REPAID;
-        }
+        // repayAmount < totalDebt implies principalPaid < principal, so the loan
+        // cannot reach zero principal here â€” the full-repay branch above is the
+        // only close-out path.
 
-        emit LoanRepaid(loanId, msg.sender, principalPaid, revenuePaid);
+        emit LoanRepaid(loanId, msg.sender, principalPaid, revenue);
     }
 
     /**
@@ -657,7 +677,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
 
         // Check liquidation eligibility
         if (loan.status == LoanStatus.LIQUIDATION_CURE) {
-            // Cannot liquidate while in cure window — must wait for settleLiquidation
+            // Cannot liquidate while in cure window â€” must wait for settleLiquidation
             revert LoanNotInCure();
         }
         if (loan.status == LoanStatus.ACTIVE || loan.status == LoanStatus.GRACE_PERIOD) {
@@ -723,8 +743,8 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Complete async liquidation after cure window expires — submits redemption
-     * @dev Transitions CURE → SETTLING and invokes the async adapter. Accounting is
+     * @notice Complete async liquidation after cure window expires â€” submits redemption
+     * @dev Transitions CURE â†’ SETTLING and invokes the async adapter. Accounting is
      *      deferred until `finalizeRedemptionSettlement` is called after the issuer
      *      confirms settlement. This prevents premature loss recognition.
      * @param loanId The loan to settle
@@ -738,8 +758,11 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         if (block.timestamp < cureDeadline) revert CureWindowStillOpen();
         if (!liquidationAdapter.isAsynchronous()) revert LoanNotInCure();
 
-        // Enter irreversible settling state — do NOT mark liquidated yet
+        // Enter irreversible settling state â€” do NOT mark liquidated yet
         loan.status = LoanStatus.LIQUIDATION_SETTLING;
+        // Review M2: reserve the full principal at risk of write-off (O(1)).
+        // Released at finalizeRedemptionSettlement; CURE repayments never reserve.
+        reservedSettling += loan.principal;
         emit LiquidationSettlingStarted(loanId);
 
         // Submit redemption; async adapters MUST return (0,0) and transfer no lending asset yet
@@ -758,11 +781,16 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         // Async submission must not have moved lending asset; verify isolation
         if (balanceAfter != balanceBefore) revert AdapterAccountingMismatch();
         if (recoveredForLP != 0 || returnedToHolder != 0) revert AdapterAccountingMismatch();
+        // M1 design note: recovery is measured against this settle-time snapshot at
+        // finalize. Sale proceeds that land between settle and finalize (e.g. an
+        // on-chain auction buy) are genuine recovery; a snapshot â€” not a spontaneous
+        // delta â€” is what makes that measurement correct.
+        settleBalance[loanId] = balanceAfter;
         // Loan remains in SETTLING until finalizeRedemptionSettlement
     }
 
     /**
-     * @notice Finalize async redemption after issuer settlement — permissionless
+     * @notice Finalize async redemption after issuer settlement â€” permissionless
      * @dev Must be called after the issuer's `checkSettlement(redemptionId)` returns settled.
      *      The issuer is expected to have transferred `proceeds` of lending asset to this market
      *      (either via direct transfer or via the adapter). Accounting is finalized here with
@@ -773,39 +801,52 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         Loan storage loan = loans[loanId];
         if (loan.status != LoanStatus.LIQUIDATION_SETTLING) revert LoanNotSettling();
 
-        // Verify the adapter reports settlement; fail-closed if adapter reverts or not settled
+        // Verify the adapter acknowledges settlement (review M1 â€” fail-closed).
+        // Previously a tolerated call-failure let ANYONE force early finalization
+        // with a bare lending-asset donation (loss recognized as a write-off on
+        // phantom recovery). All async adapters must implement claimSettlement:
+        // it reverts unless settlement genuinely completed.
+        // NOTE: `balanceBefore` below is only the call-time reference; recovery is
+        // measured against the settle-time snapshot (settleBalance) â€” see below.
         uint256 balanceBefore = lendingAsset.balanceOf(address(this));
         // The adapter is responsible for pulling proceeds from the issuer into this contract
-        // during this call. We use a low-level call to allow adapters that need to claim.
+        // during this call. We use a low-level call so adapters revert cleanly when not settled.
         (bool ok, bytes memory data) = address(liquidationAdapter).call(
             abi.encodeWithSignature("claimSettlement(uint256)", loanId)
         );
-        // If adapter does not implement claimSettlement, we still support direct issuer transfers:
-        // balance delta will reflect any proceeds already sent to this contract.
+        if (!ok) revert SettlementNotClaimed();
         uint256 claimedRecovered = 0;
         uint256 claimedReturned = 0;
-        if (ok && data.length >= 64) {
+        if (data.length >= 64) {
             (claimedRecovered, claimedReturned) = abi.decode(data, (uint256, uint256));
-        } else if (!ok) {
-            // claimSettlement not implemented or reverted — proceed with balance delta only
         }
-        uint256 balanceAfter = lendingAsset.balanceOf(address(this));
-        uint256 actualRecovery = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+        uint256 balanceNow = lendingAsset.balanceOf(address(this));
+        uint256 settledAt = settleBalance[loanId];
+        uint256 actualRecovery = balanceNow > settledAt ? balanceNow - settledAt : 0;
 
-        // If adapter returned explicit amounts, they must match the delta
-        if (ok && data.length >= 64) {
-            if (claimedRecovered != actualRecovery) revert AdapterAccountingMismatch();
-            // claimedReturned is surplus already sent to holder; not verified via market balance
+        // Explicit non-zero claims must match the measured delta; (0, 0) means the
+        // adapter's proceeds already landed atomically during buy()/fulfillment â€”
+        // finalize on the delta.
+        if (claimedRecovered != 0 && claimedRecovered != actualRecovery) {
+            revert AdapterAccountingMismatch();
         }
+        // claimedReturned is surplus already sent to holder; not verified via market balance
 
         // If no proceeds yet, keep in SETTLING (front-end will poll)
         if (actualRecovery == 0) revert AdapterUnderDelivered();
 
         loan.status = LoanStatus.LIQUIDATED;
+        delete settleBalance[loanId];
         totalBorrowed -= loan.principal;
         availableLiquidity += actualRecovery;
         if (loan.principal > actualRecovery) {
             totalLiquidity -= (loan.principal - actualRecovery);
+        }
+        // Review M2: release the settlement reserve now that the write-off is recognized.
+        if (reservedSettling >= loan.principal) {
+            unchecked {
+                reservedSettling -= loan.principal;
+            }
         }
         positionAdapter.burn(loanId);
         emit LoanLiquidated(loanId, msg.sender, actualRecovery, claimedReturned);
@@ -818,7 +859,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
 
         (uint256 currentPrice, bool trusted, ) = oracleAdapter.getPrice();
 
-        // Untrusted oracle → pause
+        // Untrusted oracle â†’ pause
         if (!trusted) {
             if (status == MarketStatus.ACTIVE) {
                 status = MarketStatus.PAUSED_STALE_ORACLE;
@@ -873,6 +914,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     function pause() external onlyMarketOwner {
         status = MarketStatus.PAUSED_MANUAL;
         pausedAt = block.timestamp;
+        emit MarketPaused(block.timestamp);
     }
 
     function unpause() external onlyMarketOwner {
@@ -880,6 +922,22 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
             status = MarketStatus.ACTIVE;
             emit MarketResumed(block.timestamp);
         }
+    }
+
+    // ============ ERC721 Receiver ============
+
+    /// @notice Allows ERC721 collateral to be safeTransferFrom'd into escrow
+    ///         (asset adapters use safeTransferFrom; without the hook every NFT
+    ///         escrow reverts). Also accepts direct NFT transfers â€” such tokens
+    ///         join the market's collateral custody unaccounted (LP-beneficial
+    ///         donation; no accounting impact).
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 
     // ============ View Functions ============
@@ -931,7 +989,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
 
     // ============ Paginated Views (Enterprise) ============
 
-    /// @notice Legacy view — iterates all loans. Gas-unbounded; use getMarketStatsPaginated for >500 loans.
+    /// @notice Legacy view â€” iterates all loans. Gas-unbounded; use getMarketStatsPaginated for >500 loans.
     /// @dev Kept for backward compatibility and off-chain indexers that cache.
     function getMarketStats() external view returns (
         uint256 _totalLiquidity,
@@ -951,9 +1009,9 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         uint256 activeLoans,
         MarketStatus marketStatus
     ) {
-        require(endId <= nextLoanId, "Out of bounds");
-        require(endId >= startId, "Invalid range");
-        require(endId - startId <= 1000, "Range too large");
+        if (endId > nextLoanId) revert OutOfBounds();
+        if (endId < startId) revert InvalidRange();
+        if (endId - startId > 1000) revert InvalidRange();
         uint256 active = 0;
         for (uint256 i = startId; i < endId; i++) {
             LoanStatus s = loans[i].status;
@@ -977,7 +1035,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         uint256[] memory expiryTimes,
         LoanStatus[] memory statuses
     ) {
-        require(endId <= nextLoanId && endId >= startId && endId - startId <= 200, "Invalid range");
+        if (endId > nextLoanId || endId < startId || endId - startId > 200) revert InvalidRange();
         uint256 n = endId - startId;
         collateralAmounts = new uint256[](n);
         principals = new uint256[](n);
@@ -1005,7 +1063,15 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
     }
 
     function _collateralValueInLendingUnits(uint256 amount, uint256 price18) internal view returns (uint256) {
-        uint256 usdValue18 = Math.mulDiv(amount, price18, 10 ** collateralDecimals);
+        uint256 usdValue18;
+        if (collateralIsERC20) {
+            usdValue18 = Math.mulDiv(amount, price18, 10 ** collateralDecimals);
+        } else {
+            // ERC721 collateral (review C4): `amount` is the tokenId; each position
+            // is exactly ONE token, valued at the oracle's per-collection floor
+            // price. Token-id-as-quantity would scale valuation nonsensically.
+            usdValue18 = price18;
+        }
         return Math.mulDiv(usdValue18, 10 ** lendingDecimals, 1e18);
     }
 
@@ -1025,7 +1091,7 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable {
         if (loan.startTime == 0 || loan.principal == 0) return 0;
         uint256 elapsed;
         if (loan.frozenInterestAt != 0) {
-            // Interest frozen at cure entry — no further accrual
+            // Interest frozen at cure entry â€” no further accrual
             elapsed = loan.frozenInterestAt > loan.startTime ? loan.frozenInterestAt - loan.startTime : 0;
         } else {
             elapsed = block.timestamp > loan.startTime ? block.timestamp - loan.startTime : 0;

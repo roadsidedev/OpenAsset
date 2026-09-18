@@ -17,6 +17,7 @@ describe("DEXSwap per-market routing + factory Rule 6", function () {
 
     await adapter.configure(await market.getAddress(), owner.address);
     await adapter.configureRisk(await market.getAddress(), owner.address, 500);
+    await adapter.addApprovedRouter(await routerA.getAddress());
     await adapter.setRouter(await routerA.getAddress());
     await routerA.setOutputMultiplier(7n * 10n ** 16n); // out = 700e6 per 100e8 collateral
     await routerB.setOutputMultiplier(9n * 10n ** 16n); // out = 900e6
@@ -45,6 +46,8 @@ describe("DEXSwap per-market routing + factory Rule 6", function () {
 
   it("per-market router override takes precedence over the global router", async function () {
     const { holder, market, adapter, lending, routerA, routerB } = await deployAdapterFixture();
+    // H2: router must be allowlisted before it can serve as an override
+    await adapter.addApprovedRouter(await routerB.getAddress());
     await adapter.setMarketRouter(await market.getAddress(), await routerB.getAddress());
 
     const cfg = await adapter.getMarketLiquidationConfig(await market.getAddress());
@@ -59,6 +62,7 @@ describe("DEXSwap per-market routing + factory Rule 6", function () {
 
   it("clearing the override falls back to the global router", async function () {
     const { holder, market, adapter, lending, routerA, routerB } = await deployAdapterFixture();
+    await adapter.addApprovedRouter(await routerB.getAddress());
     await adapter.setMarketRouter(await market.getAddress(), await routerB.getAddress());
     await adapter.setMarketRouter(await market.getAddress(), ethers.ZeroAddress);
     const cfg = await adapter.getMarketLiquidationConfig(await market.getAddress());
@@ -69,12 +73,29 @@ describe("DEXSwap per-market routing + factory Rule 6", function () {
     expect((await lending.balanceOf(holder.address)) - holderBefore).to.equal(200n * 10n ** 6n);
   });
 
+  it("H2 regression: routers must be allowlisted before use", async function () {
+    const { owner, market, adapter, routerB } = await deployAdapterFixture();
+    // setRouter without allowlisting reverts
+    await expect(adapter.setRouter(await routerB.getAddress())).to.be.revertedWith("Router not allowlisted");
+    // per-market override of a non-allowlisted router reverts
+    await expect(
+      adapter.setMarketRouter(await market.getAddress(), await routerB.getAddress())
+    ).to.be.revertedWith("Router not allowlisted");
+    // an EOA can never be allowlisted (code check)
+    const [ , , , , stranger] = await ethers.getSigners();
+    await expect(adapter.connect(owner).addApprovedRouter(stranger.address)).to.be.revertedWith("Invalid router");
+    // owner can revoke; a revoked router can no longer be set
+    await adapter.addApprovedRouter(await routerB.getAddress());
+    await adapter.removeApprovedRouter(await routerB.getAddress());
+    await expect(adapter.setRouter(await routerB.getAddress())).to.be.revertedWith("Router not allowlisted");
+  });
+
   it("rejects invalid router overrides and unconfigured markets", async function () {
     const { owner, market, adapter } = await deployAdapterFixture();
     const [ , , , , stranger] = await ethers.getSigners();
     await expect(
       adapter.connect(owner).setMarketRouter(await market.getAddress(), stranger.address)
-    ).to.be.revertedWith("Invalid router");
+    ).to.be.revertedWith("Router not allowlisted");
     await expect(
       adapter.connect(owner).setMarketRouter(stranger.address, stranger.address)
     ).to.be.revertedWith("Unconfigured market");
@@ -141,9 +162,10 @@ describe("DEXSwap per-market routing + factory Rule 6", function () {
       "Liquidation router unset"
     );
 
-    // Once the global router is set, creation succeeds
+    // Once the global router is approved + set, creation succeeds
     const Router = await ethers.getContractFactory("MockUniswapV3Router");
     const router = await Router.deploy();
+    await liquidationAdapter.connect(admin).addApprovedRouter(await router.getAddress());
     await liquidationAdapter.connect(admin).setRouter(await router.getAddress());
     const marketAddress = await factory.connect(admin).createMarket.staticCall(config, initialLiquidity);
     await (await factory.connect(admin).createMarket(config, initialLiquidity)).wait();

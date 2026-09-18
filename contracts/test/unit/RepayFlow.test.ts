@@ -1,4 +1,4 @@
-import { expect } from "chai";
+﻿import { expect } from "chai";
 import { ethers } from "hardhat";
 
 // LendingMarketV2.LoanStatus: ACTIVE=0, GRACE_PERIOD=1, LIQUIDATION_CURE=2, SETTLING=3, REPAID=4, LIQUIDATED=5
@@ -25,7 +25,7 @@ describe("RepayFlow (LendingMarketV2)", function () {
   const PRINCIPAL = ethers.parseEther("100000"); // 50% LTV
   const YEAR = 365n * 24n * 3600n;
 
-  async function setup() {
+  async function setup(liquidationAsync = false, cureWindow = 0) {
     [owner, lp, borrower, thirdParty, treasury] = await ethers.getSigners();
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
@@ -39,7 +39,7 @@ describe("RepayFlow (LendingMarketV2)", function () {
     const oracleAdapter = await MockOracleAdapter.deploy(ethers.parseEther("2000"), true);
 
     const MockLiquidationAdapter = await ethers.getContractFactory("MockLiquidationAdapter");
-    liquidationAdapter = await MockLiquidationAdapter.deploy(false, 0); // sync, no cure window
+    liquidationAdapter = await MockLiquidationAdapter.deploy(liquidationAsync, cureWindow); // sync by default
 
     const MockPositionAdapter = await ethers.getContractFactory("MockPositionAdapter");
     positionAdapter = await MockPositionAdapter.deploy();
@@ -113,7 +113,7 @@ describe("RepayFlow (LendingMarketV2)", function () {
     const stats = await market.getMarketStats();
     expect(stats._totalBorrowed).to.equal(0n);
     // principal + lp revenue back in the pool; principal returned, LP interest share is the
-    // accrued interest (tiny but > 0 after a few blocks) × 90% LP share
+    // accrued interest (tiny but > 0 after a few blocks) Ã— 90% LP share
     expect(stats._totalLiquidity).to.be.at.least(DEPOSIT);
     expect(stats._availableLiquidity).to.be.at.least(DEPOSIT);
 
@@ -126,7 +126,7 @@ describe("RepayFlow (LendingMarketV2)", function () {
     await setup();
     const loanId = await borrow();
 
-    // Warp ~30 days → interest = principal * 12% * 30/365
+    // Warp ~30 days â†’ interest = principal * 12% * 30/365
     await ethers.provider.send("evm_increaseTime", [30 * 24 * 3600]);
     await ethers.provider.send("evm_mine", []);
 
@@ -160,23 +160,32 @@ describe("RepayFlow (LendingMarketV2)", function () {
     await ethers.provider.send("evm_mine", []);
 
     const interest10d = (PRINCIPAL * APR_BPS * 10n * 24n * 3600n) / (10000n * YEAR);
+    const perSecondInterest = (PRINCIPAL * APR_BPS) / (10000n * YEAR);
 
-    // Pay exactly the accrued interest → principal unchanged, loan stays ACTIVE
-    await market.connect(borrower).repayPartial(loanId, interest10d);
+    // Review C2 regression: paying LESS than the accrued interest must revert â€”
+    // a dust payment used to reset startTime and permanently erase accrued interest.
+    await expect(
+      market.connect(borrower).repayPartial(loanId, interest10d - perSecondInterest * 60n)
+    ).to.be.revertedWithCustomError(market, "RepayBelowAccruedInterest");
+
+    // Pay the accrued interest (+ small headroom for block-timestamp drift) â†’
+    // principal reduced by at most the headroom sliver; loan stays ACTIVE.
+    await market.connect(borrower).repayPartial(loanId, interest10d + perSecondInterest * 10n);
 
     let loan = await market.loans(loanId);
     expect(loan.status).to.equal(STATUS.ACTIVE);
-    expect(loan.principal).to.equal(PRINCIPAL);
+    expect(loan.principal).to.be.at.most(PRINCIPAL);
+    expect(loan.principal).to.be.at.least(PRINCIPAL - perSecondInterest * 15n);
 
     // Collateral still escrowed (borrower had 100000, escrowed 100)
     expect(await collateral.balanceOf(borrower.address)).to.equal(ethers.parseEther("99900"));
 
-    // Pay 40k of principal → principal reduced (a sliver goes to freshly re-based interest)
-    const perSecondInterest = (PRINCIPAL * APR_BPS) / (10000n * YEAR);
+    // Pay 40k of principal -> principal reduced (a sliver goes to freshly re-based interest)
+    const principalBefore40k = loan.principal;
     await market.connect(borrower).repayPartial(loanId, ethers.parseEther("40000"));
     loan = await market.loans(loanId);
-    expect(loan.principal).to.be.at.least(PRINCIPAL - ethers.parseEther("40000"));
-    expect(loan.principal).to.be.at.most(PRINCIPAL - ethers.parseEther("40000") + perSecondInterest * 10n);
+    expect(loan.principal).to.be.at.least(principalBefore40k - ethers.parseEther("40000"));
+    expect(loan.principal).to.be.at.most(principalBefore40k - ethers.parseEther("40000") + perSecondInterest * 10n);
 
     const stats = await market.getMarketStats();
     expect(stats._totalBorrowed).to.equal(loan.principal);
@@ -188,7 +197,7 @@ describe("RepayFlow (LendingMarketV2)", function () {
 
     loan = await market.loans(loanId);
     expect(loan.status).to.equal(STATUS.REPAID);
-    // Collateral released to borrower on full repayment (minted 100000, all escrowed → returned)
+    // Collateral released to borrower on full repayment (minted 100000, all escrowed â†’ returned)
     expect(await collateral.balanceOf(borrower.address)).to.equal(ethers.parseEther("100000"));
     expect(await positionAdapter.ownerOf(loanId)).to.equal(ethers.ZeroAddress);
   });
@@ -212,11 +221,50 @@ describe("RepayFlow (LendingMarketV2)", function () {
     expect(await collateral.balanceOf(thirdParty.address)).to.equal(0n);
   });
 
+  it("CURE: revenue-only partial repay re-freezes; final close-out does not re-charge frozen interest (C3 regression)", async function () {
+    await setup(true, 0); // async adapter, 0s cure window — settle is permissionless after expiry anyway
+    const loanId = await borrow();
+
+    // Expire the loan, then enter LIQUIDATION_CURE via an async adapter
+    await ethers.provider.send("evm_increaseTime", [31 * 24 * 3600]);
+    await ethers.provider.send("evm_mine", []);
+    await market.connect(borrower).liquidate(loanId);
+    let loan = await market.loans(loanId);
+    expect(loan.status).to.equal(2n); // LIQUIDATION_CURE
+    expect(loan.frozenInterestAt).to.not.equal(0n);
+
+    // Frozen debt: principal + frozen interest + 5% penalty
+    const frozenInterest = loan.frozenInterestAt - loan.startTime;
+    const frozenRevenue = (PRINCIPAL * APR_BPS * frozenInterest) / (10000n * YEAR);
+    const penalty1 = (PRINCIPAL * 500n) / 10000n;
+
+    // Pay ONLY the accrued revenue (interest + penalty) — no principal reduction
+    await market.connect(borrower).repayPartial(loanId, frozenRevenue + penalty1 + (PRINCIPAL * APR_BPS * 10n) / YEAR);
+
+    loan = await market.loans(loanId);
+    expect(loan.status).to.equal(2n); // still in CURE
+    // Re-freeze means the elapsed window restarted: frozen window is now ~0
+    expect(loan.frozenInterestAt - loan.startTime).to.be.at.most(3n);
+
+    // Final close-out charges only the remaining principal + fresh 5% penalty
+    // (+ a tiny fresh-interest sliver). Under the old code it would re-charge the
+    // already-paid frozen interest + penalty (≈ 2× revenue on the paid-down portion).
+    const thirdBefore = await lending.balanceOf(thirdParty.address);
+    await lending.connect(thirdParty).approve(await market.getAddress(), ethers.MaxUint256);
+    await market.connect(thirdParty).repay(loanId);
+    const spent = thirdBefore - (await lending.balanceOf(thirdParty.address));
+
+    const freshPenalty = (loan.principal * 500n) / 10000n;
+    // spent must be ≈ principal + fresh penalty (+ sliver) — NOT + old frozen revenue again
+    expect(spent).to.be.at.least(loan.principal + freshPenalty);
+    expect(spent).to.be.at.most(loan.principal + freshPenalty + (PRINCIPAL * APR_BPS) / YEAR);
+  });
+
   it("sad paths: no allowance, zero amount, over-repay, already-repaid", async function () {
     await setup();
     const loanId = await borrow();
 
-    // No allowance → transferFrom reverts
+    // No allowance â†’ transferFrom reverts
     const spender = (await ethers.getSigners())[5];
     await lending.mint(spender.address, ethers.parseEther("200000"));
     await expect(market.connect(spender).repay(loanId)).to.be.reverted;
@@ -232,7 +280,7 @@ describe("RepayFlow (LendingMarketV2)", function () {
     const generousDebt = principal + (principal * APR_BPS) / YEAR;
     await expect(
       market.connect(borrower).repayPartial(loanId, generousDebt + ethers.parseEther("1"))
-    ).to.be.revertedWith("Exceeds total debt");
+    ).to.be.revertedWithCustomError(market, "ExceedsTotalDebt");
 
     // Full repay then double repay reverts
     await market.connect(borrower).repay(loanId);
@@ -245,3 +293,6 @@ describe("RepayFlow (LendingMarketV2)", function () {
     ).to.be.revertedWithCustomError(market, "LoanAlreadyRepaid");
   });
 });
+
+
+

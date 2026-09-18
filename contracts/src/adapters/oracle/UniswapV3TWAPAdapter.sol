@@ -41,6 +41,7 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
 
     event PoolConfigured(address indexed market, address indexed asset, address pool, uint32 twapPeriod);
     event FallbackModeUpdated(address indexed market, bool useFallbackOnly);
+    event FallbackPriceUpdated(address indexed market, uint256 price, uint256 updatedAt);
 
     error PoolNotConfigured();
     error InvalidMarket();
@@ -118,6 +119,9 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
     }
 
     /// @inheritdoc IOracleAdapter
+    /// @dev Review M14 note: informational history only — returns the consult at
+    /// `secondsAgo` (24h max) with no window/gate, and returns 0 when the pool is
+    /// unavailable. Not a consensus input; the circuit breaker keeps its own baseline.
     function getHistoricalPrice(uint256 secondsAgo) external view override returns (uint256) {
         MarketConfig storage config = marketConfigs[msg.sender];
         if (!config.isActive || config.pool == address(0)) return 0;
@@ -138,6 +142,9 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
         require(newPrice > 0 && newPrice < MAX_SANE_PRICE, "Invalid price");
         marketConfigs[market].lastPrice = newPrice;
         marketConfigs[market].lastUpdatedAt = block.timestamp;
+        // Review M9: keeper price pushes are the effective oracle authority in v2.x
+        // (on-chain consult disabled) — they must leave an on-chain trail
+        emit FallbackPriceUpdated(market, newPrice, block.timestamp);
     }
 
     // ============ Internal TWAP Helpers ============

@@ -21,6 +21,10 @@ interface IB20TokenRegistrar {
 contract B20ProviderConfigurator is IProviderConfigurator {
     address public immutable factory;
 
+    /// @notice Review H7: staleness cap (24h). Equity feeds publish per-session; a
+    /// staleness window longer than a trading day defeats freshness detection.
+    uint256 public constant MAX_STALENESS_SECONDS = 24 hours;
+
     event B20MarketConfigured(address indexed market, address indexed collateralAsset, address indexed feed);
 
     modifier onlyFactory() {
@@ -54,7 +58,9 @@ contract B20ProviderConfigurator is IProviderConfigurator {
             (address, uint256, address)
         );
         require(feed != address(0) && feed.code.length > 0, "B20 feed has no code");
-        require(maxStaleness > 0, "B20 staleness required");
+        // Review H7: unbounded caller-supplied staleness could disable freshness
+        // detection entirely (lending against a frozen Friday close across days).
+        require(maxStaleness > 0 && maxStaleness <= MAX_STALENESS_SECONDS, "B20 staleness out of bounds");
         if (l2Sequencer != address(0)) {
             require(l2Sequencer.code.length > 0, "B20 sequencer has no code");
         }

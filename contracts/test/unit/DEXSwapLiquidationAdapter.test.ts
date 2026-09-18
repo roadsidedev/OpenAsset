@@ -14,6 +14,7 @@ describe("DEXSwapLiquidationAdapter", function () {
     const Adapter = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
     const adapter = await Adapter.deploy(owner.address);
 
+    await adapter.connect(owner).addApprovedRouter(await router.getAddress());
     await adapter.connect(owner).setRouter(await router.getAddress());
     await adapter.connect(owner).configure(await market.getAddress(), owner.address);
     await adapter.connect(owner).configureRisk(await market.getAddress(), owner.address, 500);
@@ -48,6 +49,7 @@ describe("DEXSwapLiquidationAdapter", function () {
     const Adapter = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
     const adapter = await Adapter.deploy(owner.address);
 
+    await adapter.connect(owner).addApprovedRouter(await router.getAddress());
     await adapter.connect(owner).setRouter(await router.getAddress());
     await adapter.connect(owner).configure(await market.getAddress(), owner.address);
     await adapter.connect(owner).configureRisk(await market.getAddress(), owner.address, 500);
@@ -76,6 +78,7 @@ describe("DEXSwapLiquidationAdapter", function () {
     const Adapter = await ethers.getContractFactory("DEXSwapLiquidationAdapter");
     const adapter = await Adapter.deploy(owner.address);
 
+    await adapter.connect(owner).addApprovedRouter(await router.getAddress());
     await adapter.connect(owner).setRouter(await router.getAddress());
     await adapter.connect(owner).configure(await market.getAddress(), owner.address);
     await adapter.connect(owner).configureRisk(await market.getAddress(), owner.address, 500);

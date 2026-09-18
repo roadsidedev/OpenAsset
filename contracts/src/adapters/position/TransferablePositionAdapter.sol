@@ -38,6 +38,8 @@ contract TransferablePositionAdapter is ERC721, IPositionAdapterInit, Initializa
 
     /// @notice Template constructor — sentinel; real factory set via initialize() on clones
     constructor() ERC721("OpenAsset Market Transferable Position", "rcTP") {
+        // Review M8: lock the template against direct initialization
+        _disableInitializers();
         factory = address(0xdead);
         _adapterName = "OpenAsset Market Transferable Position";
         _adapterSymbol = "rcTP";

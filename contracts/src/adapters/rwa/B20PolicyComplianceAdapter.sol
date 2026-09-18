@@ -74,9 +74,16 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
         owner = msg.sender;
     }
 
+    // Review M9: emit on every privileged mutation (previously silent: token
+    // binding, ownership, and configurator changes had no on-chain trail).
+    event TokenRegistered(address indexed market, address indexed token);
+    event OwnerTransferred(address indexed oldOwner, address indexed newOwner);
+    event ConfiguratorUpdated(address indexed configurator, bool authorized);
+
     function transferOwner(address newOwner) external {
         require(msg.sender == owner, "Only owner");
         require(newOwner != address(0), "Invalid owner");
+        emit OwnerTransferred(owner, newOwner);
         owner = newOwner;
     }
 
@@ -94,11 +101,13 @@ contract B20PolicyComplianceAdapter is IComplianceAdapter {
         require(market != address(0), "Invalid market");
         require(token != address(0), "Invalid token");
         marketConfigs[market] = MarketConfig({ token: IB20Policy(token) });
+        emit TokenRegistered(market, token);
     }
 
     function setAuthorizedConfigurator(address configurator, bool authorized) external onlyFactoryOrOwner {
         require(configurator != address(0), "Invalid configurator");
         authorizedConfigurators[configurator] = authorized;
+        emit ConfiguratorUpdated(configurator, authorized);
     }
 
     /// @inheritdoc IComplianceAdapter

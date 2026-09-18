@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "etherscan-contract-review": {
+      "source": "etherscan/skills",
+      "sourceType": "github",
+      "skillPath": "skills/etherscan-contract-review/SKILL.md",
+      "computedHash": "396852de1aea9c7f4e57c35dbd11d2033322e5730872ef2b99f766450f8dcbfb"
+    }
+  }
+}

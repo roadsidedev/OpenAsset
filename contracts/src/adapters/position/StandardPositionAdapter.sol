@@ -33,6 +33,8 @@ contract StandardPositionAdapter is IPositionAdapterInit, Initializable {
 
     /// @notice Template constructor — sets sentinel so clone detection works; real factory set via initialize()
     constructor() {
+        // Review M8: lock the template against direct initialization
+        _disableInitializers();
         factory = address(0xdead);
     }
 

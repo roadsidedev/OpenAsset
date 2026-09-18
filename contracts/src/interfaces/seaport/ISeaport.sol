@@ -53,10 +53,10 @@ interface ISeaport {
 
     /**
      * @notice Cancel orders whose offerer is msg.sender
-     * @param orders The order components to cancel
-     * @return cancelled True if all orders were cancelled
+     * @dev Canonical Seaport 1.4/1.5 returns nothing (M15 review note); callers must
+     *      tolerate silent failure via try/catch (the local check persists regardless).
      */
-    function cancel(OrderComponents[] calldata orders) external returns (bool cancelled);
+    function cancel(OrderComponents[] calldata orders) external;
 
     /**
      * @notice Retrieve the offerer's current order counter (for order construction)

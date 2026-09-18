@@ -15,8 +15,35 @@ contract MarketDeployer {
     }
 
     /// @notice Deploy a new LendingMarketV2 clone and initialize it
+    /// @dev Review M3/M4: fail-closed parameter validation lives HERE (not in the
+    ///      template's initialize, which must stay under the 24KB deploy limit).
+    ///      A zero treasury or adapter bricks all repay/escrow paths permanently
+    ///      (config is immutable after init), and a mis-scaled HF threshold silently
+    ///      disables health-factor liquidation. Every clone passes through this gate.
     /// @return The address of the newly created market
     function deploy(LendingMarketV2.ConstructorParams memory params) external returns (address) {
+        require(params.marketOwner != address(0), "Invalid market owner");
+        require(params.collateralAsset != address(0), "Invalid collateral asset");
+        require(params.lendingAsset != address(0), "Invalid lending asset");
+        require(params.protocolTreasury != address(0), "Invalid protocol treasury");
+        require(params.assetAdapter != address(0), "Invalid asset adapter");
+        require(params.oracleAdapter != address(0), "Invalid oracle adapter");
+        require(params.liquidationAdapter != address(0), "Invalid liquidation adapter");
+        require(params.positionAdapter != address(0), "Invalid position adapter");
+        require(params.ltvBps > 0 && params.ltvBps <= 10000, "Invalid LTV");
+        require(params.durationSeconds > 0, "Invalid duration");
+        if (params.enableHealthFactor) {
+            // Threshold is bps-scaled (10000 = 1.0x); a raw "1.5" would silently disable HF liquidation
+            require(params.healthFactorThreshold > 10000, "Invalid HF threshold");
+        }
+        // Circuit breaker: a zero resume threshold or missing lookback can never
+        // resume; a zero pause threshold pauses on the first nonzero tick.
+        if (params.cbConfig.enabled) {
+            require(params.cbConfig.pauseThresholdBps > 0, "Invalid CB pause threshold");
+            require(params.cbConfig.resumeThresholdBps > 0, "Invalid CB resume threshold");
+            require(params.cbConfig.resumeThresholdBps <= params.cbConfig.pauseThresholdBps, "Invalid CB resume bound");
+            require(params.cbConfig.lookbackPeriodSeconds > 0, "Invalid CB lookback");
+        }
         address clone = Clones.clone(template);
         LendingMarketV2(clone).initialize(params);
         return clone;

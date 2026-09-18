@@ -43,6 +43,9 @@ contract ERC20Adapter is IAssetAdapter {
     function configure(address market, address collateralToken) external override onlyFactory {
         require(market != address(0), "Invalid market");
         require(collateralToken != address(0), "Invalid token");
+        // Review M7: one-time config — remapping a live market's token would corrupt
+        // its escrow/release integrity (factory-key attack surface otherwise).
+        require(address(marketConfigs[market].token) == address(0), "Already configured");
 
         // Fail-closed: reject collateral that doesn't implement ERC20. Low-level probe
         // with explicit returndata-length guard (a plain try/catch on an EOA target

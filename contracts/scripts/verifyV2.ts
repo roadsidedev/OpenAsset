@@ -26,7 +26,7 @@ async function sendAndWait(label: string, send: () => Promise<any>): Promise<any
       const tx = await send();
       return await tx.wait();
     } catch (e: any) {
-      const msg = (e?.code || e?.message || String(e)).slice(0, 80);
+      const msg = String(e?.code ?? e?.message ?? e).slice(0, 80);
       if (i >= 6 || !/UND_ERR|ETIMEDOUT|ECONNRESET|Timeout|timeout|underpriced|nonce too low|already known/i.test(msg)) {
         throw e;
       }
@@ -77,7 +77,9 @@ async function main() {
       ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
       : network.name === "sepolia"
         ? "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
-        : "0x0000000000000000000000000000000000000000";
+        : network.name === "robinhoodTestnet"
+          ? process.env.ROBINHOOD_USDC_ADDRESS || "0xA58C61370e0f7c419379ac7C27554E1e4de3e940"
+          : "0x0000000000000000000000000000000000000000";
 
   console.log(`\n=== Verifying deployment on ${networkName} ===`);
   console.log(`Factory:     ${d.marketFactory}`);
@@ -114,14 +116,16 @@ async function main() {
   results.push(["isAllowedLendingAsset(USDC)", usdcAllowed]);
   console.log(`  ${usdcAllowed ? "✓" : "✗"} USDC allowlisted: ${usdcAllowed}`);
 
-  // 3. Position adapter factory wiring (multi-tenant fix)
-  console.log("\n--- 3. Position adapter factory wiring ---");
+  // 3. Position adapter templates carry the initializer-lock sentinel (clone pattern
+  // + review M8: templates must be _disableInitializers-locked, never wired to a factory)
+  console.log("\n--- 3. Position adapter template sentinel + clone wiring ---");
+  const FACTORY_SENTINEL = "0x000000000000000000000000000000000000dead";
   for (const name of ["standardPosition", "soulboundPosition", "transferablePosition"]) {
     const pos = await ethers.getContractAt("StandardPositionAdapter", d[name]);
     const posFactory = await retryRead(`${name}.factory()`, () => pos.factory());
-    const ok = posFactory.toLowerCase() === d.marketFactory.toLowerCase();
-    results.push([`${name}.factory() == MarketFactory`, ok]);
-    console.log(`  ${ok ? "✓" : "✗"} ${name}.factory() = ${posFactory} (${ok ? "matches factory" : "MISMATCH"})`);
+    const ok = posFactory.toLowerCase() === FACTORY_SENTINEL;
+    results.push([`${name} template factory() == sentinel (unwired)`, ok]);
+    console.log(`  ${ok ? "✓" : "✗"} ${name}.factory() = ${posFactory} (${ok ? "sentinel — template locked" : "MISMATCH"})`);
   }
 
   // 4. Revert test: non-contract collateral
@@ -237,22 +241,21 @@ async function main() {
   console.log(`  ${marketCreatedEvent ? "✓" : "✗"} MarketCreated event: ${marketCreatedEvent}`);
 
   if (marketCreatedEvent && marketAddress) {
-    // RPC nodes can lag on post-tx state. Poll with the tx's block tag until the
-    // market is visible on-chain (handles propagation delay from the RPC provider).
-    const blockNumber = receipt.blockNumber;
+    // RPC nodes can lag on post-tx state (RH testnet lags minutes). Poll at latest
+    // with a generous budget instead of pinning the receipt block.
     const factoryOnChain = new ethers.Contract(d.marketFactory, factory.interface, rpcProvider);
 
     let isRegistered = false;
     let code = "0x";
-    for (let i = 0; i < 20 && !(isRegistered && code.length > 2); i++) {
+    for (let i = 0; i < 60 && !(isRegistered && code.length > 2); i++) {
       try {
-        isRegistered = await factoryOnChain.isMarket(marketAddress, { blockTag: blockNumber });
-        code = await rpcProvider.getCode(marketAddress, blockNumber);
+        isRegistered = await factoryOnChain.isMarket(marketAddress);
+        code = await rpcProvider.getCode(marketAddress);
       } catch {
         // retry
       }
       if (!(isRegistered && code.length > 2)) {
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 5000));
       }
     }
 
@@ -263,10 +266,35 @@ async function main() {
     results.push(["market is a deployed contract", hasCode]);
     console.log(`  ${hasCode ? "✓" : "✗"} Market bytecode length: ${code.length}`);
 
-    const count = await factoryOnChain.getMarketCount({ blockTag: blockNumber });
+    let count = beforeCount;
+    let countRead = false;
+    for (let i = 0; i < 8 && !countRead; i++) {
+      try {
+        count = await factoryOnChain.getMarketCount();
+        countRead = true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
+    if (!countRead) throw new Error("getMarketCount unreadable after retries (flaky RPC)");
     const countOk = count > beforeCount;
     results.push(["getMarketCount increased", countOk]);
     console.log(`  ${countOk ? "✓" : "✗"} Market count: ${beforeCount} → ${count}`);
+
+    // Clone wiring: the e2e market's position adapter must be a clone whose
+    // factory() points at the real factory (proves the M6 registration path works)
+    try {
+      const marketOnChain = new ethers.Contract(marketAddress, ["function positionAdapter() view returns (address)"], rpcProvider);
+      const clonePosAddr = await marketOnChain.positionAdapter();
+      const clonePos = new ethers.Contract(clonePosAddr, ["function factory() view returns (address)"], rpcProvider);
+      const cloneFactory = await clonePos.factory();
+      const cloneOk = cloneFactory.toLowerCase() === d.marketFactory.toLowerCase();
+      results.push(["e2e market position-adapter clone factory() == MarketFactory", cloneOk]);
+      console.log(`  ${cloneOk ? "✓" : "✗"} clone factory: ${cloneFactory}`);
+    } catch (e: any) {
+      results.push(["e2e market position-adapter clone factory() == MarketFactory", false]);
+      console.log(`  ✗ clone factory check failed: ${(e?.message || String(e)).slice(0, 100)}`);
+    }
   }
 
   // ---- Summary ----

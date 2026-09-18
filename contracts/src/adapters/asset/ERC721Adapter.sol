@@ -41,6 +41,8 @@ contract ERC721Adapter is IAssetAdapter {
     function configure(address market, address nftAddress) external override onlyFactory {
         require(market != address(0), "Invalid market");
         require(nftAddress != address(0), "Invalid NFT");
+        // Review M7: one-time config (see ERC20Adapter)
+        require(address(marketConfigs[market].nft) == address(0), "Already configured");
 
         // Fail-closed: verify the ERC721 interface (ERC-165). Explicit returndata-length
         // guard — a plain try/catch panics on empty returndata (EOA targets). Non-conformant

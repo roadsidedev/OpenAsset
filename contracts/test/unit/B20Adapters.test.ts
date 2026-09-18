@@ -134,4 +134,33 @@ describe("B20 Adapters", function () {
     expect(after - before).to.equal(ethers.parseEther("100"));
     await stopMarket(marketAddr);
   });
+
+  it("H6: release pre-checks sender/receiver/executor policies and emits CollateralReleased", async function () {
+    const { marketAddr, marketSigner } = await asMarket();
+    await assetAdapter.connect(marketSigner).escrow(await borrower.getAddress(), ethers.parseEther("100"));
+    // In production the market approves the adapter at initialize; mirror that here
+    await b20.connect(marketSigner).approve(await assetAdapter.getAddress(), ethers.MaxUint256);
+
+    // Market is not sender-authorized yet → release reverts with a precise error
+    await expect(
+      assetAdapter.connect(marketSigner).release(await borrower.getAddress(), ethers.parseEther("10"))
+    ).to.be.revertedWithCustomError(assetAdapter, "B20ReleaseUnauthorized");
+    expect(await assetAdapter.connect(marketSigner).isReleaseable(await borrower.getAddress(), ethers.parseEther("10"))).to.be.false;
+
+    // Authorize the market as sender → release to the allowlisted borrower succeeds
+    await registry.setAuthorized(PID_SENDER, marketAddr, true);
+    expect(await assetAdapter.connect(marketSigner).isReleaseable(await borrower.getAddress(), ethers.parseEther("10"))).to.be.true;
+    const borrowerBefore = await b20.balanceOf(await borrower.getAddress());
+    const relTx = await assetAdapter.connect(marketSigner).release(await borrower.getAddress(), ethers.parseEther("10"));
+    expect((await b20.balanceOf(await borrower.getAddress())) - borrowerBefore).to.equal(ethers.parseEther("10"));
+    expect((await relTx.wait())!.logs.some((l: any) => l.fragment?.name === "CollateralReleased")).to.be.true;
+
+    // De-authorize the recipient → release reverts again (would otherwise strand the loan)
+    await registry.setAuthorized(PID_RECEIVER, await borrower.getAddress(), false);
+    await expect(
+      assetAdapter.connect(marketSigner).release(await borrower.getAddress(), ethers.parseEther("10"))
+    ).to.be.revertedWithCustomError(assetAdapter, "B20ReleaseUnauthorized");
+    expect(await assetAdapter.connect(marketSigner).isReleaseable(await borrower.getAddress(), ethers.parseEther("10"))).to.be.false;
+    await stopMarket(marketAddr);
+  });
 });
