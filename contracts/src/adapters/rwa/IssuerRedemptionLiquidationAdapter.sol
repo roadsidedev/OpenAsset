@@ -44,7 +44,8 @@ contract IssuerRedemptionLiquidationAdapter is ILiquidationAdapter {
     }
 
     mapping(address => MarketConfig) public marketConfigs;
-    mapping(uint256 => uint256) public loanRedemptionId;
+    /// @notice market => loanId => issuer redemption id (prevents cross-market collisions)
+    mapping(address => mapping(uint256 => uint256)) public loanRedemptionId;
 
     modifier onlyFactory() {
         require(msg.sender == factory, "Only factory");
@@ -110,7 +111,7 @@ contract IssuerRedemptionLiquidationAdapter is ILiquidationAdapter {
             debtOwed
         );
 
-        loanRedemptionId[loanId] = redemptionId;
+        loanRedemptionId[msg.sender][loanId] = redemptionId;
         emit RedemptionSubmitted(loanId, redemptionId, debtOwed);
 
         recoveredForLP = 0;
@@ -136,7 +137,7 @@ contract IssuerRedemptionLiquidationAdapter is ILiquidationAdapter {
      * @param loanId The loan to check
      */
     function checkSettlement(uint256 loanId) external view returns (bool settled, uint256 proceeds) {
-        uint256 redemptionId = loanRedemptionId[loanId];
+        uint256 redemptionId = loanRedemptionId[msg.sender][loanId];
         if (redemptionId == 0) return (false, 0);
 
         MarketConfig storage config = marketConfigs[msg.sender];
@@ -156,7 +157,7 @@ contract IssuerRedemptionLiquidationAdapter is ILiquidationAdapter {
     function claimSettlement(uint256 loanId) external returns (uint256 recoveredForLP, uint256 returnedToHolder) {
         MarketConfig storage config = marketConfigs[msg.sender];
         require(config.isActive, "Unconfigured market");
-        uint256 redemptionId = loanRedemptionId[loanId];
+        uint256 redemptionId = loanRedemptionId[msg.sender][loanId];
         require(redemptionId != 0, "No redemption");
 
         (bool settled, uint256 proceeds) = config.issuerRedemption.checkSettlement(redemptionId);

@@ -1,6 +1,6 @@
 import { Worker } from '../bootstrap/lifecycle';
 import { KeeperService } from '../services/KeeperService';
-import { config } from '../config/unifiedConfig';
+import { config, getKeeperPrivateKey } from '../config/unifiedConfig';
 import { logger } from '../utils/logger';
 import { prisma } from '../bootstrap/prisma';
 import { getProvider } from '../bootstrap/provider';
@@ -16,8 +16,9 @@ export class KeeperWorker implements Worker {
       return;
     }
 
-    // Keeper needs a signer wallet
-    if (!config.keeper?.privateKey) {
+    // Keeper needs a signer wallet (resolved via closure helper, not plain config)
+    const keeperPrivateKey = getKeeperPrivateKey();
+    if (!keeperPrivateKey) {
       logger.warn('Keeper private key not configured, skipping keeper service');
       return;
     }
@@ -32,7 +33,7 @@ export class KeeperWorker implements Worker {
         return;
       }
       this.service = new KeeperService(prisma, provider, chainId, {
-        privateKey: config.keeper.privateKey,
+        privateKey: keeperPrivateKey,
         maxGasPriceGwei: config.keeper.maxGasPriceGwei || 100,
         pollIntervalMs: config.keeper.pollIntervalMs || 30_000,
         minHealthFactorBps: config.keeper.minHealthFactorBps || 12000,

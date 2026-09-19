@@ -48,11 +48,11 @@ describe("LendingMarketV2", function () {
     const MockPositionAdapter = await ethers.getContractFactory("MockPositionAdapter");
     positionAdapter = await MockPositionAdapter.deploy();
 
-    // Deploy LendingMarketV2 via initialize (clone pattern)
+    // Deploy LendingMarketV2 implementation; owner is deployer so initialize is allowed
     const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-    market = await LendingMarketV2.deploy();
+    market = await LendingMarketV2.deploy(owner.address);
     await market.waitForDeployment();
-    await market.initialize({
+    await market.connect(owner).initialize({
       factory: ethers.ZeroAddress,
       marketOwner: owner.address,
       collateralAsset: await mockToken.getAddress(),
@@ -156,7 +156,7 @@ describe("LendingMarketV2", function () {
       const Position = await ethers.getContractFactory("MockPositionAdapter");
       const b20Position = await Position.deploy();
       const Market = await ethers.getContractFactory("LendingMarketV2");
-      const b20Market = await Market.deploy();
+      const b20Market = await Market.deploy(owner.address);
       await b20Market.waitForDeployment();
       await b20Market.initialize({
         factory: owner.address,

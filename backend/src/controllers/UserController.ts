@@ -23,25 +23,89 @@ const verifyCodeSchema = z.object({
   code: z.string().length(6),
 });
 
+const PUBLIC_USER_FIELDS = {
+  address: true,
+  emailVerified: true,
+  smsVerified: true,
+  pushEnabled: true,
+  emailAllAlerts: true,
+  createdAt: true,
+} as const;
+
+const SELF_USER_FIELDS = {
+  address: true,
+  email: true,
+  emailVerified: true,
+  sms: true,
+  smsVerified: true,
+  pushEnabled: true,
+  emailAllAlerts: true,
+  createdAt: true,
+  updatedAt: true,
+  // NEVER: pushToken, nonce, nonceExpiresAt
+} as const;
+
+export function toPublicUser(user: {
+  address: string;
+  emailVerified: boolean;
+  smsVerified: boolean;
+  pushEnabled: boolean;
+  emailAllAlerts: boolean;
+  createdAt: Date;
+}) {
+  return {
+    address: user.address,
+    emailVerified: user.emailVerified,
+    smsVerified: user.smsVerified,
+    pushEnabled: user.pushEnabled,
+    emailAllAlerts: user.emailAllAlerts,
+    createdAt: user.createdAt,
+  };
+}
+
+export function toSelfUser(user: {
+  address: string;
+  email: string | null;
+  emailVerified: boolean;
+  sms: string | null;
+  smsVerified: boolean;
+  pushEnabled: boolean;
+  emailAllAlerts: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    address: user.address,
+    email: user.email,
+    emailVerified: user.emailVerified,
+    sms: user.sms,
+    smsVerified: user.smsVerified,
+    pushEnabled: user.pushEnabled,
+    emailAllAlerts: user.emailAllAlerts,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
 export const getUser = async (req: Request, res: Response) => {
   try {
-    const address = req.params.address as string;
+    const address = (req.params.address as string).toLowerCase();
+    const authReq = req as AuthRequest;
+    const isSelf =
+      !!authReq.user &&
+      authReq.user.address.toLowerCase() === address;
+
     const user = await prisma.user.findUnique({
       where: { address },
+      select: isSelf ? SELF_USER_FIELDS : PUBLIC_USER_FIELDS,
     });
 
     if (!user) {
-       // If user doesn't exist, create them (auto-onboarding) or return 404.
-       // Given the context, we might want to auto-create or just return null profile.
-       // Let's create if missing for simpler UX.
-       const newUser = await prisma.user.create({
-         data: { address },
-       });
-       res.json(newUser);
-       return;
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    res.json(user);
+    res.json(isSelf ? toSelfUser(user as any) : toPublicUser(user as any));
   } catch (error) {
     logger.error({ err: error }, 'Error fetching user');
     res.status(500).json({ error: 'Internal server error' });
@@ -75,9 +139,10 @@ export const updateUser = async (req: Request, res: Response) => {
       where: { address },
       update: updateData,
       create: { address, ...updateData },
+      select: SELF_USER_FIELDS,
     });
 
-    res.json(user);
+    res.json(toSelfUser(user));
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: error.errors });
@@ -256,6 +321,11 @@ export const confirmSmsVerification = async (req: Request, res: Response) => {
 export const getUserActivity = async (req: Request, res: Response) => {
   try {
     const address = (req.params.address as string).toLowerCase();
+    const authReq = req as AuthRequest;
+    if (!authReq.user || authReq.user.address.toLowerCase() !== address) {
+      res.status(403).json({ error: 'Unauthorized: Cannot view another user activity' });
+      return;
+    }
 
     const [createdMarkets, lpPositions, borrowedLoans, alerts] = await Promise.all([
       prisma.market.findMany({

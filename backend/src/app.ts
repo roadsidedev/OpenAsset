@@ -12,6 +12,7 @@ import { createAdapterRoutes } from './routes/adapterRoutes';
 import { createSupportRoutes } from './routes/supportRoutes';
 import { prisma } from './bootstrap/prisma';
 import { lifecycle } from './bootstrap/lifecycle';
+import { requireAuth } from './middleware/auth';
 
 const app = express();
 
@@ -45,16 +46,40 @@ app.use('/api/v1/users', createUserRoutes(prisma));
 app.use('/api/v1/adapters', createAdapterRoutes(prisma));
 app.use('/api/v1/support', createSupportRoutes(prisma));
 
-// Health endpoint with worker status
-app.get('/health', async (req, res) => {
-  const workerHealth = await lifecycle.healthCheck();
-  const overallHealthy = Object.values(workerHealth).every((h: any) => h.healthy);
-  
-  res.status(overallHealthy ? 200 : 503).json({
-    status: overallHealthy ? 'ok' : 'degraded',
-    timestamp: new Date().toISOString(),
-    workers: workerHealth,
-  });
+async function computeOverallStatus(): Promise<'ok' | 'degraded'> {
+  try {
+    const workerHealth = await lifecycle.healthCheck();
+    const overallHealthy = Object.values(workerHealth).every((h: any) => h?.healthy !== false);
+    return overallHealthy ? 'ok' : 'degraded';
+  } catch {
+    return 'degraded';
+  }
+}
+
+// Public health: status only — never expose worker details or String(error)
+app.get('/health', async (_req, res) => {
+  const status = await computeOverallStatus();
+  res.status(status === 'ok' ? 200 : 503).json({ status });
+});
+
+// Authenticated detailed health for operators
+app.get('/health/detailed', requireAuth, async (_req, res) => {
+  try {
+    const workerHealth = await lifecycle.healthCheck();
+    const overallHealthy = Object.values(workerHealth).every((h: any) => h?.healthy !== false);
+    // Sanitize: never include raw String(error) — map to boolean/status only at public-facing keys;
+    // detailed route is auth-gated and returns structured worker health without stacking error strings into the top level.
+    const sanitized: Record<string, { healthy: boolean }> = {};
+    for (const [name, h] of Object.entries(workerHealth)) {
+      sanitized[name] = { healthy: !!(h as any)?.healthy };
+    }
+    res.status(overallHealthy ? 200 : 503).json({
+      status: overallHealthy ? 'ok' : 'degraded',
+      workers: sanitized,
+    });
+  } catch {
+    res.status(503).json({ status: 'degraded', workers: {} });
+  }
 });
 
 // Metrics endpoint

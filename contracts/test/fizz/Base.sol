@@ -88,8 +88,9 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
 
     function _deployAdaptersAndFactory() internal {
         registry = new AdapterRegistry(admin);
-        MarketDeployer deployer = new MarketDeployer(address(new LendingMarketV2()));
+        MarketDeployer deployer = new MarketDeployer();
         factory = new MarketFactoryV2(admin, admin, address(registry), deployer);
+        deployer.setFactory(address(factory));
         factory.addLendingAsset(address(lendingAsset));
 
         assetAdapter = new ERC20Adapter(address(factory));

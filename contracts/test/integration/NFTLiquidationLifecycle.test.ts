@@ -36,12 +36,11 @@ describe("NFTLiquidationLifecycle (M1 e2e)", function () {
     const MockPositionAdapter = await ethers.getContractFactory("MockPositionAdapter");
     const positionAdapter = await MockPositionAdapter.deploy();
 
-    const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-    const template = await LendingMarketV2.deploy();
     const MarketDeployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await MarketDeployer.deploy(await template.getAddress());
+    const deployer = await MarketDeployer.deploy();
 
-    const params = {
+    
+    await (await deployer.setFactory(admin.address)).wait(); // tests act as factoryconst params = {
       factory: ZeroAddress,
       marketOwner: admin.address,
       collateralAsset: await nft.getAddress(),

@@ -71,6 +71,7 @@ contract ChainlinkAdapter is IOracleAdapter {
     function registerFeed(address asset, address feedAddress, uint256 maxStalenessSeconds) external onlyOwner {
         require(asset != address(0), "Invalid asset");
         require(feedAddress != address(0), "Invalid feed");
+        require(maxStalenessSeconds <= 2 days, "maxStaleness too high");
         assetFeeds[asset] = FeedConfig({
             feed: AggregatorV3Interface(feedAddress),
             maxStaleness: maxStalenessSeconds > 0 ? maxStalenessSeconds : 3600
@@ -160,13 +161,83 @@ contract ChainlinkAdapter is IOracleAdapter {
     }
 
     /// @inheritdoc IOracleAdapter
-    function getHistoricalPrice(uint256) external view override returns (uint256) {
+    function getHistoricalPrice(uint256 secondsAgo) external view override returns (uint256) {
         address asset = marketAssets[msg.sender];
         FeedConfig memory config = assetFeeds[asset];
         if (address(config.feed) == address(0)) return 0;
-        (, int256 answer,,,) = config.feed.latestRoundData();
-        if (answer <= 0) return 0;
-        return _normalizeDecimals(uint256(answer), _getFeedDecimals(config.feed));
+
+        // Apply the same L2 sequencer gate as getPrice
+        if (address(l2SequencerFeed) != address(0)) {
+            try l2SequencerFeed.latestRoundData() returns (
+                uint80 roundId,
+                int256 answer,
+                uint256 startedAt,
+                uint256,
+                uint80 answeredInRound
+            ) {
+                if (answer == 1) return 0;
+                if (answeredInRound < roundId) return 0;
+                if (block.timestamp - startedAt <= SEQUENCER_GRACE_PERIOD) return 0;
+            } catch {
+                return 0;
+            }
+        }
+
+        // secondsAgo == 0 → latest round, but ONLY if still within maxStaleness
+        if (secondsAgo == 0) {
+            try config.feed.latestRoundData() returns (
+                uint80 roundId,
+                int256 answer,
+                uint256,
+                uint256 updatedAtRound,
+                uint80 answeredInRound
+            ) {
+                if (answer <= 0) return 0;
+                if (answeredInRound < roundId) return 0;
+                if (updatedAtRound == 0 || block.timestamp < updatedAtRound) return 0;
+                if (block.timestamp - updatedAtRound > config.maxStaleness) return 0;
+                return _normalizeDecimals(uint256(answer), _getFeedDecimals(config.feed));
+            } catch {
+                return 0;
+            }
+        }
+
+        // Walk rounds backward to find a price at or before (now - secondsAgo).
+        // Do NOT silently return unchecked latest as "historical".
+        if (secondsAgo > block.timestamp) return 0;
+        uint256 targetTimestamp = block.timestamp - secondsAgo;
+
+        uint80 latestRoundId;
+        try config.feed.latestRoundData() returns (uint80 rid, int256, uint256, uint256, uint80) {
+            latestRoundId = rid;
+        } catch {
+            return 0;
+        }
+
+        // Bound gas: walk at most 50 rounds
+        uint80 maxWalk = 50;
+        for (uint80 i = 0; i < maxWalk; i++) {
+            if (latestRoundId < i) break;
+            uint80 roundId = latestRoundId - i;
+            try config.feed.getRoundData(roundId) returns (
+                uint80 id,
+                int256 answer,
+                uint256,
+                uint256 updatedAt,
+                uint80 answeredInRound
+            ) {
+                if (answer <= 0) continue;
+                if (answeredInRound < id) continue;
+                if (updatedAt == 0) continue;
+                if (updatedAt > targetTimestamp) continue; // still too recent — keep walking
+                // Round is at or before target. Reject if that round is stale vs target.
+                if (targetTimestamp - updatedAt > config.maxStaleness) return 0;
+                return _normalizeDecimals(uint256(answer), _getFeedDecimals(config.feed));
+            } catch {
+                continue;
+            }
+        }
+        return 0;
     }
 
     function _getFeedDecimals(AggregatorV3Interface _feed) internal view returns (uint8) {

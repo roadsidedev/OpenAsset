@@ -17,9 +17,10 @@ model User {
     pushEnabled    Boolean  @default(false)
     pushToken      String?
     emailAllAlerts Boolean  @default(false)
-    nonce          String   @default(dbgenerated("gen_random_uuid()"))
-    createdAt      DateTime @default(now())
-    updatedAt      DateTime @updatedAt
+    nonce          String    @default(dbgenerated("gen_random_uuid()"))
+    nonceExpiresAt DateTime?
+    createdAt      DateTime  @default(now())
+    updatedAt      DateTime  @updatedAt
 
     loans   Loan[]   @relation("BorrowerLoans")
     markets Market[] @relation("LPMarkets")

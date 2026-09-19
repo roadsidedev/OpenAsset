@@ -170,11 +170,10 @@ describe("AssetAdapters (production readiness)", function () {
       const liquidationAdapter = await MockLiquidationAdapter.deploy(false, 0);
       const MockPositionAdapter = await ethers.getContractFactory("MockPositionAdapter");
       const positionAdapter = await MockPositionAdapter.deploy();
-      const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-      const template = await LendingMarketV2.deploy();
       const MarketDeployer = await ethers.getContractFactory("MarketDeployer");
-      const deployer = await MarketDeployer.deploy(await template.getAddress());
-      const params = {
+      const deployer = await MarketDeployer.deploy();
+      
+    await (await deployer.setFactory(owner.address)).wait(); // tests act as factoryconst params = {
         factory: ZeroAddress, marketOwner: owner.address, collateralAsset: await collateral.getAddress(),
         lendingAsset: await lending.getAddress(), protocolTreasury: treasury.address,
         assetAdapter: await assetAdapter.getAddress(), oracleAdapter: await oracleAdapter.getAddress(),
@@ -204,10 +203,8 @@ describe("AssetAdapters (production readiness)", function () {
       const liquidationAdapter = await MockLiquidationAdapter.deploy(false, 0);
       const MockPositionAdapter = await ethers.getContractFactory("MockPositionAdapter");
       const positionAdapter = await MockPositionAdapter.deploy();
-      const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-      const template = await LendingMarketV2.deploy();
       const MarketDeployer = await ethers.getContractFactory("MarketDeployer");
-      const deployer = await MarketDeployer.deploy(await template.getAddress());
+      const deployer = await MarketDeployer.deploy();
       const params = {
         factory: ZeroAddress, marketOwner: owner.address, collateralAsset: await collateral.getAddress(),
         lendingAsset: await lending.getAddress(), protocolTreasury: treasury.address,

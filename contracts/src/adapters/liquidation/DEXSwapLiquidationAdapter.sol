@@ -248,15 +248,18 @@ contract DEXSwapLiquidationAdapter is ILiquidationAdapter {
             })
         );
 
-        require(amountOut >= debtOwed, "Insufficient liquidation output");
+        // Allow underwater liquidations: if swap output < debtOwed, settle the
+        // shortfall via market write-off accounting (same pattern as NFT auctions).
+        // Market.liquidate already reduces totalLiquidity by (principal - recovery).
         IERC20 lending = IERC20(lendingToken);
-        lending.safeTransfer(msg.sender, debtOwed);
+        uint256 toMarket = amountOut < debtOwed ? amountOut : debtOwed;
+        lending.safeTransfer(msg.sender, toMarket);
 
-        returnedToHolder = amountOut - debtOwed;
+        returnedToHolder = amountOut > debtOwed ? amountOut - debtOwed : 0;
         if (returnedToHolder > 0) {
             lending.safeTransfer(holder, returnedToHolder);
         }
-        recoveredForLP = debtOwed;
+        recoveredForLP = toMarket;
 
         emit LiquidationExecuted(
             msg.sender,

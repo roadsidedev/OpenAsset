@@ -338,6 +338,28 @@ contract MarketFactoryV2 is ReentrancyGuard {
         // Configure Oracle Adapter (asset address for price feed lookup)
         if (config.oracleAdapter != address(0)) {
             IOracleAdapter(config.oracleAdapter).configure(marketAddress, config.collateralAsset);
+            // UniswapV3TWAPAdapter: if a pool was pre-registered for this asset via
+            // registerPoolForAsset / getPoolForAsset, bind it to the market so TWAP
+            // consult works without a separate keeper step. Remaining keeper path
+            // (updatePrice) is documented in SECURITY_REMEDIATION.md for forks /
+            // low-cardinality pools where observe() is unavailable.
+            (bool ok, bytes memory data) = config.oracleAdapter.staticcall(
+                abi.encodeWithSignature("getPoolForAsset(address)", config.collateralAsset)
+            );
+            if (ok && data.length >= 64) {
+                (address pool, bool token0IsBase) = abi.decode(data, (address, bool));
+                if (pool != address(0)) {
+                    (bool rok, ) = config.oracleAdapter.call(
+                        abi.encodeWithSignature(
+                            "registerPoolForMarket(address,address,bool)",
+                            marketAddress,
+                            pool,
+                            token0IsBase
+                        )
+                    );
+                    rok; // best-effort — non-TWAP oracles ignore
+                }
+            }
         }
 
         // Configure Compliance Adapter (no extra params beyond market identity)
@@ -449,6 +471,14 @@ contract MarketFactoryV2 is ReentrancyGuard {
         require(registry.isSelectable(config.positionAdapter), "Position adapter not selectable");
         if (config.complianceAdapter != address(0)) {
             require(registry.isSelectable(config.complianceAdapter), "Compliance adapter not selectable");
+        }
+        // Optional type checks — reject mis-typed adapters even if marked selectable
+        require(registry.getAdapterInfo(config.assetAdapter).adapterType == AdapterRegistry.AdapterType.ASSET, "Asset adapter type mismatch");
+        require(registry.getAdapterInfo(config.oracleAdapter).adapterType == AdapterRegistry.AdapterType.ORACLE, "Oracle adapter type mismatch");
+        require(registry.getAdapterInfo(config.liquidationAdapter).adapterType == AdapterRegistry.AdapterType.LIQUIDATION, "Liquidation adapter type mismatch");
+        require(registry.getAdapterInfo(config.positionAdapter).adapterType == AdapterRegistry.AdapterType.POSITION, "Position adapter type mismatch");
+        if (config.complianceAdapter != address(0)) {
+            require(registry.getAdapterInfo(config.complianceAdapter).adapterType == AdapterRegistry.AdapterType.COMPLIANCE, "Compliance adapter type mismatch");
         }
 
         // Rule 4: Check for duplicate config
