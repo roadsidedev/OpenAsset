@@ -40,15 +40,27 @@ describe("Phase 6: Security & Integration Tests", function () {
     const positionAdapter = overrides.positionAdapter || await MockPositionAdapter.deploy();
 
     const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-    const market = await LendingMarketV2.deploy(
-      ethers.ZeroAddress, owner.address,
-      await mToken.getAddress(), await lToken.getAddress(), treasury.address,
-      await assetAdapter.getAddress(), await oracleAdapter.getAddress(),
-      overrides.useCompliance ? await complianceAdapter.getAddress() : ethers.ZeroAddress,
-      await liquidationAdapter.getAddress(), await positionAdapter.getAddress(),
-      LTV, APR, DURATION, GRACE_PERIOD, true, 12000,
-      { enabled: true, pauseThresholdBps: 2000, lookbackPeriodSeconds: 3600, resumeThresholdBps: 1000, cooldownSeconds: 7200 }
-    );
+    const market = await LendingMarketV2.deploy(owner.address);
+    await market.waitForDeployment();
+    await market.connect(owner).initialize({
+      factory: ethers.ZeroAddress,
+      marketOwner: owner.address,
+      collateralAsset: await mToken.getAddress(),
+      lendingAsset: await lToken.getAddress(),
+      protocolTreasury: treasury.address,
+      assetAdapter: await assetAdapter.getAddress(),
+      oracleAdapter: await oracleAdapter.getAddress(),
+      complianceAdapter: overrides.useCompliance ? await complianceAdapter.getAddress() : ethers.ZeroAddress,
+      liquidationAdapter: await liquidationAdapter.getAddress(),
+      positionAdapter: await positionAdapter.getAddress(),
+      ltvBps: LTV,
+      aprBps: APR,
+      durationSeconds: DURATION,
+      gracePeriodHours: GRACE_PERIOD,
+      enableHealthFactor: true,
+      healthFactorThreshold: 12000,
+      cbConfig: { enabled: true, pauseThresholdBps: 2000, lookbackPeriodSeconds: 3600, resumeThresholdBps: 1000, cooldownSeconds: 7200 },
+    });
 
     // Fund signers
     await mToken.mint(borrower.address, ethers.parseEther("10000000"));

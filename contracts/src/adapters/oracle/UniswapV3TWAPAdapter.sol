@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "../../interfaces/adapters/IOracleAdapter.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "../../libraries/UniswapV3TwapLibrary.sol";
 
 /**
  * @title UniswapV3TWAPAdapter
@@ -33,6 +34,13 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
     }
 
     mapping(address => MarketConfig) public marketConfigs;
+    struct AssetPool {
+        address pool;
+        bool token0IsBase;
+    }
+    /// @notice Optional asset→pool registry so MarketFactoryV2 can auto-bind pools at createMarket
+    mapping(address => AssetPool) public assetPools;
+
 
     uint256 public constant MAX_DEVIATION_BPS = 5000;
     uint256 public constant BPS_DENOMINATOR = 10000;
@@ -91,6 +99,18 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
         emit PoolConfigured(market, marketConfigs[market].asset, pool, twapPeriod);
     }
 
+    /// @notice Pre-register a Uniswap V3 pool for an asset (factory only).
+    /// @dev MarketFactoryV2 reads this via getPoolForAsset during _configureAdapters.
+    function registerPoolForAsset(address asset, address pool, bool token0IsBase) external onlyFactory {
+        require(asset != address(0) && pool != address(0), "Invalid");
+        assetPools[asset] = AssetPool({pool: pool, token0IsBase: token0IsBase});
+    }
+
+    function getPoolForAsset(address asset) external view returns (address pool, bool token0IsBase) {
+        AssetPool memory ap = assetPools[asset];
+        return (ap.pool, ap.token0IsBase);
+    }
+
     /// @notice Force fallback mode for deterministic tests (factory only)
     function setFallbackMode(address market, bool useFallbackOnly) external onlyFactory {
         require(market != address(0), "Invalid market");
@@ -142,8 +162,8 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
         require(newPrice > 0 && newPrice < MAX_SANE_PRICE, "Invalid price");
         marketConfigs[market].lastPrice = newPrice;
         marketConfigs[market].lastUpdatedAt = block.timestamp;
-        // Review M9: keeper price pushes are the effective oracle authority in v2.x
-        // (on-chain consult disabled) — they must leave an on-chain trail
+        // Review M9: keeper price pushes remain a fallback when pool observations are
+        // unavailable — they must leave an on-chain trail. Primary path is on-chain TWAP.
         emit FallbackPriceUpdated(market, newPrice, block.timestamp);
     }
 
@@ -161,9 +181,26 @@ contract UniswapV3TWAPAdapter is IOracleAdapter {
     }
 
     /// @notice External wrapper — keeper-fed TWAP (fallback) is primary in v2.1; on-chain pool TWAP via helper will be enabled in v2.2.
-    /// @dev In v2.1, this reverts to trigger fallback path; v2.2 will replace with helper call.
-    function _consultWithQuote(address, address, uint32) external pure returns (uint256) {
-        revert("On-chain TWAP not enabled in v2.1 - use keeper-fed updatePrice + staleness");
+        /// @notice External self-call wrapper for TWAP consult (enables try/catch in _tryTwap).
+    /// @dev Uses UniswapV3TwapLibrary (0.8 port of OracleLibrary.consult + getQuoteAtTick).
+    ///      Returns the quote-token value of 1e18 base asset units.
+    function _consultWithQuote(address pool, address asset, uint32 secondsAgo) external view returns (uint256) {
+        require(msg.sender == address(this), "Only self");
+        require(pool != address(0) && asset != address(0) && secondsAgo > 0, "Bad args");
+        int24 tick = UniswapV3TwapLibrary.consult(pool, secondsAgo);
+        address token0 = IUniswapV3Pool(pool).token0();
+        address token1 = IUniswapV3Pool(pool).token1();
+        require(asset == token0 || asset == token1, "Asset not in pool");
+        address quote = asset == token0 ? token1 : token0;
+        // Prefer configured quoteToken when it is the other side of the pool
+        if (quoteToken != address(0)) {
+            require(quote == quoteToken || asset == quoteToken, "Quote mismatch");
+            if (asset == quoteToken) {
+                // Price of quote in base — invert by swapping roles
+                quote = token0 == asset ? token1 : token0;
+            }
+        }
+        return UniswapV3TwapLibrary.getQuoteAtTick(tick, 1e18, asset, quote);
     }
 
     function _fallbackPrice(MarketConfig storage config) internal view returns (uint256 price, bool isTrusted, uint256 updatedAt) {

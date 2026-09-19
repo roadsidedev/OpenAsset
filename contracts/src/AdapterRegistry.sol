@@ -255,9 +255,11 @@ contract AdapterRegistry {
     function markRejected(address adapter, string calldata reasonReference) external onlyAuditGovernance {
         if (adapters[adapter].adapterAddress == address(0)) revert NotRegistered();
         adapters[adapter].verified = false;
+        adapters[adapter].deprecated = true; // rejected adapters must not remain selectable
         adapterMetadata[adapter].reviewStatus = ReviewStatus.REJECTED;
         adapterMetadata[adapter].auditURI = reasonReference;
         emit AdapterReviewStatusUpdated(adapter, ReviewStatus.REJECTED, reasonReference);
+        emit AdapterDeprecated(adapter, reasonReference);
     }
 
     /**
@@ -316,13 +318,17 @@ contract AdapterRegistry {
 
     /**
      * @notice Check if an adapter is registered and valid for selection
-     * @dev An adapter is selectable if registered AND not deprecated
+     * @dev An adapter is selectable if registered AND verified AND not deprecated AND not rejected
      * @param adapter Address of the adapter
      * @return selectable True if registered and not deprecated
      */
     function isSelectable(address adapter) external view returns (bool) {
         AdapterInfo storage info = adapters[adapter];
-        return info.adapterAddress != address(0) && !info.deprecated;
+        // Selectable only when registered, verified, not deprecated, and not rejected.
+        return info.adapterAddress != address(0)
+            && info.verified
+            && !info.deprecated
+            && adapterMetadata[adapter].reviewStatus != ReviewStatus.REJECTED;
     }
 
     /**

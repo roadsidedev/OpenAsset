@@ -1,11 +1,31 @@
 import { PrismaClient, LoanStatus } from '@prisma/client';
 import { ethers } from 'ethers';
 import { logger } from '../utils/logger';
-import { LENDING_MARKET_V2_ABI } from './web3/ContractAbisV2';
+import { LENDING_MARKET_V2_ABI, ILIQUIDATION_ADAPTER_ABI } from './web3/ContractAbisV2';
 
-interface KeeperConfig {
-  privateKey: string;
+/** On-chain LendingMarketV2.LoanStatus → Prisma LoanStatus */
+const ON_CHAIN_LOAN_STATUS: Record<number, LoanStatus> = {
+  0: 'ACTIVE',
+  1: 'GRACE_PERIOD',
+  2: 'LIQUIDATION_CURE',
+  3: 'LIQUIDATION_SETTLING',
+  4: 'REPAID',
+  5: 'LIQUIDATED',
+};
+
+interface KeeperRuntimeConfig {
   chainId: number;
+  gasLimit: number;
+  maxGasPriceGwei: number;
+  pollIntervalMs: number;
+  minHealthFactorBps: number;
+  batchSize: number;
+}
+
+interface KeeperConfigInput {
+  /** Used only to construct the wallet; never stored on the service config object */
+  privateKey?: string;
+  chainId?: number;
   gasLimit?: number;
   maxGasPriceGwei?: number;
   pollIntervalMs?: number;
@@ -18,7 +38,8 @@ export class KeeperService {
   private provider: ethers.Provider;
   private wallet: ethers.Wallet;
   private chainId: number;
-  private config: Required<KeeperConfig>;
+  /** Runtime knobs only — never includes privateKey */
+  private config: KeeperRuntimeConfig;
   private isRunning = false;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private lastBlockChecked = 0;
@@ -27,21 +48,24 @@ export class KeeperService {
     prisma: PrismaClient,
     provider: ethers.Provider,
     chainId: number,
-    config?: Partial<KeeperConfig>
+    config?: Partial<KeeperConfigInput>
   ) {
     this.prisma = prisma;
     this.provider = provider;
     this.chainId = chainId;
-    
-    const privateKey = config?.privateKey || process.env.KEEPER_PRIVATE_KEY;
-    if (!privateKey) {
-      throw new Error('Keeper private key not configured');
-    }
-    
+
+    // Resolve private key in a local closure; do not assign onto exported/plain config
+    const privateKey = (() => {
+      const key = config?.privateKey || process.env.KEEPER_PRIVATE_KEY;
+      if (!key) {
+        throw new Error('Keeper private key not configured');
+      }
+      return key;
+    })();
+
     this.wallet = new ethers.Wallet(privateKey, provider);
-    
+
     this.config = {
-      privateKey,
       chainId,
       gasLimit: config?.gasLimit || 500_000,
       maxGasPriceGwei: config?.maxGasPriceGwei || 100,
@@ -69,6 +93,30 @@ export class KeeperService {
 
   isRunningStatus(): boolean {
     return this.isRunning;
+  }
+
+  private mapOnChainStatus(status: number): LoanStatus | null {
+    return ON_CHAIN_LOAN_STATUS[status] ?? null;
+  }
+
+  private async queryCureWindowSeconds(liquidationAdapter: string): Promise<number> {
+    try {
+      const adapter = new ethers.Contract(
+        liquidationAdapter,
+        ILIQUIDATION_ADAPTER_ABI,
+        this.provider
+      );
+      const cureWindow = await adapter.cureWindowSeconds();
+      const seconds = Number(cureWindow);
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        logger.warn({ liquidationAdapter }, 'Invalid cureWindowSeconds from adapter; skipping settle');
+        return 0;
+      }
+      return seconds;
+    } catch (error) {
+      logger.warn({ err: error, liquidationAdapter }, 'Failed to query cureWindowSeconds');
+      return 0;
+    }
   }
 
   private async poll(): Promise<void> {
@@ -103,27 +151,30 @@ export class KeeperService {
 
     for (const loan of loans) {
       try {
-        // Double-check on-chain health factor
         const marketContract = new ethers.Contract(
           loan.marketAddress,
           LENDING_MARKET_V2_ABI,
           this.wallet
         );
-        
+
         const healthFactorStr = await marketContract.getHealthFactor(loan.contractLoanId);
         const healthFactor = Number(healthFactorStr) / 10000;
-        
+
         if (healthFactor >= this.config.minHealthFactorBps / 10000) {
           continue; // Health recovered, skip
         }
 
-        // Check if already liquidated on-chain
+        // Check if already liquidated / in cure on-chain
         const loanDetails = await marketContract.getLoanDetails(loan.contractLoanId);
         const onChainStatus = Number(loanDetails.status);
-        if (onChainStatus === 5 || onChainStatus === 6) { // LIQUIDATED or LIQUIDATION_SETTLING
+        const mapped = this.mapOnChainStatus(onChainStatus);
+        if (mapped && mapped !== 'ACTIVE' && mapped !== 'GRACE_PERIOD') {
           await this.prisma.loan.update({
             where: { id: loan.id },
-            data: { status: onChainStatus === 5 ? 'LIQUIDATED' : 'LIQUIDATION_SETTLING' },
+            data: {
+              status: mapped,
+              ...(mapped === 'LIQUIDATED' ? { liquidatedAt: new Date() } : {}),
+            },
           });
           continue;
         }
@@ -131,7 +182,7 @@ export class KeeperService {
         // Estimate gas
         const gasEstimate = await marketContract.liquidate.estimateGas(loan.contractLoanId);
         const gasLimit = gasEstimate + 50_000n; // Buffer
-        
+
         // Check gas price
         const feeData = await this.provider.getFeeData();
         const maxGasPrice = ethers.parseUnits(this.config.maxGasPriceGwei.toString(), 'gwei');
@@ -140,21 +191,29 @@ export class KeeperService {
           continue;
         }
 
-        // Execute liquidation
         logger.info({ loanId: loan.contractLoanId, market: loan.marketAddress, healthFactor }, 'Executing liquidation');
-        
+
         const tx = await marketContract.liquidate(loan.contractLoanId, { gasLimit });
         const receipt = await tx.wait();
-        
+
         logger.info({ loanId: loan.contractLoanId, txHash: receipt?.hash }, 'Liquidation executed');
-        
-        // Update DB
+
+        // Re-read on-chain status (async → LIQUIDATION_CURE, sync → LIQUIDATED)
+        const after = await marketContract.getLoanDetails(loan.contractLoanId);
+        const afterMapped = this.mapOnChainStatus(Number(after.status)) || 'LIQUIDATION_CURE';
+
         await this.prisma.loan.update({
           where: { id: loan.id },
-          data: { status: 'LIQUIDATION_SETTLING' },
+          data: {
+            status: afterMapped,
+            frozenInterestAt:
+              afterMapped === 'LIQUIDATION_CURE' && Number(after.frozenInterestAt) > 0
+                ? new Date(Number(after.frozenInterestAt) * 1000)
+                : undefined,
+            ...(afterMapped === 'LIQUIDATED' ? { liquidatedAt: new Date() } : {}),
+          },
         });
-        
-        // Create alert
+
         await this.prisma.alert.create({
           data: {
             userId: loan.positionHolderAddress,
@@ -164,7 +223,7 @@ export class KeeperService {
             message: `Loan ${loan.contractLoanId} liquidated. Transaction: ${receipt?.hash}`,
           },
         });
-        
+
       } catch (error) {
         logger.error({ err: error, loanId: loan.contractLoanId }, 'Liquidation execution failed');
       }
@@ -191,45 +250,56 @@ export class KeeperService {
           LENDING_MARKET_V2_ABI,
           this.wallet
         );
-        
+
         const loanDetails = await marketContract.getLoanDetails(loan.contractLoanId);
         const onChainStatus = Number(loanDetails.status);
-        
-        // If already settled on-chain
-        if (onChainStatus === 5 || onChainStatus === 6) {
+        const mapped = this.mapOnChainStatus(onChainStatus);
+
+        // Sync DB if chain already moved past CURE
+        if (mapped && mapped !== 'LIQUIDATION_CURE') {
           await this.prisma.loan.update({
             where: { id: loan.id },
-            data: { status: onChainStatus === 5 ? 'LIQUIDATED' : 'LIQUIDATION_SETTLING' },
+            data: {
+              status: mapped,
+              ...(mapped === 'LIQUIDATED' ? { liquidatedAt: new Date() } : {}),
+            },
           });
           continue;
         }
-        
-        // Check cure window expiry
+
         const frozenInterestAt = Number(loanDetails.frozenInterestAt);
         if (frozenInterestAt === 0) continue;
-        
-        // Get cure window from liquidation adapter
-        // For now use default 24h, but should query adapter
-        const cureWindow = 24 * 60 * 60; // 24 hours default
+
+        const liquidationAdapter = (loan as any).market?.liquidationAdapter as string | undefined;
+        if (!liquidationAdapter) {
+          logger.warn({ loanId: loan.contractLoanId }, 'No liquidationAdapter on market; skipping settle');
+          continue;
+        }
+
+        const cureWindow = await this.queryCureWindowSeconds(liquidationAdapter);
+        if (cureWindow <= 0) continue;
+
         const cureDeadline = frozenInterestAt + cureWindow;
-        
         if (Date.now() / 1000 < cureDeadline) continue; // Window not expired
-        
-        // Execute settlement
-        logger.info({ loanId: loan.contractLoanId, market: loan.marketAddress }, 'Executing settlement');
-        
-        const tx = await marketContract.settleLiquidation(loan.contractLoanId, { 
-          gasLimit: this.config.gasLimit 
+
+        logger.info({ loanId: loan.contractLoanId, market: loan.marketAddress, cureWindow }, 'Executing settlement');
+
+        const tx = await marketContract.settleLiquidation(loan.contractLoanId, {
+          gasLimit: this.config.gasLimit
         });
         const receipt = await tx.wait();
-        
+
         logger.info({ loanId: loan.contractLoanId, txHash: receipt?.hash }, 'Settlement executed');
-        
+
+        // settleLiquidation → LIQUIDATION_SETTLING on-chain (not LIQUIDATED yet)
+        const after = await marketContract.getLoanDetails(loan.contractLoanId);
+        const afterMapped = this.mapOnChainStatus(Number(after.status)) || 'LIQUIDATION_SETTLING';
+
         await this.prisma.loan.update({
           where: { id: loan.id },
-          data: { status: 'LIQUIDATED', liquidatedAt: new Date() },
+          data: { status: afterMapped },
         });
-        
+
       } catch (error) {
         logger.error({ err: error, loanId: loan.contractLoanId }, 'Settlement execution failed');
       }
@@ -242,7 +312,7 @@ export class KeeperService {
    */
   private async checkExpiredCureWindows(): Promise<void> {
     const SETTLEMENT_TIMEOUT = 7 * 24 * 60 * 60; // 7 days
-    
+
     const loans = await this.prisma.loan.findMany({
       where: {
         status: 'LIQUIDATION_SETTLING' as LoanStatus,
@@ -253,7 +323,7 @@ export class KeeperService {
 
     for (const loan of loans) {
       const loanAge = (Date.now() - loan.createdAt.getTime()) / 1000;
-      
+
       if (loanAge > SETTLEMENT_TIMEOUT) {
         logger.warn(
           { loanId: loan.contractLoanId, market: loan.marketAddress, age: loanAge },

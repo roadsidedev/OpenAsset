@@ -9,4 +9,33 @@ function getLogLevel(): string {
   }
 }
 
-export const logger = pino({ level: getLogLevel() });
+export const logger = pino({
+  level: getLogLevel(),
+  redact: {
+    paths: [
+      'privateKey',
+      'KEEPER_PRIVATE_KEY',
+      'keeper.privateKey',
+      'config.privateKey',
+      'config.keeper.privateKey',
+      'JWT_SECRET',
+      'jwtSecret',
+      'config.jwtSecret',
+      'password',
+      'authorization',
+      'headers.authorization',
+      'req.headers.authorization',
+      '*.privateKey',
+      '*.JWT_SECRET',
+      '*.jwtSecret',
+      // Full RPC / webhook URLs often embed API keys
+      'url',
+      'rpcUrl',
+      'RPC_URL',
+      '*.url',
+      '*.rpcUrl',
+      'err.config.headers.Authorization',
+    ],
+    censor: '[Redacted]',
+  },
+});

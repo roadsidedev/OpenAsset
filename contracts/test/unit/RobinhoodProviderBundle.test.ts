@@ -57,13 +57,12 @@ describe("Robinhood provider bundle", function () {
 
     const Registry = await ethers.getContractFactory("AdapterRegistry");
     registry = await Registry.deploy(governance.address);
-    const MarketImpl = await ethers.getContractFactory("LendingMarketV2");
-    const marketTemplate = await MarketImpl.deploy();
-    await marketTemplate.waitForDeployment();
     const Deployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await Deployer.deploy(await marketTemplate.getAddress());
+    const deployer = await Deployer.deploy();
+    await deployer.waitForDeployment();
     const Factory = await ethers.getContractFactory("MarketFactoryV2");
     factory = await Factory.deploy(owner.address, treasury.address, registry.target, deployer.target);
+    await (await deployer.setFactory(await factory.getAddress())).wait();
 
     const MockToken = await ethers.getContractFactory("MockRobinhoodToken");
     token = await MockToken.deploy("Robinhood Apple Token", "AAPL");

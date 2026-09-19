@@ -5,7 +5,7 @@
 
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, optionalAuth } from '../middleware/auth';
 import {
   getUser,
   updateUser,
@@ -21,8 +21,9 @@ export function createUserRoutes(prisma: PrismaClient): express.Router {
   const router = express.Router();
 
   router.get('/:address/nonce', getNonce);
-  router.get('/:address/activity', getUserActivity);
-  router.get('/:address', getUser);
+  // Activity includes alert messages — require authentication
+  router.get('/:address/activity', requireAuth, getUserActivity);
+  router.get('/:address', optionalAuth, getUser);
   router.put('/:address', requireAuth, updateUser);
 
   router.post('/:address/verify-email', requireAuth, requestEmailVerification);

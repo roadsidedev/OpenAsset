@@ -1,6 +1,6 @@
 import { lifecycle } from './bootstrap/lifecycle';
 import { logger } from './utils/logger';
-import { config } from './config/unifiedConfig';
+import { config, getKeeperPrivateKey } from './config/unifiedConfig';
 import { shutdown } from './bootstrap/workers';
 import { ApiWorker } from './workers/apiWorker';
 import { IndexerWorker } from './workers/indexerWorker';
@@ -18,7 +18,7 @@ if (config.alerts?.sendgrid?.apiKey || config.alerts?.twilio?.accountSid || conf
   lifecycle.register(new MonitorWorker());
 }
 
-if (config.keeper?.enabled && config.keeper?.privateKey) {
+if (config.keeper?.enabled && getKeeperPrivateKey()) {
   lifecycle.register(new KeeperWorker());
 }
 

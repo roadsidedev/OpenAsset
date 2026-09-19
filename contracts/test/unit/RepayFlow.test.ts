@@ -45,12 +45,11 @@ describe("RepayFlow (LendingMarketV2)", function () {
     positionAdapter = await MockPositionAdapter.deploy();
 
     // LendingMarketV2 is a clone template: deploy template once, clone via MarketDeployer
-    const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-    const template = await LendingMarketV2.deploy();
     const MarketDeployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await MarketDeployer.deploy(await template.getAddress());
+    const deployer = await MarketDeployer.deploy();
 
-    const params = {
+    
+    await (await deployer.setFactory(admin.address)).wait(); // tests act as factoryconst params = {
       factory: ethers.ZeroAddress,
       marketOwner: owner.address,
       collateralAsset: await collateral.getAddress(),

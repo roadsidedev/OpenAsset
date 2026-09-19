@@ -109,12 +109,11 @@ describe("DEXSwap per-market routing + factory Rule 6", function () {
 
     const AdapterRegistry = await ethers.getContractFactory("AdapterRegistry");
     const registry = await AdapterRegistry.deploy(admin.address);
-    const LendingMarketV2 = await ethers.getContractFactory("LendingMarketV2");
-    const template = await LendingMarketV2.deploy();
     const MarketDeployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await MarketDeployer.deploy(await template.getAddress());
+    const deployer = await MarketDeployer.deploy();
     const MarketFactoryV2 = await ethers.getContractFactory("MarketFactoryV2");
     const factory = await MarketFactoryV2.deploy(admin.address, admin.address, await registry.getAddress(), await deployer.getAddress());
+    await (await deployer.setFactory(await factory.getAddress())).wait();
     await factory.addLendingAsset(await lending.getAddress());
 
     const ERC20Adapter = await ethers.getContractFactory("ERC20Adapter");

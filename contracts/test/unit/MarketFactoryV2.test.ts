@@ -27,16 +27,16 @@ describe("MarketFactoryV2", function () {
     const Registry = await ethers.getContractFactory("AdapterRegistry");
     registry = await Registry.deploy(governance.address);
 
-    // Deploy MarketDeployer (clone pattern: template + deployer)
-    const MarketImpl = await ethers.getContractFactory("LendingMarketV2");
-    const marketTemplate = await MarketImpl.deploy();
-    await marketTemplate.waitForDeployment();
+    // Deploy MarketDeployer (clone pattern: deployer owns template; factory wired via setFactory)
     const Deployer = await ethers.getContractFactory("MarketDeployer");
-    const deployer = await Deployer.deploy(await marketTemplate.getAddress());
+    const deployer = await Deployer.deploy();
+    await deployer.waitForDeployment();
 
     // Deploy factory with the deployer
     const Factory = await ethers.getContractFactory("MarketFactoryV2");
     factory = await Factory.deploy(owner.address, treasury.address, await registry.getAddress(), await deployer.getAddress());
+    await factory.waitForDeployment();
+    await (await deployer.setFactory(await factory.getAddress())).wait();
 
     // Deploy mock tokens
     const MockERC20 = await ethers.getContractFactory("MockERC20");

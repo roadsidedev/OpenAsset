@@ -3,6 +3,15 @@ import { config, getRpcUrl } from '../config/unifiedConfig';
 import { logger } from '../utils/logger';
 
 const providers: Map<number, ethers.JsonRpcProvider> = new Map();
+
+function rpcHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '[invalid-rpc-url]';
+  }
+}
+
 const currentProviderIndex: Map<number, number> = new Map();
 
 export function getConfiguredChains(): number[] {
@@ -30,7 +39,7 @@ export function getProvider(chainId: number = 11155111): ethers.JsonRpcProvider 
   currentProviderIndex.set(chainId, 0);
   
   provider.on('error', async (error) => {
-    logger.warn({ err: error, chainId, url }, 'Provider error, attempting failover');
+    logger.warn({ err: error, chainId, rpcHost: rpcHostname(url) }, 'Provider error, attempting failover');
     // Could implement failover here if multiple URLs per chain
   });
   

@@ -60,6 +60,8 @@ contract LPTokenV2 is ERC20 {
  * - How positions are represented (IPositionAdapter)
  */
 contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable, IERC721Receiver {
+    /// @notice MarketDeployer allowed to call initialize (set in implementation constructor).
+    address public immutable deployer;
     using SafeERC20 for IERC20;
     using Address for address;
 
@@ -253,11 +255,17 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable, IERC721Rec
 
     // ============ Constructor / Initializer ============
 
-    constructor() {
+    constructor(address _deployer) {
+        require(_deployer != address(0), "Invalid deployer");
+        deployer = _deployer;
         _disableInitializers();
     }
 
     function initialize(ConstructorParams memory p) external initializer {
+        // Security: only MarketDeployer may initialize clones. Fail-closed validation
+        // remains in MarketDeployer.deploy(); onlyDeployer is sufficient to prevent
+        // direct Clones.clone(template)+initialize bypass of that gate.
+        require(msg.sender == deployer, "Only deployer");
         // Review M3/M4: fail-closed parameter validation lives in MarketDeployer.deploy
         // (kept out of the template to stay under the 24KB deploy limit â€” every market
         // clone is created through the deployer, so the check cannot be bypassed).
@@ -958,10 +966,12 @@ contract LendingMarketV2 is Initializable, ReentrancyGuard, Pausable, IERC721Rec
         (uint256 price, bool trusted, ) = oracleAdapter.getPrice();
         if (!trusted || price == 0) return (0, false);
 
+        // Allow underwater liquidations: minOutput is the slippage-adjusted collateral
+        // value, NOT floored at debtOwed. Shortfall is written off in liquidate() accounting
+        // (same pattern as NFTAuctionLiquidationAdapter).
         uint256 oracleValueInLoan = _collateralValueInLendingUnits(collateralAmount, price);
-        uint256 slippageFloor = Math.mulDiv(oracleValueInLoan, BPS_DENOMINATOR - slippageBps, BPS_DENOMINATOR);
-        minOutput = slippageFloor > debtOwed ? slippageFloor : debtOwed;
-        oracleTrusted = minOutput > 0;
+        minOutput = Math.mulDiv(oracleValueInLoan, BPS_DENOMINATOR - slippageBps, BPS_DENOMINATOR);
+        oracleTrusted = trusted && price > 0;
     }
 
     function getLoanDetails(uint256 loanId) external view returns (

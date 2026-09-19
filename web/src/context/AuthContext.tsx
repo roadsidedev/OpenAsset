@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { toast } from 'sonner';
 import { fetchFromApi } from '../lib/api';
@@ -19,11 +19,31 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Decode JWT payload without verifying (client-side address binding check only). */
+function decodeJwtAddress(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const json = JSON.parse(atob(padded));
+    return typeof json.address === 'string' ? json.address.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, authenticated, logout: privyLogout, ready } = usePrivy();
+  const { user, authenticated, ready } = usePrivy();
   const { wallets } = useWallets();
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
+
+  const activeAddress = useMemo(() => {
+    const fromUser = user?.wallet?.address?.toLowerCase();
+    if (fromUser) return fromUser;
+    return null;
+  }, [user?.wallet?.address]);
 
   // Load auth token from local storage on mount
   useEffect(() => {
@@ -34,8 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Sync: If Privy has finished initializing and says not authenticated, clear our local state.
-  // We only clear when `ready` is true to avoid wiping the token during page refresh while
-  // Privy is still loading.
   useEffect(() => {
     if (ready && !authenticated && authToken) {
       setAuthToken(null);
@@ -43,36 +61,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [ready, authenticated, authToken]);
 
+  // On wallet change / mount: if JWT address !== active address, clear token and require re-login
+  useEffect(() => {
+    if (!authToken || !activeAddress) return;
+    const jwtAddress = decodeJwtAddress(authToken);
+    if (jwtAddress && jwtAddress !== activeAddress) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      setAuthToken(null);
+      toast.message('Wallet changed — please sign in again.');
+    }
+  }, [authToken, activeAddress]);
+
   const signLoginMessage = useCallback(async () => {
     if (!authenticated || !user?.wallet?.address || !wallets.length) return;
-    
+
     setIsSigning(true);
     try {
-      // FIX: Case-insensitive comparison for wallet address
       const userAddress = user.wallet.address.toLowerCase();
       const wallet = wallets.find((w) => w.address.toLowerCase() === userAddress);
-      
+
       if (!wallet) {
-        console.error('Wallet not found for address:', userAddress);
-        // Fallback: use the first connected wallet if specific match fails 
-        // (sometimes Privy user object lags behind wallet list)
-        const fallbackWallet = wallets[0];
-        if (!fallbackWallet) throw new Error('No wallets connected');
-        
-        // warn if mismatch
-        if (fallbackWallet.address.toLowerCase() !== userAddress) {
-             console.warn('Using fallback wallet:', fallbackWallet.address);
-        }
+        // Active address exists but is not in the connected wallets list — do NOT fall back to wallets[0]
+        console.error('Wallet not found for active address:', userAddress);
+        toast.error('Connected wallet does not match your active address. Switch wallets and try again.');
+        return;
       }
 
-      const activeWallet = wallet || wallets[0];
+      const activeWallet = wallet;
 
       // 1. Fetch nonce from backend
       const { nonce } = await fetchFromApi(`/auth/nonce/${activeWallet.address}`);
 
       const message = `Login to OpenAsset Market: ${nonce}`;
       const signature = await activeWallet.sign(message);
-      
+
       // 2. Login to get JWT
       const { token } = await fetchFromApi('/auth/login', {
         method: 'POST',
@@ -107,11 +129,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [authToken]);
 
   const logout = useCallback(() => {
+    const token = authToken || localStorage.getItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     setAuthToken(null);
-    // We don't call privyLogout() here to separate concerns, 
-    // but the effect above will clean up if Privy logs out.
-  }, []);
+    // Best-effort server-side revocation
+    if (token) {
+      fetchFromApi('/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
+  }, [authToken]);
 
   const value = {
     isAuthenticated: !!authToken,

@@ -44,7 +44,7 @@ const envSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_NUMBER: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_KEY: z.string().optional(),
-  JWT_SECRET: z.string().default('super-secret-change-me-in-production'),
+  JWT_SECRET: z.string().min(1).optional(),
   
   // Keeper Service (Liquidation Execution)
   KEEPER_ENABLED: z.string().default('false').transform(v => v === 'true'),
@@ -61,6 +61,35 @@ const envSchema = z.object({
 });
 
 const env = envSchema.parse(process.env);
+
+const INSECURE_JWT_PLACEHOLDERS = new Set([
+  'super-secret-change-me-in-production',
+  'changeme',
+  'secret',
+  'jwt-secret',
+  'your-secret-here',
+]);
+
+function assertSecureJwtSecret(secret: string | undefined, nodeEnv: string): string {
+  if (!secret || !secret.trim()) {
+    throw new Error(
+      `JWT_SECRET is required (NODE_ENV=${nodeEnv}). Set a strong random secret via environment.`
+    );
+  }
+  const normalized = secret.trim();
+  if (INSECURE_JWT_PLACEHOLDERS.has(normalized.toLowerCase()) || INSECURE_JWT_PLACEHOLDERS.has(normalized)) {
+    throw new Error(
+      `JWT_SECRET must not use a known insecure placeholder (NODE_ENV=${nodeEnv}).`
+    );
+  }
+  // Always reject placeholders; in production also require reasonable length
+  if (nodeEnv === 'production' && normalized.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production.');
+  }
+  return normalized;
+}
+
+const resolvedJwtSecret = assertSecureJwtSecret(env.JWT_SECRET, env.NODE_ENV);
 
 function parseRpcUrls(input: string): Map<number, string[]> {
   const result = new Map<number, string[]>();
@@ -143,7 +172,7 @@ const resolvedAllowedFrontendOrigins =
 
 export const config = {
   port: env.PORT,
-  jwtSecret: env.JWT_SECRET,
+  jwtSecret: resolvedJwtSecret,
   db: {
     url: env.DATABASE_URL,
     poolSize: env.DB_POOL_SIZE,
@@ -211,10 +240,9 @@ export const config = {
     },
   },
   
-  // Keeper service configuration
+  // Keeper service configuration (private key is NOT exported on this plain object)
   keeper: {
     enabled: env.KEEPER_ENABLED,
-    privateKey: env.KEEPER_PRIVATE_KEY,
     chainId: env.KEEPER_CHAIN_ID,
     maxGasPriceGwei: env.KEEPER_MAX_GAS_PRICE_GWEI,
     pollIntervalMs: env.KEEPER_POLL_INTERVAL_MS,
@@ -222,6 +250,11 @@ export const config = {
     batchSize: env.KEEPER_BATCH_SIZE,
   },
 };
+
+/** Resolve keeper private key without putting it on the exported config object */
+export function getKeeperPrivateKey(): string | undefined {
+  return env.KEEPER_PRIVATE_KEY;
+}
 
 // Helper methods
 export function getRpcUrl(chainId: number): string | undefined {

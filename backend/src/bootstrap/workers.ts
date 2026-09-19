@@ -3,7 +3,7 @@ import { getProvider, getConfiguredChains, rotateProvider } from './provider';
 import { lifecycle, Worker, WorkerName } from './lifecycle';
 import { prisma, disconnectPrisma } from './prisma';
 import { logger } from '../utils/logger';
-import { config } from '../config/unifiedConfig';
+import { config, getKeeperPrivateKey } from '../config/unifiedConfig';
 
 export class ApiWorker implements Worker {
   name: WorkerName = 'api';
@@ -250,7 +250,7 @@ export async function bootstrap(): Promise<void> {
   }
   
   // Keeper if signer configured
-  if (config.keeper?.privateKey) {
+  if (getKeeperPrivateKey()) {
     workers.push(new KeeperWorker());
   }
   

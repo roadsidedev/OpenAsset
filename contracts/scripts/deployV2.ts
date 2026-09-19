@@ -259,23 +259,22 @@ async function deployMarketDeployer(existing?: Record<string, string>) {
     .includes("marketDeployer");
   if (existing?.marketDeployer && !forceRedeployDeployer) {
     console.log(`  MarketDeployer (reuse): ${existing.marketDeployer}`);
-    return { address: existing.marketDeployer };
+    const reused = await ethers.getContractAt("MarketDeployer", existing.marketDeployer);
+    return { address: existing.marketDeployer, contract: reused };
   }
   if (existing?.marketDeployer && forceRedeployDeployer) {
     console.log(`  MarketDeployer (force redeploy, was ${existing.marketDeployer})`);
   }
   console.log("\n=== Deploying MarketDeployer (clone pattern) ===");
-  const Template = await ethers.getContractFactory("LendingMarketV2");
-  const template = await Template.deploy();
-  await waitTx(template.deploymentTransaction(), "LendingMarketV2.template.deploy");
-  const templateAddr = await template.getAddress();
-  console.log(`  LendingMarketV2 template: ${templateAddr}`);
+  // MarketDeployer constructs its own LendingMarketV2 template with deployer = address(this).
   const Deployer = await ethers.getContractFactory("MarketDeployer");
-  const dep = await Deployer.deploy(templateAddr);
+  const dep = await Deployer.deploy();
   await waitTx(dep.deploymentTransaction(), "MarketDeployer.deploy");
   const address = await dep.getAddress();
+  const templateAddr = await dep.template();
+  console.log(`  LendingMarketV2 template: ${templateAddr}`);
   console.log(`  MarketDeployer: ${address}`);
-  return { address };
+  return { address, contract: dep };
 }
 
 async function deployMarketFactory(config: DeploymentConfig, registryAddress: string, deployerAddress: string, existing?: Record<string, string>) {
@@ -627,9 +626,16 @@ async function main() {
   // 1. Deploy AdapterRegistry
   const { address: registryAddress } = await deployAdapterRegistry(config, existing ?? undefined);
 
-  // 2. Deploy MarketDeployer + MarketFactoryV2
-  const { address: deployerAddress } = await deployMarketDeployer(existing ?? undefined);
+  // 2. Deploy MarketDeployer + MarketFactoryV2, then wire factory into deployer
+  const { address: deployerAddress, contract: marketDeployer } = await deployMarketDeployer(existing ?? undefined);
   const { address: factoryAddress } = await deployMarketFactory(config, registryAddress, deployerAddress, existing ?? undefined);
+  const wiredFactory = await marketDeployer.factory();
+  if (wiredFactory === ethers.ZeroAddress) {
+    await waitTx(await marketDeployer.setFactory(factoryAddress), "MarketDeployer.setFactory");
+    console.log(`  MarketDeployer.factory set to ${factoryAddress}`);
+  } else if (wiredFactory.toLowerCase() !== factoryAddress.toLowerCase()) {
+    throw new Error(`MarketDeployer already wired to ${wiredFactory}, refusing to use factory ${factoryAddress}`);
+  }
 
   // 3. Deploy multi-tenant reference adapters
   const deployedAdapters = await deployReferenceAdapters(factoryAddress, config, deployer.address, existing ?? undefined);

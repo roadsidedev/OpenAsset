@@ -87,6 +87,8 @@ contract NFTAuctionLiquidationAdapter is ILiquidationAdapter, ERC721Holder, Reen
 
     mapping(address => MarketConfig) public marketConfigs;
     mapping(address => mapping(uint256 => AuctionState)) public auctions;
+    /// @notice OPEN auctions per NFT collection — used to avoid revoking Seaport approval early
+    mapping(address => uint256) public openAuctionsByCollection;
     // Seaport order hash â†’ registered (EIP-1271 validity)
     mapping(bytes32 => bool) public registeredOrders;
     // Seaport order hash â†’ cancelled/invalidated
@@ -252,6 +254,10 @@ contract NFTAuctionLiquidationAdapter is ILiquidationAdapter, ERC721Holder, Reen
         auctionState.endTime = uint64(block.timestamp + config.auctionDuration);
         auctionState.tokenId = collateralAmount;
         auctionState.status = AuctionStatus.OPEN;
+        {
+            address nftCollection = ILendingMarketV2View(msg.sender).collateralAsset();
+            openAuctionsByCollection[nftCollection] += 1;
+        }
 
         // Approve the OpenSea conduit (or Seaport itself) so posted orders are fulfillable
         address spender = config.seaportConduit != address(0) ? config.seaportConduit : config.seaport;
@@ -331,10 +337,15 @@ contract NFTAuctionLiquidationAdapter is ILiquidationAdapter, ERC721Holder, Reen
         // has left custody â€” the approval is re-granted on the next handoff, so the
         // adapter never holds an unused standing approval across all its NFTs.
         address spender = config.seaportConduit != address(0) ? config.seaportConduit : config.seaport;
-        if (spender != address(0)) {
-            address nft = ILendingMarketV2View(market).collateralAsset();
-            try IERC721(nft).setApprovalForAll(spender, false) {
-                // approval revoked
+        address nftCollection = ILendingMarketV2View(market).collateralAsset();
+        // Decrement OPEN count for this collection; only revoke Seaport approval when
+        // no sibling OPEN auctions remain (prevents breaking hybrid Seaport sales).
+        if (openAuctionsByCollection[nftCollection] > 0) {
+            openAuctionsByCollection[nftCollection] -= 1;
+        }
+        if (spender != address(0) && openAuctionsByCollection[nftCollection] == 0) {
+            try IERC721(nftCollection).setApprovalForAll(spender, false) {
+                // approval revoked — safe, no other OPEN auctions for this collection
             } catch {
                 // Non-standard NFT: keep going; no approval existed or revocation unsupported
             }
