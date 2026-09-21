@@ -1,5 +1,5 @@
 /**
- * GuillochePlate — authored background image plate for the certificate world.
+  * GuillochePlate: authored background image plate for the certificate world.
  * Deterministic parametric engraving: woven rosettes and hairline bands,
  * the line-work language of stock certificates and banknotes.
  * Server component: renders with or without JavaScript; the live canvas
@@ -48,7 +48,7 @@ function bandPath(
 }
 
 export function GuillochePlate({ className }: { className?: string }) {
-  // Layered rosette family — right-of-center, like the rosette on a certificate face.
+  // Layered rosette family, right-of-center, like the rosette on a certificate face.
   // Dense high-frequency ripples with small amplitudes: fine woven engraving,
   // not petals. Polar sum: base + harmonics, sampled finely for smoothness.
   const rosettes = [
@@ -88,7 +88,7 @@ export function GuillochePlate({ className }: { className?: string }) {
         {rosettes.map((r, i) => (
           <path key={`rosette-${i}`} d={polarPath(r.cx, r.cy, r.base, r.harmonics)} opacity={r.opacity} />
         ))}
-        {/* Central rosette core — the certificate seal */}
+        {/* Central rosette core: the certificate seal */}
         <path
           d={polarPath(1180, 470, 58, [{ k: 30, a: 3, p: 0.4 }])}
           opacity={0.42}

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * GuillocheField — the signature physics moment of the certificate world.
+  * GuillocheField: the signature physics moment of the certificate world.
  * The engraved line-work is strung like instrument wires: the cursor plucks
  * the guilloché bands and they vibrate back into their engraved rest shape
  * with real verlet dynamics (neighbor constraints + rest springs + damping).
@@ -128,7 +128,7 @@ export function GuillocheField({
           p.x += vx;
           p.y += vy;
         }
-        // neighbor distance constraints — keeps the wire continuous
+        // neighbor distance constraints, keeps the wire continuous
         for (let i = 1; i < line.length; i++) {
           const a = line[i - 1];
           const c = line[i];

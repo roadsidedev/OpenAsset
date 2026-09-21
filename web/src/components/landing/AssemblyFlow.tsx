@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * AssemblyFlow — the machine inside the certificate.
+ * AssemblyFlow: the machine inside the certificate.
  * The canonical 8-step creation flow (PRD Feature 1) becomes a scroll-scrubbed
  * assembly: adapter parts fly in with spring dynamics and bolt onto a market
  * cell, each snap revealing one plain-English fact. The finished cell is
- * stamped DEPLOYED — validated in one transaction.
+ * stamped DEPLOYED, validated in one transaction.
  *
  * Physics: scroll progress is smoothed through a spring (stiffness 130,
  * damping 22); each part's settle runs its own stiffer spring (170/14), so
@@ -52,7 +52,7 @@ const PARTS: Part[] = [
 const STEPS = [
   {
     title: "Pick the collateral.",
-    copy: "Any tokenized asset on-chain — tokens, NFTs, tokenized stocks. The wizard verifies the contract exists before you sign.",
+    copy: "Any tokenized asset on-chain: tokens, NFTs, tokenized stocks. The wizard verifies the contract exists before you sign.",
   },
   {
     title: "Choose how it's priced.",
@@ -60,7 +60,7 @@ const STEPS = [
   },
   {
     title: "Set eligibility.",
-    copy: "Permissionless by default — or attach a compliance adapter where the asset requires it.",
+    copy: "Permissionless by default, or attach a compliance adapter where the asset requires it.",
   },
   {
     title: "Choose how it liquidates.",
@@ -68,7 +68,7 @@ const STEPS = [
   },
   {
     title: "Set the terms. Deploy.",
-    copy: "LTV, rate, duration, grace period, circuit breaker — your parameters, enforced on-chain. The factory validates every combination and tells you, in plain language, if something won't work.",
+    copy: "LTV, rate, duration, grace period, circuit breaker: your parameters, enforced on-chain. The factory validates every combination and tells you, in plain language, if something won't work.",
   },
 ];
 
@@ -168,7 +168,7 @@ export function AssemblyFlow() {
     <div ref={containerRef} className="relative h-[280vh] md:h-[300vh]">
       <div className="sticky top-0 flex min-h-dvh items-center">
         <div className="mx-auto grid w-full max-w-[1160px] items-center gap-10 px-4 md:grid-cols-[1fr_1.05fr] md:gap-14 md:px-6">
-          {/* Steps — the deployment sequence */}
+          {/* Steps: the deployment sequence */}
           <div>
             <ol className="border-b border-[var(--oa-rule)]">
               {STEPS.map((step, i) => (
@@ -186,7 +186,7 @@ export function AssemblyFlow() {
               ))}
             </ol>
             <p className="mt-5 max-w-[54ch] text-[13px] leading-relaxed text-[var(--oa-ink-soft)]">
-              Pick a tokenized stock and the wizard pre-selects the full stack —
+              Pick a tokenized stock and the wizard pre-selects the full stack:
               equity price feed, compliance policy, non-transferable positions,
               DEX liquidation.
             </p>
@@ -203,7 +203,7 @@ export function AssemblyFlow() {
               <span className="cert-frame-corner bl" />
               <span className="cert-frame-corner br" />
               <p className="cert-cap absolute left-4 top-3.5">
-                Market cell — isolated by construction
+                Market cell: isolated by construction
               </p>
 
               {PARTS.map((part) => (
