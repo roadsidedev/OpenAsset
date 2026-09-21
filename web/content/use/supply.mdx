@@ -1,0 +1,26 @@
+---
+title: Supply liquidity
+description: How stablecoin liquidity works in an isolated OpenAsset market and what LPs should check first.
+---
+
+# Supply liquidity
+
+Liquidity providers fund one isolated market at a time. Your stablecoins serve only that market's borrowers, under that market's terms. There is no shared pool: your deposit is never exposed to another market's collateral decisions.
+
+## How supplying works
+
+- **Seed at creation.** When a market is created, the creator supplies initial stablecoin liquidity from the allowlisted stablecoins. See [Create a market](/docs/curate/create-market).
+- **One market, one risk surface.** Liquidity, collateral, risk parameters, and the adapter stack all belong to a single `LendingMarket` contract.
+- **Borrowers pay per loan.** Each originated loan carries a 0.5% origination fee enforced on-chain; market creation carries a 0.5% fee on initial liquidity. Both are shown before signing.
+
+## What to check before supplying
+
+- Collateral asset, LTV, APR, duration, grace period, and health-factor settings.
+- Oracle type, trust status, and staleness behavior.
+- Liquidation path: synchronous (DEX swap, NFT auction) or asynchronous (issuer redemption with a cure window).
+- Adapter verification status. Verified is a review signal, not insurance; unverified use requires explicit acknowledgment.
+- For RWA or tokenized-equity markets: issuer solvency and redemption risk, which no contract can remove. See [RWA markets](/docs/curate/rwa-markets).
+
+## Next step
+
+Review the market's terms in the app, then read [Scope and risks](/docs/security/scope-and-risks) if you have not already. To set the terms yourself instead, [create a market](/docs/curate/create-market).

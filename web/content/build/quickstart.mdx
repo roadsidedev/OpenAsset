@@ -9,7 +9,7 @@ This path takes you from **read → install → copy template → modify → tes
 
 ## 1. Read
 
-Start with the [adapter system](/docs/protocol/adapter-system), [adapter trust model](/docs/protocol/trust-model), and [security model](/docs/protocol/security). Then review the [reference adapters](/docs/guides/reference-adapters) and [adapter registry](/docs/protocol/adapter-registry).
+Start with the [adapter system](/docs/build/adapter-system), [adapter trust model](/docs/security/trust-model), and [security model](/docs/security/model). Then review the [reference adapters](/docs/build/reference-adapters) and [adapter registry](/docs/build/adapter-registry).
 
 Asset, oracle, compliance, and liquidation adapters are shared multi-tenant instances. Position adapters are EIP-1167 clones. Runtime calls must resolve configuration from the configured market and fail closed when dependencies are invalid or unavailable.
 
@@ -35,7 +35,7 @@ Generate an interface-safe scaffold:
 npx create-openasset-adapter --type oracle --name MyOracleAdapter
 ```
 
-Supported types are `asset`, `oracle`, `compliance`, `liquidation`, and `position`. For teaching code with realistic dependency handling, copy the closest [reference adapter](/docs/guides/reference-adapters). The scaffold is intentionally incomplete and is not production-ready.
+Supported types are `asset`, `oracle`, `compliance`, `liquidation`, and `position`. For teaching code with realistic dependency handling, copy the closest [reference adapter](/docs/build/reference-adapters). The scaffold is intentionally incomplete and is not production-ready.
 
 ## 4. Modify
 

@@ -22,11 +22,11 @@ These implementations are deployable code and teaching material. Read the implem
 | Policy-controlled asset | `B20AssetAdapter` | External policy checks, pause behavior, fail-closed movement |
 | Position ownership | `StandardPositionAdapter` | Clone initialization, market authorization, mint/burn, `ownerOf` |
 
-Source code is available in the [`contracts/src/adapters`](https://github.com/roadsidedev/OpenAsset/tree/main/contracts/src/adapters) directory. The [adapter template catalog](/docs/protocol/adapter-registry) explains category coverage; the [security model](/docs/protocol/security) explains permissions, upgrades, revocation, and emergency handling.
+Source code is available in the [`contracts/src/adapters`](https://github.com/roadsidedev/OpenAsset/tree/main/contracts/src/adapters) directory. The [adapter template catalog](/docs/build/adapter-registry) explains category coverage; the [security model](/docs/security/model) explains permissions, upgrades, revocation, and emergency handling.
 
 ## How to study one
 
-Start at the constructor and identify immutable authority and dependencies. Follow `configure` to see what is keyed by market. Trace runtime calls from `msg.sender` through external calls and output validation. Read the focused unit or integration tests, especially unauthorized, stale, revert, and balance-delta cases. Finally compare code comments with the [security checklist](/docs/reference/security-checklist).
+Start at the constructor and identify immutable authority and dependencies. Follow `configure` to see what is keyed by market. Trace runtime calls from `msg.sender` through external calls and output validation. Read the focused unit or integration tests, especially unauthorized, stale, revert, and balance-delta cases. Finally compare code comments with the [security checklist](/docs/security/checklist).
 
 ## Build from a reference
 
@@ -34,4 +34,4 @@ Start at the constructor and identify immutable authority and dependencies. Foll
 npx create-openasset-adapter --type oracle --name MyOracleAdapter
 ```
 
-Copy only the patterns you understand. Preserve factory and market authorization, fail-closed behavior, bounded gas, dependency documentation, and version/commit records. Add a focused test before changing the integration. Use the [developer quick start](/docs/guides/developer-quickstart) to run the local environment and prepare a submission.
+Copy only the patterns you understand. Preserve factory and market authorization, fail-closed behavior, bounded gas, dependency documentation, and version/commit records. Add a focused test before changing the integration. Use the [developer quick start](/docs/build/quickstart) to run the local environment and prepare a submission.

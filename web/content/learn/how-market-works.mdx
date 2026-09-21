@@ -20,7 +20,7 @@ The configuration includes:
 
 The Factory rejects incompatible combinations before deployment. For example, an oracle must cover the selected asset type, a permissioned asset requires a Compliance Adapter, and an asynchronous liquidation adapter requires compliance checks.
 
-Read the [validation matrix](/docs/protocol/validation-matrix) for the complete rules.
+Read the [validation matrix](/docs/curate/validation-matrix) for the complete rules.
 
 ## 2. The Factory deploys an isolated market
 
@@ -94,7 +94,7 @@ ACTIVE → GRACE_PERIOD → LIQUIDATION_CURE → LIQUIDATION_SETTLING → LIQUID
 
 During `LIQUIDATION_CURE`, interest freezes and repayment is still possible. When the cure window expires, the adapter submits redemption and the loan enters `LIQUIDATION_SETTLING`. That transition is irreversible. If settlement does not arrive within the outer timeout, the loan is flagged for manual LP intervention.
 
-Read the [loan lifecycle](/docs/protocol/loan-lifecycle) and [async liquidation flow](/docs/guides/liquidation) for the complete state transitions.
+Read the [loan lifecycle](/docs/learn/loan-lifecycle) and [async liquidation flow](/docs/curate/liquidation) for the complete state transitions.
 
 ## What the engine protects
 
@@ -106,4 +106,4 @@ The core engine keeps several rules independent of the chosen adapters:
 - The loan state machine prevents invalid transitions.
 - Liquidation accounting reconciles recovered debt and returned surplus.
 
-Read the [protocol overview](/docs/protocol/overview) for the architecture and the [security model](/docs/protocol/security) for the implementation baseline.
+Read the [protocol overview](/docs/learn/overview) for the architecture and the [security model](/docs/security/model) for the implementation baseline.

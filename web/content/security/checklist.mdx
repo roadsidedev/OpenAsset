@@ -5,7 +5,7 @@ description: Pre-mainnet and ongoing security requirements for OpenAsset Market.
 
 # Security checklist
 
-- [ ] Core engine independently verifies every adapter’s output ([trust model](/docs/protocol/trust-model)) — for **all** adapters, not only unverified ones
+- [ ] Core engine independently verifies every adapter’s output ([trust model](/docs/security/trust-model)) — for **all** adapters, not only unverified ones
 - [ ] Reentrancy guards and CEI ordering on every adapter call, not only user-facing entry points
 - [ ] Market Factory validation matrix enforced and unit-tested for every rule, including negative tests
 - [ ] Circuit breaker tested under volatility **and** stale/untrusted-oracle triggers

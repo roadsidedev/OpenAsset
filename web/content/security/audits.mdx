@@ -1,0 +1,26 @@
+---
+title: Audits
+description: How OpenAsset reviews the core engine and adapters, and where audit reports live.
+---
+
+# Audits
+
+The core lending engine is deliberately narrow so it can be reviewed thoroughly and then left alone. Its specification is frozen at v2.1, and any change requires a version bump and fresh review.
+
+## What gets reviewed
+
+- **Core engine.** Independently reviewed against the frozen specification. Because the engine is small and changes require a version bump, a review stays valid until the specification itself changes.
+- **Adapters.** Reviewed through the [verification policy](/docs/security/trust-model) and recorded in the [adapter registry](/docs/build/adapter-registry). Verification is a bounded review signal, not insurance: the engine verifies every adapter output at runtime regardless of status.
+
+## Reports
+
+Audit reports are published alongside the releases they cover. When evaluating a market, read the report for the exact contract version deployed, not just the latest headline.
+
+## Review it yourself
+
+Reports complement, not replace, independent review:
+
+- [Security model](/docs/security/model)
+- [Trust model](/docs/security/trust-model)
+- [Security checklist](/docs/security/checklist)
+- [Out of scope](/docs/security/deferred)

@@ -1,0 +1,32 @@
+---
+title: Getting started
+description: Connect, find a market, and take your first borrow or supply action in the OpenAsset app.
+---
+
+# Getting started
+
+Use the OpenAsset app to borrow stablecoins against collateral or supply stablecoin liquidity to an isolated market.
+
+## Connect your wallet
+
+1. Open the app and connect a supported wallet.
+2. Switch to the chain your target market lives on. Each chain has its own Factory and Registry, and markets are per chain.
+
+## Pick your action
+
+| Goal | Start here |
+| --- | --- |
+| Borrow stablecoins against what you hold | [Borrow](/docs/use/borrow) |
+| Earn from stablecoin liquidity in a specific market | [Supply liquidity](/docs/use/supply) |
+| Launch a market with your own terms | [Create a market](/docs/curate/create-market) |
+
+## Before your first transaction
+
+- **Markets are isolated.** Your collateral and the LP's liquidity live in one market contract. One market's bad debt can never touch another market.
+- **Terms are set by the market creator.** Review LTV, APR, duration, grace period, oracle, liquidation path, position type, and adapter trust badges before you sign.
+- **Eligibility is checked first.** If a market has a Compliance Adapter, the app checks eligibility before prompting wallet approval, so ineligible users do not spend gas on a revert.
+- **Permissionless is not risk-free.** Read [Scope and risks](/docs/security/scope-and-risks) before depositing collateral or liquidity.
+
+## Next step
+
+Borrowers continue to [Borrow](/docs/use/borrow). Liquidity providers continue to [Supply liquidity](/docs/use/supply). If no market fits your asset, [create one](/docs/curate/create-market).

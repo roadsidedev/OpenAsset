@@ -1,0 +1,59 @@
+---
+title: Developer guide
+description: What developers can build on OpenAsset and how to build, test, integrate, and submit it.
+---
+
+# Developer guide
+
+OpenAsset is a permissionless lending protocol for isolated markets. Developers can build new markets and integrations around ERC-20s, NFTs, tokenized real-world assets, and other assets by selecting asset, oracle, compliance, liquidation, and position adapters.
+
+The core engine retains loan state, accounting, circuit breakers, reentrancy protection, and defensive output checks. Adapters provide bounded integrations at an explicit trust boundary. A registry badge is not a substitute for on-chain validation or independent risk assessment.
+
+## What can you build?
+
+| Goal | Start here |
+|---|---|
+| Launch an isolated market | [Create a market](/docs/curate/create-market) |
+| Add a new collateral type | [Adapter system](/docs/build/adapter-system) and [adapter templates](/docs/build/reference-adapters) |
+| Add a price source | [Oracle adapters](/docs/learn/oracles) and the [adapter specification](/docs/build/adapter-system) |
+| Add eligibility rules | [Compliance boundary](/docs/curate/compliance) |
+| Add a liquidation route | [Liquidations](/docs/learn/liquidations) |
+| Represent loan ownership | [Position adapters](/docs/learn/positions) |
+| Integrate registry and market data | [Adapter registry](/docs/build/adapter-registry) |
+
+## Developer journey
+
+1. **Understand:** read the [protocol overview](/docs/learn/overview), [adapter system](/docs/build/adapter-system), and [security model](/docs/security/model).
+2. **Install:** clone the repository, install `contracts` and `sdk` dependencies, and compile locally.
+3. **Choose a starting point:** use the [reference adapters](/docs/build/reference-adapters) or generate an SDK scaffold.
+4. **Implement:** follow the [adapter security model](/docs/security/model), including factory permissions, market isolation, fail-closed behavior, and non-upgradeable deployment.
+5. **Test:** use the local [testing environment](/docs/build/quickstart#5-test) with mock assets, feeds, compliance, liquidation, failures, and gas checks.
+6. **Submit:** run automated checks, record the source commit and dependencies, register metadata, and follow the [verification workflow](/docs/build/adapter-registry#review-meaning).
+
+## Platform documentation map
+
+- **Market creation:** [Create a market](/docs/curate/create-market) and [market risk boundaries](/docs/security/scope-and-risks).
+- **Adapter development:** [Adapter system](/docs/build/adapter-system), [reference adapters](/docs/build/reference-adapters), and [quick start](/docs/build/quickstart).
+- **SDK and local testing:** [Developer quick start](/docs/build/quickstart) and [testing environment](/docs/build/quickstart#5-test).
+- **Registry and verification:** [Adapter registry](/docs/build/adapter-registry), [trust model](/docs/security/trust-model), and [security checklist](/docs/security/checklist).
+- **Deployment and integration:** [Operations](/docs/build/quickstart#6-submit), [multi-chain](/docs/curate/multi-chain), and [core contracts](/docs/learn/core-contracts).
+- **Feedback:** [Developer feedback loop](/docs/build/developer-feedback).
+
+## Existing page roles
+
+The platform docs already contain conceptual pages for the adapter system, trust model, registry, oracles, liquidations, compliance, positions, and market creation. This guide does not replace them: it is the developer entry point that connects those pages into an actionable build path. The quick start provides commands; the conceptual pages explain protocol behavior and user risk.
+
+## Local commands
+
+```bash
+cd contracts
+npm install
+npm run compile
+npx hardhat test
+
+cd ../sdk
+npm test
+npm run pack:check
+```
+
+For the complete path, continue to [Developer quick start](/docs/build/quickstart).

@@ -507,8 +507,8 @@ const loadRegistry = useCallback(async () => {
               ))}
               <li className="rounded-xl border border-ice-300/30 bg-ice-50 dark:bg-ice-500/10 p-3 text-xs text-muted-foreground leading-relaxed">
                 Registration never implies verification, and deprecation never pauses existing markets — it only blocks
-                new selection. See the full <Link href="/docs/protocol/adapter-registry" className="font-semibold text-ice-700 dark:text-ice-300 hover:underline">registry spec</Link> and the{" "}
-                <Link href="/docs/guides/register-adapter" className="font-semibold text-ice-700 dark:text-ice-300 hover:underline">developer walkthrough</Link>.
+                new selection. See the full <Link href="/docs/build/adapter-registry" className="font-semibold text-ice-700 dark:text-ice-300 hover:underline">registry spec</Link> and the{" "}
+                <Link href="/docs/build/register-adapter" className="font-semibold text-ice-700 dark:text-ice-300 hover:underline">developer walkthrough</Link>.
               </li>
             </ol>
           )}

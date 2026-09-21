@@ -1,10 +1,9 @@
 export default {
   index: 'Start here',
-  'choose-your-path': 'Choose your path',
-  'how-market-works': 'How a market works',
-  'scope-and-risks': 'Scope and risks',
-  guides: 'Build and operate',
-  protocol: 'Understand the protocol',
-  reference: 'Trust and reference',
+  learn: 'Learn',
+  use: 'Use the app',
+  build: 'Build',
+  curate: 'Curate markets',
+  security: 'Security',
   llms: 'Agent-readable docs',
 }

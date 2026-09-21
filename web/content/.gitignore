@@ -1,0 +1,5 @@
+# The docs IA has a top-level `build/` section (Euler-style Learn / Use / Build /
+# Curate / Security). Re-include it: the repo-root .gitignore excludes every
+# directory named `build/` (meant for compiled output), which would otherwise
+# silently swallow new pages added under content/build/.
+!build/

@@ -11,18 +11,50 @@ Create an isolated lending market around an asset, fund it with stablecoins, and
 
 > **Before you start:** OpenAsset v2 uses a pluggable adapter architecture. Version 1 is scoped to EVM chains and stablecoin lending assets. Permissionless market creation does not mean that every asset, adapter, or market is safe, verified, or suitable for every borrower.
 
-## Choose your path
+## Start with your goal
 
-OpenAsset is one protocol with several ways to use it. Start with the outcome you need, then read the protocol details behind that workflow.
+### Learn
 
-| If you are a... | You want to... | Start here |
-|---|---|---|
-| **Liquidity provider or market creator** | Launch an isolated market, set its terms, choose adapters, and seed liquidity. | [Create a market](/docs/guides/create-market) |
-| **Borrower** | Find a market, check its terms and eligibility rules, borrow stablecoins, and understand repayment and liquidation. | [Borrow against collateral](/docs/guides/borrow) |
-| **Adapter author or integrator** | Connect an asset, oracle, compliance rule, liquidation path, or position type to the core engine. | [Use adapters](/docs/guides/adapters) |
-| **RWA or tokenized-asset issuer** | Decide whether an issuer-backed market meets the oracle, compliance, settlement, and legal requirements. | [Launch an RWA market](/docs/guides/rwa-market) |
-| **Auditor or security reviewer** | Trace trust boundaries, validation rules, invariants, and failure paths. | [Review the security model](/docs/protocol/security) |
-| **Agent or documentation consumer** | Retrieve the synchronized, machine-readable source of the docs. | [Read the agent-readable docs](/docs/llms) |
+Protocol concepts: markets, adapters, loan lifecycle, oracles, liquidations, risk, and security.
+
+| Goal | Guide |
+| --- | --- |
+| Understand what OpenAsset is | [What is OpenAsset](/docs/learn/overview) |
+| See how a market works end to end | [How a market works](/docs/learn/how-market-works) |
+| Follow a loan from origination to repayment or liquidation | [Loan lifecycle](/docs/learn/loan-lifecycle) |
+| Learn the vocabulary | [Glossary](/docs/learn/glossary) |
+
+### Use
+
+Supply, borrow, and manage positions in the OpenAsset app.
+
+| Goal | Guide |
+| --- | --- |
+| Connect and take your first action | [Getting started](/docs/use/getting-started) |
+| Borrow stablecoins against collateral | [Borrow](/docs/use/borrow) |
+| Supply stablecoin liquidity to a market | [Supply liquidity](/docs/use/supply) |
+
+### Build
+
+Developer setup and references for adapters, the registry, and integrations.
+
+| Goal | Guide |
+| --- | --- |
+| Build your first adapter in minutes | [Quick start](/docs/build/quickstart) |
+| Plan an adapter or integration | [Developer guide](/docs/build/developer-guide) |
+| Implement the five adapter interfaces | [Adapter system](/docs/build/adapter-system) |
+| Register and verify an adapter | [Adapter registry](/docs/build/adapter-registry) |
+
+### Curate
+
+Configure and operate markets, including RWA and permissioned markets.
+
+| Goal | Guide |
+| --- | --- |
+| Launch an isolated market | [Create a market](/docs/curate/create-market) |
+| Launch a tokenized-equity or RWA market | [RWA markets](/docs/curate/rwa-markets) |
+| Check which combinations the Factory accepts | [Validation matrix](/docs/curate/validation-matrix) |
+| Set up eligibility rules | [Compliance setup](/docs/curate/compliance) |
 
 ## The short version
 
@@ -36,93 +68,9 @@ OpenAsset separates a stable lending engine from the asset-specific logic that c
 | Resolve a default | Liquidation Adapter |
 | Represent the loan position | Position Adapter |
 
-The Factory validates the selected combination, then deploys a new `LendingMarket`. Each market has its own liquidity, collateral, risk parameters, and adapter stack. There is no shared lending pool between markets.
-
-## From asset to active market
-
-The market creator’s path is deliberately short:
-
-```text
-Choose collateral
-      ↓
-Select adapters
-      ↓
-Set risk terms
-      ↓
-Factory validates configuration
-      ↓
-Deploy isolated LendingMarket
-      ↓
-Seed stablecoin liquidity
-      ↓
-Borrowers can originate loans
-```
-
-The Factory rejects incompatible combinations before a market goes live. For example, the selected oracle must cover the selected asset type, a permissioned asset must have a compliance adapter, and the lending asset must be on the stablecoin allowlist. See the [validation matrix](/docs/protocol/validation-matrix) for the complete rule set.
-
-## What happens inside a loan
-
-A borrower first chooses a market by reviewing its collateral asset, LTV, APR, duration, oracle, liquidation path, position type, and adapter trust status. If the market has a Compliance Adapter, the application checks eligibility before asking for wallet approval.
-
-The borrower then escrows collateral through the Asset Adapter. The engine reads a trusted oracle, computes the maximum loan from the configured LTV, verifies the collateral balance change, creates the position, and transfers stablecoin proceeds.
-
-A loan can be repaid while active or during its grace period. If the loan defaults, the configured Liquidation Adapter resolves it. Synchronous markets settle in one transaction. Issuer-redemption markets use a reversible `LIQUIDATION_CURE` window before entering irreversible `LIQUIDATION_SETTLING`.
-
-```text
-Market is active
-      ↓
-Borrower deposits collateral
-      ↓
-Oracle and eligibility checks
-      ↓
-Stablecoins transferred
-      ↓
-Repay on time? ── yes ──→ Collateral released
-      │
-      no
-      ↓
-Grace period or liquidation path
-      ↓
-Synchronous or asynchronous?
-      ├─ synchronous ─→ Liquidation settles
-      └─ asynchronous → Cure window → Issuer settlement
-
-Debt and penalty are recovered; surplus is returned to the current position holder.
-```
-
-The fairness rule is the same across liquidation types: take the amount owed plus the configured penalty, then return the surplus to the current position holder. For a transferable position, the current holder is the economic actor for repayment, surplus, and alerts. That might not be the original borrower.
-
-## What stays in the core
-
-The lending engine owns the parts of the system that should not vary by asset class:
-
-| Core responsibility | Why it stays in the engine |
-|---|---|
-| Loan state machine | Every market needs explicit, auditable transitions. |
-| Circuit breaker | Pause decisions must not be disabled by a custom oracle or adapter. |
-| Defensive adapter checks | The engine verifies outputs from both verified and unverified adapters. |
-| Reentrancy protection and CEI ordering | Every external adapter call crosses a trust boundary. |
-| Gradual liquidation accounting | Liquidation must reconcile what goes to the LP with what returns to the holder. |
-
-The adapter layer is open. The safety boundary around the adapter layer is not.
-
-## Understand the adapter choices
-
-The adapter you choose determines the behavior of the market. Prefer the Verified reference adapters when they fit the asset and workflow. A Verified badge records an audit or review decision; it does not make the adapter trusted at the contract level. The engine still checks every adapter’s output.
-
-| Adapter type | It controls | Typical implementations |
-|---|---|---|
-| **Asset** | How collateral is escrowed, released, and checked for transferability. | `ERC20Adapter`, `ERC721Adapter`, `ERC1155Adapter` |
-| **Oracle** | The collateral price, trust status, and historical price used for circuit-breaker checks. | `UniswapV3TWAPAdapter`, `ChainlinkAdapter`, issuer or NAV oracles |
-| **Compliance** | Whether a participant is eligible. This adapter is optional and checked at defined protocol actions. | ERC-3643, issuer allowlist, jurisdiction geofence |
-| **Liquidation** | How a default is resolved and how recovered value and surplus are split. | DEX swap, NFT auction, issuer redemption |
-| **Position** | Who owns the loan position and whether it can transfer. | Standard, soulbound, or transferable position |
-
-Read the [adapter system](/docs/protocol/adapter-system) before creating or integrating a market. If you are selecting a third-party adapter, read its audit reference and understand its trust status first.
+The Factory validates the selected combination, then deploys a new `LendingMarket`. Each market has its own liquidity, collateral, risk parameters, and adapter stack. There is no shared lending pool between markets. Details: [How a market works](/docs/learn/how-market-works).
 
 ## Know the boundaries before you deposit or deploy
-
-OpenAsset’s design makes several boundaries explicit. They belong in the decision a reader is making, not in a footnote at the end of the docs.
 
 | Boundary | What it means in practice |
 |---|---|
@@ -130,27 +78,9 @@ OpenAsset’s design makes several boundaries explicit. They belong in the decis
 | **EVM deployments only in v1** | Each supported chain has its own Factory and Registry. There is no unified cross-chain liquidity layer. |
 | **No protocol underwriting** | Anyone can create a market, but the market creator sets the parameters and LPs carry the market’s economic risk. |
 | **Verified does not mean trusted code** | Verification is a process control. The core engine treats verified and unverified adapters as semi-trusted external code and verifies their outputs. |
-| **Compliance is action-specific** | Compliance adapters check eligibility at origination and, for transferable positions, on position transfer. They do not continuously monitor real-world eligibility during a loan. |
 | **RWA assets carry issuer risk** | An issuer can become insolvent, halt redemption, or be shut down independently of the token’s market price and OpenAsset’s contracts. This is an uninsured total-loss risk. |
-| **Async liquidation can become irreversible** | In an issuer-redemption market, repayment remains possible during `LIQUIDATION_CURE`. Once the market enters `LIQUIDATION_SETTLING`, the redemption has been submitted and repayment is no longer possible. |
 
-## Read the docs in the order you need them
-
-### If you are creating a market
-
-Start with [Create a market](/docs/guides/create-market), then read the [adapter system](/docs/protocol/adapter-system), [validation matrix](/docs/protocol/validation-matrix), and [trust model](/docs/protocol/trust-model). If the collateral is an RWA or tokenized equity, read [Launch an RWA market](/docs/guides/rwa-market) and the [RWA risk boundaries](/docs/protocol/rwa) before choosing an oracle or liquidation path.
-
-### If you are borrowing
-
-Start with [Borrow against collateral](/docs/guides/borrow). Before depositing collateral, review the market’s LTV, APR, duration, grace period, oracle, liquidation path, position type, and adapter trust status. Then read [Loan lifecycle](/docs/protocol/loan-lifecycle) so you know what changes when a loan enters grace or liquidation.
-
-### If you are building an adapter or integration
-
-Start with [Use adapters](/docs/guides/adapters), then read the interface definitions in the [adapter system](/docs/protocol/adapter-system), the [adapter trust model](/docs/protocol/trust-model), and the [adapter registry](/docs/protocol/adapter-registry). The core engine will verify your outputs regardless of whether OpenAsset has marked your adapter Verified.
-
-### If you are reviewing security
-
-Start with the [security model](/docs/protocol/security), then work through the [trust model](/docs/protocol/trust-model), [validation matrix](/docs/protocol/validation-matrix), [circuit breaker](/docs/protocol/circuit-breaker), and [security checklist](/docs/reference/security-checklist). For RWA markets, include issuer insolvency and redemption failure in the review. They are operational and legal risks, not problems that contract checks can remove.
+Full version: [Scope and risks](/docs/security/scope-and-risks).
 
 ## Documentation for agents
 

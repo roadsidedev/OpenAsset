@@ -17,7 +17,7 @@ OpenAsset is permissionless lending infrastructure, not an underwriting service.
 | Cross-chain behavior | No unified cross-chain liquidity, position portability, or shared cross-chain reputation layer in v1. |
 | Non-EVM chains | Solana and other non-EVM deployments require separate architecture and are deferred. |
 
-See [Lending asset scope](/docs/protocol/lending-assets), [Multi-chain architecture](/docs/protocol/multi-chain), and [Deferred / out of scope](/docs/reference/deferred) for details.
+See [Lending asset scope](/docs/learn/lending-assets), [Multi-chain architecture](/docs/curate/multi-chain), and [Deferred / out of scope](/docs/security/deferred) for details.
 
 ## Permissionless does not mean risk-free
 
@@ -38,7 +38,7 @@ Anyone can register an adapter. The registry attaches trust metadata, but the en
 
 A Verified status is a process control: it records that OpenAsset’s review process or audit sign-off has been completed. It is not a guarantee that the adapter is free of bugs. Unverified adapters require explicit risk acknowledgment, and Deprecated adapters cannot be selected for new markets.
 
-Read the [adapter trust model](/docs/protocol/trust-model) and [adapter registry](/docs/protocol/adapter-registry).
+Read the [adapter trust model](/docs/security/trust-model) and [adapter registry](/docs/build/adapter-registry).
 
 ## Compliance boundary
 
@@ -49,7 +49,7 @@ A Compliance Adapter performs point-in-time checks at defined protocol actions:
 
 It does not continuously monitor real-world eligibility during a loan. It does not define the issuer’s KYC, AML, jurisdiction, or eligible-investor rules. If a participant’s status changes mid-loan, ongoing enforcement depends on the underlying token issuer’s own controls.
 
-Read [Compliance responsibility boundary](/docs/protocol/compliance) before launching a permissioned market.
+Read [Compliance responsibility boundary](/docs/curate/compliance) before launching a permissioned market.
 
 ## RWA and tokenized-equity risk
 
@@ -57,7 +57,7 @@ A tokenized equity or RWA token is a claim on an issuer. If the issuer becomes i
 
 This is an uninsured, total-loss-possible risk category. It is not something a smart contract, adapter, or circuit breaker can remove. RWA markets also require issuer-specific oracle and compliance decisions, an asynchronous redemption path where applicable, and securities or RWA counsel review before real-user launch.
 
-Read [RWA and tokenized equity support](/docs/protocol/rwa) and [Launch an RWA market](/docs/guides/rwa-market).
+Read [RWA and tokenized equity support](/docs/curate/rwa-markets) and [Launch an RWA market](/docs/curate/rwa-markets).
 
 ## Liquidation boundaries
 
@@ -65,7 +65,7 @@ All liquidation adapters must account for both sides of the result: value recove
 
 For synchronous liquidations, such as a DEX swap or NFT auction, resolution usually completes in one transaction. For issuer redemption, the holder can repay during `LIQUIDATION_CURE`. Once the cure window expires and the loan enters `LIQUIDATION_SETTLING`, the redemption is in flight and repayment is no longer possible.
 
-Read [Liquidations](/docs/protocol/liquidations) and [Async liquidation flow](/docs/guides/liquidation).
+Read [Liquidations](/docs/learn/liquidations) and [Async liquidation flow](/docs/curate/liquidation).
 
 ## What is deferred
 
@@ -78,8 +78,8 @@ The v1 architecture deliberately leaves several capabilities out of scope:
 - Unified cross-chain liquidity and position portability.
 - Autonomous adapter verification.
 
-Read [Deferred / out of scope](/docs/reference/deferred) for the reasons behind each decision.
+Read [Deferred / out of scope](/docs/security/deferred) for the reasons behind each decision.
 
 ## Next step
 
-If these boundaries fit your use case, choose a workflow from [Choose your path](/docs/choose-your-path). If you are reviewing protocol risk, continue to the [security model](/docs/protocol/security).
+If these boundaries fit your use case, choose a workflow from [Start here](/docs). If you are reviewing protocol risk, continue to the [security model](/docs/security/model).

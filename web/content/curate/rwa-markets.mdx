@@ -1,13 +1,50 @@
 ---
-title: RWA & tokenized equity
-description: Issuer risk, transfer restrictions, corporate actions, and equity oracle requirements.
+title: RWA markets
+description: Launch and operate tokenized equity / RWA collateral markets, from issuer checks to async settlement.
 ---
 
-# RWA & tokenized equity support
+# RWA markets
 
-import { Callout } from 'nextra/components'
+import { Steps, Callout } from 'nextra/components'
 
-## Issuer / counterparty risk
+<Steps>
+### Select RWA / tokenized equity category
+
+Enter the issuer’s token address. The app loads the issuer profile: custody model, transfer restriction type, dividend handling.
+
+### Confirm oracle
+
+System recommends `ChainlinkEquityFeedAdapter`. Do not use Uniswap TWAP for this class.
+
+### Attach Compliance Adapter
+
+Required for this category. Choose the issuer-appropriate adapter (e.g. ERC-3643) from the Verified list when available.
+
+### Choose Issuer Redemption liquidation
+
+Review and acknowledge the async settlement flow (cure window + expected settlement).
+
+### Position defaults to Soulbound
+
+Proceed unless you have a validated reason to override (Validation Matrix still applies).
+
+### Set risk parameters & stablecoin liquidity
+
+Same numeric controls as crypto markets. Lending asset from allowlist only.
+
+### Deploy
+
+Factory validates Compliance present, async liquidation pairing, allowlisted lending asset, and related rules.
+</Steps>
+
+## Disclosures required
+
+- Issuer custody model (1:1 redeemable vs synthetic/offshore claim)
+- Dividend / corporate-action handling
+- Async settlement timeline
+- Issuer-insolvency as uninsured total-loss risk (UI + ToS)
+
+## Issuer and counterparty risk
 
 Every tokenized equity or RWA token is a **claim on an issuer**, not a pure bearer asset secured only by code. If the issuer becomes insolvent, halts redemptions, or is shut down by a regulator, the token can go to zero or freeze — **independent of the underlying asset’s price**, and independent of OpenAsset Market’s liquidation mechanics.
 
@@ -23,7 +60,7 @@ Every tokenized equity or RWA token is a **claim on an issuer**, not a pure bear
 | Permissioned / identity-gated (ERC-3643 / T-REX) | Institutional issuers | Requires Compliance Adapter; market/vault must complete issuer onboarding as whitelisted holder |
 | Issuer-specific / evolving | Broker stock tokens | Verify current issuer docs before any market launch |
 
-## Corporate actions & dividends
+## Corporate actions and dividends
 
 | Model | Effect while collateral is escrowed |
 |---|---|
@@ -31,13 +68,13 @@ Every tokenized equity or RWA token is a **claim on an issuer**, not a pure bear
 | Total-return / NAV appreciation | Price feed reflects reinvestment |
 | Off-chain cash credit only | Credit may go to escrow holder of record (the market), **not** the borrower, unless issuer provides pass-through — confirm per issuer and disclose |
 
-## Oracle rule (repeated because it is the common mistake)
+## Oracle rule
 
 Equity/RWA markets require `ChainlinkEquityFeedAdapter` (or equivalent issuer/NAV oracle), **never** `UniswapV3TWAPAdapter`.
 
-## Liquidation
+## Async liquidation
 
-Issuer-redemption liquidation is **asynchronous**. Pair with a Compliance Adapter (Validation Matrix). Full path: [Loan lifecycle](/docs/protocol/loan-lifecycle).
+Issuer-redemption liquidation is **asynchronous**. Pair with a Compliance Adapter ([validation matrix](/docs/curate/validation-matrix)). Full path: [Loan lifecycle](/docs/learn/loan-lifecycle). Flow details: [Async liquidation flow](/docs/curate/liquidation).
 
 ## Legal gate
 
