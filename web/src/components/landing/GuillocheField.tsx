@@ -14,8 +14,18 @@ import { useEffect, useRef } from "react";
 
 type Pt = { x: number; y: number; px: number; py: number; rx: number; ry: number };
 
-const INK = "20, 37, 29"; // #14251D
+const INK_LIGHT = "20, 37, 29"; // #14251D
+const INK_DARK = "246, 243, 236"; // #F6F3EC paper-as-ink
 const ACCENT = "29, 130, 209"; // engraved blue
+const ACCENT_DARK = "140, 206, 255"; // #8CCEFF readable ice on night
+
+function inkRgb(): string {
+  return document.documentElement.classList.contains("dark") ? INK_DARK : INK_LIGHT;
+}
+
+function accentRgb(): string {
+  return document.documentElement.classList.contains("dark") ? ACCENT_DARK : ACCENT;
+}
 
 export function GuillocheField({
   className,
@@ -164,9 +174,11 @@ export function GuillocheField({
           const q = line[i - 1];
           ctx.quadraticCurveTo(q.x, q.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
         }
+        const dark = document.documentElement.classList.contains("dark");
+        const base = dark ? 0.28 : 0.2;
         ctx.strokeStyle = isAccent
-          ? `rgba(${ACCENT}, 0.30)`
-          : `rgba(${INK}, ${(0.2 - b * 0.016).toFixed(3)})`;
+          ? `rgba(${accentRgb()}, ${dark ? "0.42" : "0.30"})`
+          : `rgba(${inkRgb()}, ${(base - b * 0.016).toFixed(3)})`;
         ctx.lineWidth = isAccent ? 1.1 : 0.85;
         ctx.stroke();
       }
@@ -208,6 +220,12 @@ export function GuillocheField({
     window.addEventListener("pointermove", onMove, { passive: true });
     document.documentElement.addEventListener("pointerleave", onLeave);
     document.addEventListener("visibilitychange", onVisibility);
+
+    const themeObs = new MutationObserver(() => {
+      if (!running) draw();
+    });
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
     if (!reduced) {
       running = true;
       raf = requestAnimationFrame(loop);
@@ -218,6 +236,7 @@ export function GuillocheField({
     return () => {
       cancelAnimationFrame(raf);
       io.disconnect();
+      themeObs.disconnect();
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", onMove);
       document.documentElement.removeEventListener("pointerleave", onLeave);

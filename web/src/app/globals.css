@@ -22,10 +22,10 @@
   --color-ice-900: #0B5A9E;
   --color-ice-950: #082F4A;
 
-  --color-surface-light: #FFFFFF;
-  --color-surface-dark: #171C24;
-  --color-bg-light: #F7FAFC;
-  --color-bg-dark: #0E1117;
+  --color-surface-light: #FBF9F4;
+  --color-surface-dark: #171D19;
+  --color-bg-light: #F6F3EC;
+  --color-bg-dark: #0F1411;
 
   --color-ring: var(--ring);
   --color-border: var(--border);
@@ -68,70 +68,70 @@
 
 :root {
   --radius: 0.625rem;
-  --background: #F7FAFC;
-  --foreground: #0F172A;
-  --card: #FFFFFF;
-  --card-foreground: #0F172A;
-  --popover: #FFFFFF;
-  --popover-foreground: #0F172A;
-  --primary: #0F172A;
-  --primary-foreground: #F8FAFC;
-  --secondary: #F1F5F9;
-  --secondary-foreground: #0F172A;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
-  --accent: #F1F5F9;
-  --accent-foreground: #0F172A;
+  --background: #F6F3EC;
+  --foreground: #14251D;
+  --card: #FBF9F4;
+  --card-foreground: #14251D;
+  --popover: #FBF9F4;
+  --popover-foreground: #14251D;
+  --primary: #14251D;
+  --primary-foreground: #F6F3EC;
+  --secondary: #EFEAE0;
+  --secondary-foreground: #14251D;
+  --muted: #EFEAE0;
+  --muted-foreground: #5C6B63;
+  --accent: #EFEAE0;
+  --accent-foreground: #14251D;
   --destructive: #EF4444;
-  --border: #E2E8F0;
-  --input: #E2E8F0;
+  --border: #E5DFD3;
+  --input: #E5DFD3;
   --ring: #A8D8FF;
   --chart-1: #A8D8FF;
   --chart-2: #66BFFF;
   --chart-3: #3AA5F0;
   --chart-4: #1D82D1;
   --chart-5: #0E91C7;
-  --sidebar: #F8FAFC;
-  --sidebar-foreground: #0F172A;
-  --sidebar-primary: #0F172A;
-  --sidebar-primary-foreground: #F8FAFC;
-  --sidebar-accent: #F1F5F9;
-  --sidebar-accent-foreground: #0F172A;
-  --sidebar-border: #E2E8F0;
+  --sidebar: #F6F3EC;
+  --sidebar-foreground: #14251D;
+  --sidebar-primary: #14251D;
+  --sidebar-primary-foreground: #F6F3EC;
+  --sidebar-accent: #EFEAE0;
+  --sidebar-accent-foreground: #14251D;
+  --sidebar-border: #E5DFD3;
   --sidebar-ring: #A8D8FF;
 }
 
 .dark {
-  --background: #181818;
-  --foreground: #F1F5F9;
-  --card: #1F1F1F;
-  --card-foreground: #F1F5F9;
-  --popover: #1F1F1F;
-  --popover-foreground: #F1F5F9;
-  --primary: #F1F5F9;
-  --primary-foreground: #0F172A;
-  --secondary: #272727;
-  --secondary-foreground: #F1F5F9;
-  --muted: #272727;
-  --muted-foreground: #94A3B8;
-  --accent: #272727;
-  --accent-foreground: #F1F5F9;
+  --background: #0F1411;
+  --foreground: #F6F3EC;
+  --card: #171D19;
+  --card-foreground: #F6F3EC;
+  --popover: #171D19;
+  --popover-foreground: #F6F3EC;
+  --primary: #F6F3EC;
+  --primary-foreground: #0F1411;
+  --secondary: #222A25;
+  --secondary-foreground: #F6F3EC;
+  --muted: #222A25;
+  --muted-foreground: #9AA89F;
+  --accent: #222A25;
+  --accent-foreground: #F6F3EC;
   --destructive: #F87171;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.1);
+  --border: rgba(246, 243, 236, 0.10);
+  --input: rgba(246, 243, 236, 0.12);
   --ring: #A8D8FF;
   --chart-1: #A8D8FF;
   --chart-2: #66BFFF;
   --chart-3: #8CCEFF;
   --chart-4: #CCE7FF;
   --chart-5: #E5F3FF;
-  --sidebar: #1F1F1F;
-  --sidebar-foreground: #F1F5F9;
+  --sidebar: #171D19;
+  --sidebar-foreground: #F6F3EC;
   --sidebar-primary: #A8D8FF;
-  --sidebar-primary-foreground: #0F172A;
-  --sidebar-accent: #272727;
-  --sidebar-accent-foreground: #F1F5F9;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-primary-foreground: #0F1411;
+  --sidebar-accent: #222A25;
+  --sidebar-accent-foreground: #F6F3EC;
+  --sidebar-border: rgba(246, 243, 236, 0.10);
   --sidebar-ring: #A8D8FF;
 }
 
@@ -153,22 +153,22 @@
     mix-blend-mode: screen;
   }
   .glass {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(251, 249, 244, 0.82);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
   }
   .dark .glass {
-    background: rgba(24, 24, 24, 0.78);
+    background: rgba(23, 29, 25, 0.78);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
   }
   .glass-subtle {
-    background: rgba(255, 255, 255, 0.56);
+    background: rgba(251, 249, 244, 0.56);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
   .dark .glass-subtle {
-    background: rgba(31, 31, 31, 0.52);
+    background: rgba(23, 29, 25, 0.52);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
@@ -229,7 +229,7 @@
 /* Selection */
 ::selection {
   background-color: #A8D8FF;
-  color: #0F172A;
+  color: #14251D;
 }
 
 /* Smooth transitions for theme — applied via utility class, not globally */

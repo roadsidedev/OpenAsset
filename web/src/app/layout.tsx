@@ -37,8 +37,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F7FAFC" },
-    { media: "(prefers-color-scheme: dark)", color: "#181818" },
+    { media: "(prefers-color-scheme: light)", color: "#F6F3EC" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F1411" },
   ],
 };
 
@@ -49,6 +49,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("oa-theme");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className={`${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} font-sans antialiased`}>
         <Providers>
           <AppShell>{children}</AppShell>
