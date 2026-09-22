@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";import { SquaresFour, Briefcase, Plus, List, Sun, Moon, User, SignOut } from "@phosphor-icons/react";
+import { usePathname, useRouter } from "next/navigation";import { SquaresFour, TrendUp, Briefcase, Plus, List, Sun, Moon, User, SignOut } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useDisconnect } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,12 +57,14 @@ export function Navbar() {
 
   const NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: SquaresFour },
+    { label: "Earn", href: "/earn", icon: TrendUp },
     { label: "Portfolio", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
 
   const MOBILE_NAV_ITEMS = [
     { label: "Markets", href: "/markets", icon: SquaresFour },
+    { label: "Earn", href: "/earn", icon: TrendUp },
     { label: "Portfolio", href: "/portfolio", icon: Briefcase },
     { label: "Account", href: "/account", icon: User },
   ];
@@ -203,7 +205,7 @@ export function Navbar() {
 
       {/* Mobile Bottom Nav — Twitter-style */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border glass md:hidden">
-        <div className="grid grid-cols-3 h-14">
+        <div className="grid grid-cols-4 h-14">
           {MOBILE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");

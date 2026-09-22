@@ -1132,7 +1132,10 @@ export default function MarketDetailPage() {
                   <h2 className="text-lg font-bold text-foreground">Supply liquidity</h2>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Anyone can supply {loanToken?.symbol || "USDC"} to this market. Your deposit stays isolated to this market&apos;s risk surface.
+                  Anyone can supply {loanToken?.symbol || "USDC"} to this market. Your deposit stays isolated to this market&apos;s risk surface.{" "}
+                  <Link href={`/earn?market=${market.marketAddress}`} className="font-semibold text-ice-600 hover:underline dark:text-ice-300">
+                    Earn on this market →
+                  </Link>
                 </p>
               </div>
 

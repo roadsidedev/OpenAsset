@@ -43,6 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-5">
             <Link href="/docs" className="hover:text-foreground transition-colors">Docs</Link>
             <Link href="/markets" className="hover:text-foreground transition-colors">Markets</Link>
+            <Link href="/earn" className="hover:text-foreground transition-colors">Earn</Link>
             <Link href="/portfolio" className="hover:text-foreground transition-colors">Portfolio</Link>
             <Link href="/account" className="hover:text-foreground transition-colors">Account</Link>
           </div>
