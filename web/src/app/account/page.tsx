@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
 import { useSession } from "@/context/SessionContext";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useLpPositions } from "@/hooks/useLpPositions";
 import { useLoans } from "@/hooks/useLoans";
 import { useActivity } from "@/hooks/useActivity";
 import { useAccountRisk } from "@/hooks/useAccountRisk";
@@ -16,7 +18,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useUserIdentity } from "@/hooks/useUserIdentity";
 import { cn } from "@/lib/utils";
-import { DepositModal } from "@/components/modals/DepositModal";
 import { WithdrawModal } from "@/components/modals/WithdrawModal";
 import {
   ArrowDownLeft,
@@ -180,14 +181,15 @@ function AlertPrefsCard() {
 
 function AccountContent() {
   const [subTab, setSubTab] = useState<SubTab>("overview");
-  const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [browsePrompt, setBrowsePrompt] = useState(false);
   const [exportPassword, setExportPassword] = useState("");
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const { user, exportWallet, logout: privyLogout } = usePrivy();
   const { address } = useAccount();
+  const router = useRouter();
   const identity = useUserIdentity();
+  const { positions: lpPositions, isLoading: lpPositionsLoading } = useLpPositions(address);
 
   // Detect embedded wallet (Privy-managed) vs external wallet (MetaMask, etc.)
   const isEmbeddedWallet = user?.wallet?.walletClientType === "privy" || user?.wallet?.connectorType === "embedded";
@@ -276,17 +278,8 @@ function AccountContent() {
               <button
                 type="button"
                 onClick={() => {
-                  // Open with market picker when user has created markets or any markets exist
-                  // (picker prefers created-by-user). Otherwise prompt to browse/create.
-                  if (myMarkets.length > 0 || allMarkets.length > 0) {
-                    setBrowsePrompt(false);
-                    setDepositOpen(true);
-                  } else {
-                    setBrowsePrompt(true);
-                    toast.message("No markets yet", {
-                      description: "Browse markets or create one to supply liquidity.",
-                    });
-                  }
+                  setBrowsePrompt(false);
+                  router.push("/earn");
                 }}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:bg-slate-800 dark:hover:bg-white transition-premium active-press"
               >
@@ -295,13 +288,19 @@ function AccountContent() {
               <button
                 type="button"
                 onClick={() => {
-                  if (myMarkets.length > 0 || allMarkets.length > 0) {
+                  if (lpPositionsLoading) {
+                    toast.message("Checking positions…", {
+                      description: "Looking up markets where you have LP capital.",
+                    });
+                    return;
+                  }
+                  if (lpPositions.length > 0) {
                     setBrowsePrompt(false);
                     setWithdrawOpen(true);
                   } else {
                     setBrowsePrompt(true);
-                    toast.message("No markets yet", {
-                      description: "Browse markets to find an LP position to withdraw.",
+                    toast.message("No liquidity to withdraw", {
+                      description: "Supply on Earn or open a position in Portfolio.",
                     });
                   }
                 }}
@@ -312,12 +311,16 @@ function AccountContent() {
             </div>
             {browsePrompt && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Link href="/markets" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
-                  Browse markets
+                <Link href="/earn" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
+                  Earn
                 </Link>
                 <span>·</span>
-                <Link href="/create-market" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
-                  Create a market
+                <Link href="/portfolio" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
+                  Portfolio
+                </Link>
+                <span>·</span>
+                <Link href="/markets" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
+                  Browse markets
                 </Link>
               </div>
             )}
@@ -624,8 +627,7 @@ function AccountContent() {
         )}
       </main>
 
-      {/* No marketAddress → modals show market picker (created-by-user first). */}
-      <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
+      {/* Withdraw picker lists only markets where the wallet has LP shares. */}
       <WithdrawModal open={withdrawOpen} onOpenChange={setWithdrawOpen} />
     </div>
   );
