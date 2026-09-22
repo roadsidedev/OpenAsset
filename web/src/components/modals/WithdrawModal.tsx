@@ -14,9 +14,11 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
-import { useMarket, useMarkets, type Market } from "@/hooks/useMarkets";
+import { useMarket, type Market } from "@/hooks/useMarkets";
+import { useLpPositions, type LpPosition } from "@/hooks/useLpPositions";
 import { LENDING_MARKET_ABI, LP_TOKEN_ABI } from "@/lib/contractAbis";
 import { createChainClient, DEFAULT_CHAIN_ID } from "@/lib/chains";
+import { resolveAssetIdentity } from "@/lib/assetIdentity";
 import { cn } from "@/lib/utils";
 import { useTxTrail } from "@/store/useTxTrail";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,6 +46,15 @@ function formatAmt(raw: bigint, decimals: number) {
   } catch {
     return "0.00";
   }
+}
+
+function positionOptionLabel(pos: LpPosition, userAddress: string | undefined, decimals: number): string {
+  const identity = resolveAssetIdentity({ market: pos.market });
+  const claimableStr = formatAmt(pos.claimable, decimals);
+  const mine =
+    userAddress && pos.market.owner?.toLowerCase() === userAddress.toLowerCase();
+  const star = mine ? "★ " : "";
+  return `${star}${identity.displaySymbol} · ${shortAddr(pos.market.marketAddress)} · ${claimableStr} USDC`;
 }
 
 interface LpState {
@@ -79,8 +90,12 @@ export function WithdrawModal({
   const { withdrawLiquidity, isLoading } = useContractInteraction();
   const recordTx = useTxTrail((s) => s.record);
   const queryClient = useQueryClient();
-  const { data: marketsData } = useMarkets(0, 100);
-  const allMarkets: Market[] = marketsData?.markets || [];
+
+  const needsPicker = !marketAddressProp && !routeMarketId;
+  const {
+    positions: lpPositions,
+    isLoading: positionsLoading,
+  } = useLpPositions(needsPicker ? userAddress : undefined);
 
   const [pickedAddress, setPickedAddress] = useState<string>("");
   const [amount, setAmount] = useState("");
@@ -88,34 +103,33 @@ export function WithdrawModal({
   const [lpLoading, setLpLoading] = useState(false);
 
   const resolvedAddress = (marketAddressProp || routeMarketId || pickedAddress || "").toLowerCase();
-  const needsPicker = !marketAddressProp && !routeMarketId;
 
   const { data: marketFromHook } = useMarket(
     resolvedAddress && isAddress(resolvedAddress) ? resolvedAddress : "",
   );
 
-  const marketFromList = useMemo(
-    () => allMarkets.find((m) => m.marketAddress.toLowerCase() === resolvedAddress),
-    [allMarkets, resolvedAddress],
+  const marketFromPosition = useMemo(
+    () =>
+      lpPositions.find((p) => p.market.marketAddress.toLowerCase() === resolvedAddress)?.market,
+    [lpPositions, resolvedAddress],
   );
 
-  const market = marketFromHook || marketFromList;
-
-  const sortedMarkets = useMemo(() => {
-    if (!userAddress) return allMarkets;
-    const mine: Market[] = [];
-    const others: Market[] = [];
-    for (const m of allMarkets) {
-      if (m.owner?.toLowerCase() === userAddress.toLowerCase()) mine.push(m);
-      else others.push(m);
-    }
-    return [...mine, ...others];
-  }, [allMarkets, userAddress]);
+  const market: Market | undefined = marketFromHook || marketFromPosition;
 
   const lendingSymbol = lendingSymbolProp || "USDC";
   const decimals = lendingDecimalsProp ?? 6;
   const chainId = chainIdProp ?? market?.chainId ?? DEFAULT_CHAIN_ID;
   const marketAddress = market?.marketAddress || (isAddress(resolvedAddress) ? resolvedAddress : "");
+
+  // Auto-select when exactly one LP position and picker is needed
+  useEffect(() => {
+    if (!open || !needsPicker) return;
+    if (positionsLoading) return;
+    if (lpPositions.length === 1) {
+      const only = lpPositions[0].market.marketAddress;
+      setPickedAddress((prev) => (prev === only ? prev : only));
+    }
+  }, [open, needsPicker, positionsLoading, lpPositions]);
 
   const refreshLp = useCallback(async () => {
     if (!marketAddress || !isAddress(marketAddress)) {
@@ -310,23 +324,29 @@ export function WithdrawModal({
           {needsPicker && (
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">Select market</label>
-              {sortedMarkets.length === 0 ? (
+              {positionsLoading ? (
+                <div className="rounded-2xl border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+                  Loading your LP positions…
+                </div>
+              ) : lpPositions.length === 0 ? (
                 <div className="rounded-2xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground space-y-3">
-                  <p>No markets found. Browse markets to find a position, or create one.</p>
+                  <p>
+                    No liquidity to withdraw — supply on Earn or open a position in Portfolio.
+                  </p>
                   <div className="flex gap-2">
                     <Link
-                      href="/markets"
+                      href="/earn"
                       onClick={() => onOpenChange(false)}
                       className="rounded-2xl bg-ice-300 dark:bg-ice-400 text-slate-900 px-3 py-2 text-xs font-bold hover:bg-ice-400 dark:hover:bg-ice-300"
                     >
-                      Browse markets
+                      Earn
                     </Link>
                     <Link
-                      href="/create-market"
+                      href="/portfolio"
                       onClick={() => onOpenChange(false)}
                       className="rounded-2xl border border-border px-3 py-2 text-xs font-semibold hover:bg-accent"
                     >
-                      Create market
+                      Portfolio
                     </Link>
                   </div>
                 </div>
@@ -337,15 +357,11 @@ export function WithdrawModal({
                   className="w-full rounded-2xl border border-border bg-muted/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ice-400"
                 >
                   <option value="">Choose a market…</option>
-                  {sortedMarkets.map((m) => {
-                    const mine = userAddress && m.owner?.toLowerCase() === userAddress.toLowerCase();
-                    return (
-                      <option key={m.marketAddress} value={m.marketAddress}>
-                        {mine ? "★ " : ""}
-                        {shortAddr(m.marketAddress)}
-                      </option>
-                    );
-                  })}
+                  {lpPositions.map((pos) => (
+                    <option key={pos.market.marketAddress} value={pos.market.marketAddress}>
+                      {positionOptionLabel(pos, userAddress, decimals)}
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
