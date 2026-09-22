@@ -8,7 +8,7 @@
     "test:integration": "jest --config jest.integration.config.js",
     "dev": "nodemon src/main.ts",
     "build": "npx prisma generate && npx tsc",
-    "start": "(npx prisma migrate deploy || echo 'Migration skipped') && node dist/main.js",
+    "start": "npx prisma migrate deploy && node dist/main.js",
     "lint": "npx tsc --noEmit",
     "prisma:studio": "npx prisma studio",
     "db:push": "npx prisma db push",
