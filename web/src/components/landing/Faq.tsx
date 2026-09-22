@@ -23,7 +23,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "Who sets the market terms?",
-    a: "The market creator. LTV (capped at 95%), APR, duration, grace period, health-factor threshold, circuit-breaker thresholds. The protocol enforces exactly what you declare, nothing more.",
+    a: "The market creator. LTV (capped at 95%), APR, duration, health-factor threshold, circuit-breaker thresholds. The protocol enforces exactly what you declare, nothing more.",
   },
   {
     q: "What does \"isolated market\" actually protect me from?",
@@ -35,7 +35,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "What happens in a liquidation?",
-    a: "Gradual liquidation: the protocol seizes only the collateral needed to cover the debt plus a penalty, never the whole position. NFT markets liquidate by auction; tokenized stocks can settle through issuer redemption. Grace periods of 24 to 168 hours apply before expiry liquidations.",
+    a: "Loans become liquidatable at expiry, or earlier if a health-factor threshold is set and breached. When a market's liquidation adapter settles asynchronously (NFT auction, issuer redemption), a cure window opens: repay the frozen debt plus a 5% penalty before settlement becomes final. Surplus collateral returns to the borrower on paths that support it.",
   },
   {
     q: "Does \"Verified\" mean an adapter is safe?",

@@ -11,9 +11,10 @@
  */
 
 import { ethers } from 'ethers';
-import { PrismaClient, LoanStatus } from '@prisma/client';
+import { PrismaClient, LoanStatus, AlertType, AlertLevel } from '@prisma/client';
 import { logger } from '../utils/logger';
-import { LENDING_MARKET_V2_ABI } from './web3/ContractAbisV2';
+import { LENDING_MARKET_V2_ABI, ILIQUIDATION_ADAPTER_ABI } from './web3/ContractAbisV2';
+import { AlertService } from './AlertService';
 
 const POLL_INTERVAL_MS = 30_000; // 30 seconds
 
@@ -22,10 +23,14 @@ export class LiquidationBotService {
   private provider: ethers.Provider;
   private isRunning: boolean = false;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private alertService: AlertService;
 
   constructor(prisma: PrismaClient, provider: ethers.Provider) {
     this.prisma = prisma;
     this.provider = provider;
+    // Alerts must dispatch through AlertService (user prefs + channels);
+    // raw prisma.alert.create rows were never delivered anywhere.
+    this.alertService = new AlertService(prisma);
   }
 
   start(): void {
@@ -62,8 +67,9 @@ export class LiquidationBotService {
   }
 
   /**
-   * Check for loans in LIQUIDATION_CURE where the cure window has expired
-   * and submit settleLiquidation()
+   * Detect loans in LIQUIDATION_CURE whose cure window has expired.
+   * Execution of settleLiquidation() belongs to KeeperService (it holds the
+   * signer wallet); this bot owns detection and the adapter's real window.
    */
   private async checkCureWindowExpiries(): Promise<void> {
     const curingLoans = await this.prisma.loan.findMany({
@@ -85,21 +91,32 @@ export class LiquidationBotService {
 
         if (frozenInterestAt === 0) continue;
 
-        // Get cure window from liquidation adapter
-        // For now, use a default of 24 hours
-        const cureWindow = 24 * 60 * 60; // 24 hours
+        // Real cure window from the market's liquidation adapter (never a
+        // hardcoded default — windows differ per adapter/asset class).
+        const cureWindow = await this.queryCureWindowSeconds(loan.market.liquidationAdapter);
+        if (cureWindow <= 0) continue;
         const cureDeadline = frozenInterestAt + cureWindow;
 
         if (Date.now() / 1000 >= cureDeadline) {
-          logger.info({ loanId: loan.contractLoanId, market: loan.marketAddress }, 'Cure window expired, submitting settleLiquidation');
-
-          // In production: use a signer wallet to call settleLiquidation
-          // For now, just log the action
-          logger.warn({ loanId: loan.contractLoanId }, 'SettleLiquidation would be submitted (requires signer wallet)');
+          logger.info({ loanId: loan.contractLoanId, market: loan.marketAddress, cureWindow }, 'Cure window expired — awaiting keeper settleLiquidation');
         }
       } catch (error) {
         logger.error({ err: error, loanId: loan.contractLoanId }, 'Error checking cure window');
       }
+    }
+  }
+
+  private async queryCureWindowSeconds(liquidationAdapter?: string): Promise<number> {
+    if (!liquidationAdapter) return 0;
+    try {
+      const adapter = new ethers.Contract(liquidationAdapter, ILIQUIDATION_ADAPTER_ABI, this.provider);
+      const cureWindow = await adapter.cureWindowSeconds();
+      const seconds = Number(cureWindow);
+      if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+      return seconds;
+    } catch (error) {
+      logger.warn({ err: error, liquidationAdapter }, 'Failed to query cureWindowSeconds');
+      return 0;
     }
   }
 
@@ -126,15 +143,13 @@ export class LiquidationBotService {
           );
 
           // Create alert for manual intervention
-          await this.prisma.alert.create({
-            data: {
-              userId: loan.positionHolderAddress,
-              loanId: loan.id,
-              type: 'SETTLEMENT_TIMEOUT',
-              level: 'CRITICAL',
-              message: `Loan ${loan.contractLoanId} on market ${loan.marketAddress} has exceeded settlement timeout. Manual intervention required.`,
-            },
-          });
+          await this.alertService.createAlert(
+            loan.positionHolderAddress,
+            AlertType.SETTLEMENT_TIMEOUT,
+            AlertLevel.CRITICAL,
+            `Loan ${loan.contractLoanId} on market ${loan.marketAddress} has exceeded settlement timeout. Manual intervention required.`,
+            loan.id
+          );
         }
       } catch (error) {
         logger.error({ err: error, loanId: loan.contractLoanId }, 'Error checking settlement timeout');

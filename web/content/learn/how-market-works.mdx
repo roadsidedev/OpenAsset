@@ -36,7 +36,7 @@ Before depositing collateral, the borrower should review the market’s:
 |---|---|
 | Collateral asset | Determines what is held and how it can be released. |
 | LTV | Determines the maximum principal relative to collateral value. |
-| APR, duration, and grace period | Determine the cost and repayment deadline. |
+| APR and duration | Determine the cost and repayment deadline. |
 | Oracle | Determines how collateral is priced and when a price is considered trusted. |
 | Liquidation path | Determines how a default is resolved. |
 | Position type | Determines who controls the loan position and whether it can transfer. |
@@ -68,7 +68,7 @@ The engine delegates asset-specific behavior to adapters, but it independently v
 
 ## 5. The borrower repays or the market resolves a default
 
-A borrower can repay while the loan is active or during its grace period. When the loan closes as repaid, the Asset Adapter releases the collateral and the position is closed.
+A borrower can repay while the loan is active, up to expiry. When the loan closes as repaid, the Asset Adapter releases the collateral and the position is closed.
 
 If the loan defaults, the configured Liquidation Adapter resolves it. All liquidation adapters must return both the amount recovered for the LP and the amount returned to the current position holder. The protocol takes the debt plus the configured penalty and returns the surplus.
 

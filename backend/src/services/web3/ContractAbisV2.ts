@@ -153,6 +153,13 @@ export const LENDING_MARKET_V2_ABI = [
   },
   {
     type: 'function',
+    name: 'finalizeRedemptionSettlement',
+    inputs: [{ name: 'loanId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'depositLiquidity',
     inputs: [{ name: 'amount', type: 'uint256' }],
     outputs: [{ name: 'shares', type: 'uint256' }],
@@ -318,6 +325,24 @@ export const LENDING_MARKET_V2_ABI = [
       { name: 'amount', type: 'uint256', indexed: false },
       { name: 'shares', type: 'uint256', indexed: false },
     ],
+  },
+  {
+    type: 'event',
+    name: 'CircuitBreakerTriggered',
+    inputs: [
+      { name: 'reason', type: 'string', indexed: false },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'MarketPaused',
+    inputs: [{ name: 'timestamp', type: 'uint256', indexed: false }],
+  },
+  {
+    type: 'event',
+    name: 'MarketResumed',
+    inputs: [{ name: 'timestamp', type: 'uint256', indexed: false }],
   },
 ] as const;
 

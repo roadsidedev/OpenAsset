@@ -6,6 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
 import { useLoans } from "@/hooks/useLoans";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useAccountRisk } from "@/hooks/useAccountRisk";
 import { LOAN_STATUS } from "@/lib/contractAbis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -91,6 +92,7 @@ export default function PortfolioPage() {
 function PortfolioContent() {
   const [tab, setTab] = useState<PositionsTab>("loans");
   const { address } = useAccount();
+  const { risk: accountRisk, isLoading: riskLoading } = useAccountRisk(address);
 
   const borrowerQueryEnabled = !!address && tab === "loans";
   const { data: loansData, isLoading: loansLoading } = useLoans(
@@ -188,9 +190,28 @@ function PortfolioContent() {
                   <Wallet className="h-4 w-4 text-ice-500" />
                   <span className="text-xs text-muted-foreground">Health Status</span>
                 </div>
-                <span className="text-xl font-bold text-emerald-500">
-                  {loansLoading ? <Skeleton className="h-7 w-16 bg-muted inline-block" /> : "Healthy"}
-                </span>
+                {riskLoading ? (
+                  <span className="text-xl font-bold"><Skeleton className="h-7 w-16 bg-muted inline-block" /></span>
+                ) : (
+                  <div>
+                    <span
+                      className={cn(
+                        "text-xl font-bold",
+                        accountRisk.level === "healthy" && "text-emerald-500",
+                        accountRisk.level === "atRisk" && "text-amber-500",
+                        accountRisk.level === "liquidatable" && "text-red-500",
+                        accountRisk.level === "unknown" && "text-muted-foreground",
+                      )}
+                    >
+                      {accountRisk.label}
+                    </span>
+                    {accountRisk.detail ? (
+                      <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground tabular-nums">
+                        {accountRisk.detail}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
 

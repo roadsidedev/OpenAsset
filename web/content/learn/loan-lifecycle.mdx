@@ -12,7 +12,7 @@ Applies when `ILiquidationAdapter.isAsynchronous() == false` (DEX swap, NFT auct
 ```
 ACTIVE → GRACE_PERIOD → LIQUIDATED
    │                        │
-   └─ repay → REPAID        └─ repay during grace → REPAID
+    └─ repay → REPAID        └─ repay before expiry → REPAID
 ```
 
 ## Asynchronous path (issuer-redemption / RWA)
@@ -28,7 +28,7 @@ ACTIVE → GRACE_PERIOD → LIQUIDATION_CURE → LIQUIDATION_SETTLING → LIQUID
 
 ### LIQUIDATION_CURE
 
-Entered when liquidation conditions are first met (grace expired or health factor breached).
+Entered when liquidation conditions are first met (expiry reached or health factor breached).
 
 - Interest accrual **freezes immediately** (`frozenInterestAt = block.timestamp`)
 - Window length is set **per liquidation-adapter instance** (issuer-specific cancellation cutoffs)

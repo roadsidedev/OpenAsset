@@ -11,6 +11,14 @@ import { getContract } from '@/lib/contracts';
 import { apiFetchJson, isBackendConfigured } from '@/lib/apiClient';
 import { createChainClient, discoveryChainIds, DEFAULT_CHAIN_ID } from '@/lib/chains';
 
+export interface MarketCbConfig {
+  enabled: boolean;
+  pauseThresholdBps: number;
+  lookbackPeriodSeconds: number;
+  resumeThresholdBps: number;
+  cooldownSeconds: number;
+}
+
 export interface Market {
   marketAddress: string;
   owner: string;
@@ -36,6 +44,12 @@ export interface Market {
   };
   chainId?: number;
   providerId?: string | null;
+  /** Detail-path reads (on-chain or backend); absent on list rows. */
+  gracePeriodHours?: number;
+  enableHealthFactor?: boolean;
+  /** bps; 12000 = 1.20x */
+  healthFactorThreshold?: number;
+  cbConfig?: MarketCbConfig;
 }
 
 async function fetchOnChainMarketsForChain(chainId: number): Promise<Market[]> {
@@ -222,6 +236,10 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
       ltvBps,
       aprBps,
       durationSeconds,
+      gracePeriodHours,
+      enableHealthFactor,
+      healthFactorThreshold,
+      cbConfig,
     ] = await Promise.all([
       publicClient.readContract({
         address: address as Address,
@@ -256,6 +274,14 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'ltvBps' }) as Promise<bigint>,
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'aprBps' }) as Promise<bigint>,
       publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'durationSeconds' }) as Promise<bigint>,
+      publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'gracePeriodHours' }).catch(() => 0n) as Promise<bigint>,
+      publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'enableHealthFactor' }).catch(() => undefined) as Promise<boolean | undefined>,
+      publicClient.readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'healthFactorThreshold' }).catch(() => undefined) as Promise<bigint | undefined>,
+      publicClient
+        .readContract({ address: address as Address, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'cbConfig' })
+        .catch(() => undefined) as Promise<
+        readonly [boolean, bigint, bigint, bigint, bigint] | undefined
+      >,
     ]);
 
     return {
@@ -274,6 +300,21 @@ async function fetchMarketOnChain(address: string, chainId: number): Promise<Mar
       ltvBps: Number(ltvBps),
       aprBps: Number(aprBps),
       durationSeconds: Number(durationSeconds),
+      gracePeriodHours: gracePeriodHours !== undefined ? Number(gracePeriodHours ?? 0n) : undefined,
+      enableHealthFactor: enableHealthFactor ?? undefined,
+      healthFactorThreshold:
+        healthFactorThreshold !== undefined && healthFactorThreshold !== null
+          ? Number(healthFactorThreshold ?? 0n)
+          : undefined,
+      cbConfig: cbConfig
+        ? {
+            enabled: Boolean(cbConfig[0]),
+            pauseThresholdBps: Number(cbConfig[1]),
+            lookbackPeriodSeconds: Number(cbConfig[2]),
+            resumeThresholdBps: Number(cbConfig[3]),
+            cooldownSeconds: Number(cbConfig[4]),
+          }
+        : undefined,
       createdAt: 0,
       status: Number(status),
       active: (status as number) === 0,

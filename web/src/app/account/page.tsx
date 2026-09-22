@@ -6,6 +6,9 @@ import { useAccount } from "wagmi";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLoans } from "@/hooks/useLoans";
 import { useActivity } from "@/hooks/useActivity";
+import { useAccountRisk } from "@/hooks/useAccountRisk";
+import { useUserAlertPrefs } from "@/hooks/useUserAlertPrefs";
+import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useUserIdentity } from "@/hooks/useUserIdentity";
@@ -85,6 +88,91 @@ export default function AccountPage() {
   );
 }
 
+/**
+ * Config & Rules: persisted alert preferences. Toggles map 1:1 to delivery
+ * buckets on the backend (users.alertLiquidation / users.alertMarketPaused);
+ * requires a one-time backend wallet signature (JWT) before the first save.
+ */
+function AlertPrefsCard() {
+  const { address } = useAccount();
+  const { isAuthenticated, signLoginMessage, isSigning } = useAuth();
+  const { prefs, isLoading, isUnavailable, isSaving, setPref } = useUserAlertPrefs(address);
+
+  const rows: Array<{ key: "alertLiquidation" | "alertMarketPaused"; label: string; desc: string }> = [
+    {
+      key: "alertLiquidation",
+      label: "Liquidation Alerts",
+      desc: "When a loan's health factor approaches its market's liquidation threshold, or a settlement needs attention.",
+    },
+    {
+      key: "alertMarketPaused",
+      label: "Circuit Breaker Alerts",
+      desc: "When a market pauses: oracle failure, extreme volatility, or an owner pause.",
+    },
+  ];
+
+  const controlsDisabled = !isAuthenticated || isLoading || isSaving || isUnavailable;
+
+  return (
+    <div className="p-6 rounded-3xl border border-border bg-card space-y-6 max-w-2xl">
+      <div>
+        <h3 className="text-sm font-bold">Alert Preferences</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Delivered by email, SMS, or push when those channels are configured on your account.
+          Every alert still appears in your Activity log regardless of these settings.
+        </p>
+      </div>
+
+      {!isAuthenticated ? (
+        <div className="rounded-2xl bg-muted/50 p-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Sign in with your wallet once to sync these preferences to your account.
+          </p>
+          <button
+            type="button"
+            onClick={() => void signLoginMessage()}
+            disabled={isSigning}
+            className="rounded-2xl bg-ice-300 dark:bg-ice-400 text-slate-900 px-4 py-2 text-xs font-bold hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors disabled:opacity-60"
+          >
+            {isSigning ? "Signing in…" : "Sign in to sync preferences"}
+          </button>
+        </div>
+      ) : isUnavailable ? (
+        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
+          Preferences could not be loaded (backend unreachable). Try again shortly.
+        </p>
+      ) : null}
+
+      <div className="space-y-3 text-xs">
+        {rows.map(({ key, label, desc }) => (
+          <label
+            key={key}
+            className={cn(
+              "flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-muted/50",
+              !controlsDisabled && "cursor-pointer",
+            )}
+          >
+            <span className="min-w-0">
+              <span className="block font-bold text-foreground">{label}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{desc}</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={prefs[key]}
+              disabled={controlsDisabled}
+              onChange={() => setPref({ [key]: !prefs[key] })}
+              className="w-4 h-4 shrink-0 accent-ice-500 rounded disabled:opacity-50"
+            />
+          </label>
+        ))}
+        {isAuthenticated && isLoading ? (
+          <p className="text-[11px] text-muted-foreground">Loading saved preferences…</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function AccountContent() {
   const [subTab, setSubTab] = useState<SubTab>("overview");
   const [depositOpen, setDepositOpen] = useState(false);
@@ -121,6 +209,7 @@ function AccountContent() {
   );
   const { data: marketsData, isLoading: marketsLoading } = useMarkets(0, 100);
   const { data: activityData, isLoading: activityLoading } = useActivity(address);
+  const { risk: accountRisk, isLoading: riskLoading } = useAccountRisk(address);
 
   const activeLoans: any[] = loansData?.loans || [];
   const allMarkets: any[] = marketsData?.markets || [];
@@ -232,9 +321,28 @@ function AccountContent() {
               <Clock className="h-4 w-4 text-ice-500" />
               <span className="text-xs text-muted-foreground">Account Risk</span>
             </div>
-            <span className="text-xl font-bold text-emerald-500">
-              {loansLoading ? <Skeleton className="h-7 w-16 bg-muted inline-block" /> : "Healthy"}
-            </span>
+            {riskLoading ? (
+              <span className="text-xl font-bold"><Skeleton className="h-7 w-24 bg-muted inline-block" /></span>
+            ) : (
+              <div>
+                <span
+                  className={cn(
+                    "text-xl font-bold",
+                    accountRisk.level === "healthy" && "text-emerald-500",
+                    accountRisk.level === "atRisk" && "text-amber-500",
+                    accountRisk.level === "liquidatable" && "text-red-500",
+                    accountRisk.level === "unknown" && "text-muted-foreground",
+                  )}
+                >
+                  {accountRisk.label}
+                </span>
+                {accountRisk.detail ? (
+                  <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground tabular-nums">
+                    {accountRisk.detail}
+                  </span>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
 
@@ -300,28 +408,11 @@ function AccountContent() {
           </div>
         )}
 
-        {/* Sub-tab: Config */}
+        {/* Sub-tab: Config — real, persisted alert preferences.
+            Each toggle gates a delivery bucket in AlertService.dispatchAlert;
+            alerts are always recorded to the Activity log either way. */}
         {subTab === "config" && (
-          <div className="p-6 rounded-3xl border border-border bg-card space-y-6 max-w-2xl">
-            <h3 className="text-sm font-bold">Risk Management & Configuration</h3>
-            <div className="space-y-3 text-xs">
-              {(
-                [
-                  ["Auto-Apply LP Earnings", "Automatically direct pool yields towards active loan debt", true],
-                  ["Circuit Breaker Alerts", "Instant notifications when pricing feeds halt or reset", true],
-                  ["Liquidation Alerts", "Get notified when loans approach liquidation thresholds", true],
-                ] as [string, string, boolean][]
-              ).map(([label, desc, checked]) => (
-                <div key={label} className="flex items-center justify-between p-3.5 rounded-2xl bg-muted/50">
-                  <div>
-                    <div className="font-bold text-foreground">{label}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
-                  </div>
-                  <input type="checkbox" defaultChecked={checked as boolean} className="w-4 h-4 accent-ice-500 rounded" />
-                </div>
-              ))}
-            </div>
-          </div>
+          <AlertPrefsCard />
         )}
 
         {/* Sub-tab: Activity */}

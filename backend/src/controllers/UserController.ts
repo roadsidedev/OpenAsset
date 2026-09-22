@@ -17,6 +17,8 @@ const updateProfileSchema = z.object({
   pushEnabled: z.boolean().optional(),
   pushToken: z.string().optional(),
   emailAllAlerts: z.boolean().optional(),
+  alertLiquidation: z.boolean().optional(),
+  alertMarketPaused: z.boolean().optional(),
 });
 
 const verifyCodeSchema = z.object({
@@ -40,6 +42,8 @@ const SELF_USER_FIELDS = {
   smsVerified: true,
   pushEnabled: true,
   emailAllAlerts: true,
+  alertLiquidation: true,
+  alertMarketPaused: true,
   createdAt: true,
   updatedAt: true,
   // NEVER: pushToken, nonce, nonceExpiresAt
@@ -71,6 +75,8 @@ export function toSelfUser(user: {
   smsVerified: boolean;
   pushEnabled: boolean;
   emailAllAlerts: boolean;
+  alertLiquidation: boolean;
+  alertMarketPaused: boolean;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -82,6 +88,8 @@ export function toSelfUser(user: {
     smsVerified: user.smsVerified,
     pushEnabled: user.pushEnabled,
     emailAllAlerts: user.emailAllAlerts,
+    alertLiquidation: user.alertLiquidation,
+    alertMarketPaused: user.alertMarketPaused,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

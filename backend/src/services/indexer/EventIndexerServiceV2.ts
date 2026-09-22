@@ -314,6 +314,11 @@ export class EventIndexerServiceV2 {
         case 'LiquidityDeposited':
           await this.handleLiquidityDeposited(log.address, parsed.args);
           break;
+        case 'CircuitBreakerTriggered':
+        case 'MarketPaused':
+        case 'MarketResumed':
+          await this.handleMarketStatusChange(log.address, parsed.name);
+          break;
       }
     } catch (error) {
       logger.error({ err: error, topic: log.topics?.[0], chainId: this.chainId }, 'Failed to process log');
@@ -321,6 +326,34 @@ export class EventIndexerServiceV2 {
   }
 
   // ============ Event Handlers ============
+
+  /**
+   * Circuit breaker / manual pause events: sync the DB market status from the
+   * source of truth (on-chain status enum) so UI + monitoring see pauses
+   * immediately instead of waiting for the 60s status poll.
+   */
+  private async handleMarketStatusChange(marketAddress: string, eventName: string): Promise<void> {
+    try {
+      const market = await this.prisma.market.findUnique({ where: { address: marketAddress.toLowerCase() } });
+      if (!market) return;
+
+      const contract = new ethers.Contract(marketAddress, LENDING_MARKET_V2_ABI, this.provider);
+      const chainStatus = Number(await contract.status());
+      const dbStatus = MARKET_STATUS_MAP[chainStatus] ?? 'ACTIVE';
+
+      await this.prisma.market.update({
+        where: { address: marketAddress.toLowerCase() },
+        data: {
+          status: dbStatus as any,
+          pausedAt: chainStatus === 0 ? null : new Date(),
+        },
+      });
+
+      logger.info({ chainId: this.chainId, market: marketAddress, eventName, chainStatus, dbStatus }, 'Market status synced from event');
+    } catch (error) {
+      logger.error({ err: error, market: marketAddress, chainId: this.chainId }, 'Failed to sync market status from event');
+    }
+  }
 
   private async handleMarketCreated(args: any): Promise<void> {
     const marketAddress = args.marketAddress;

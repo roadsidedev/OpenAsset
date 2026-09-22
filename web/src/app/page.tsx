@@ -44,7 +44,7 @@ const SPECIMENS = [
   {
     tag: "NFT",
     title: "Liquidity without a fire-sale.",
-    detail: "Auction liquidation · gradual seizure · 24–168h grace before expiry",
+    detail: "Auction liquidation · gradual seizure · cure window before final settlement",
   },
   {
     tag: "Community token",

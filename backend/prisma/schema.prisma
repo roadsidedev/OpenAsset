@@ -17,6 +17,9 @@ model User {
     pushEnabled    Boolean  @default(false)
     pushToken      String?
     emailAllAlerts Boolean  @default(false)
+    // Per-alert-bucket delivery prefs (gate channel dispatch, never alert recording)
+    alertLiquidation Boolean @default(true)
+    alertMarketPaused Boolean @default(true)
     nonce          String    @default(dbgenerated("gen_random_uuid()"))
     nonceExpiresAt DateTime?
     createdAt      DateTime  @default(now())

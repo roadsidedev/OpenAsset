@@ -280,9 +280,31 @@ export default function RepayPage() {
               </div>
               <div className="rounded-2xl bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">Health Factor</p>
-                <p className={loan.healthFactor !== 0n && loan.healthFactor < 12000n ? 'text-destructive' : 'text-emerald-500'}>
-                  {loan.healthFactor === 0n ? '—' : (Number(loan.healthFactor) / 10000).toFixed(2)}
-                </p>
+                {(() => {
+                  // Disabled on-chain HF returns uint256 max — never render it.
+                  const hfDisabled = market?.enableHealthFactor === false;
+                  const hfTooLarge = loan.healthFactor > 10n ** 15n;
+                  const thresholdBps = BigInt(market?.healthFactorThreshold && market.healthFactorThreshold > 10000 ? market.healthFactorThreshold : 12000);
+                  if (hfDisabled || hfTooLarge) {
+                    return (
+                      <>
+                        <p className="text-foreground">—</p>
+                        <p className="text-[10px] text-muted-foreground">Expiry-based liquidation (HF off)</p>
+                      </>
+                    );
+                  }
+                  const belowThreshold = loan.healthFactor !== 0n && loan.healthFactor < thresholdBps;
+                  return (
+                    <>
+                      <p className={belowThreshold ? 'text-destructive' : 'text-emerald-500'}>
+                        {loan.healthFactor === 0n ? '—' : (Number(loan.healthFactor) / 10000).toFixed(2)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        threshold {(Number(thresholdBps) / 10000).toFixed(2)}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
               <div className="rounded-2xl bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">Accrued Interest</p>

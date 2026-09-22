@@ -1,7 +1,8 @@
-import { PrismaClient, LoanStatus } from '@prisma/client';
+import { PrismaClient, LoanStatus, AlertType, AlertLevel } from '@prisma/client';
 import { ethers } from 'ethers';
 import { logger } from '../utils/logger';
 import { LENDING_MARKET_V2_ABI, ILIQUIDATION_ADAPTER_ABI } from './web3/ContractAbisV2';
+import { AlertService } from './AlertService';
 
 /** On-chain LendingMarketV2.LoanStatus → Prisma LoanStatus */
 const ON_CHAIN_LOAN_STATUS: Record<number, LoanStatus> = {
@@ -43,6 +44,7 @@ export class KeeperService {
   private isRunning = false;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private lastBlockChecked = 0;
+  private alertService: AlertService;
 
   constructor(
     prisma: PrismaClient,
@@ -64,6 +66,9 @@ export class KeeperService {
     })();
 
     this.wallet = new ethers.Wallet(privateKey, provider);
+    // Dispatches through AlertService so keeper alerts honor user prefs and
+    // actually reach email/SMS/push (direct prisma.alert.create rows never did).
+    this.alertService = new AlertService(prisma);
 
     this.config = {
       chainId,
@@ -125,6 +130,7 @@ export class KeeperService {
     try {
       await this.executeLiquidations();
       await this.executeSettlements();
+      await this.executeFinalizations();
       await this.checkExpiredCureWindows();
     } catch (error) {
       logger.error({ err: error, chainId: this.chainId }, 'Keeper poll error');
@@ -214,15 +220,13 @@ export class KeeperService {
           },
         });
 
-        await this.prisma.alert.create({
-          data: {
-            userId: loan.positionHolderAddress,
-            loanId: loan.id,
-            type: 'LIQUIDATION_RISK',
-            level: 'CRITICAL',
-            message: `Loan ${loan.contractLoanId} liquidated. Transaction: ${receipt?.hash}`,
-          },
-        });
+        await this.alertService.createAlert(
+          loan.positionHolderAddress,
+          AlertType.LIQUIDATION_RISK,
+          AlertLevel.CRITICAL,
+          `Loan ${loan.contractLoanId} liquidated. Transaction: ${receipt?.hash}`,
+          loan.id
+        );
 
       } catch (error) {
         logger.error({ err: error, loanId: loan.contractLoanId }, 'Liquidation execution failed');
@@ -307,6 +311,62 @@ export class KeeperService {
   }
 
   /**
+   * Attempt finalizeRedemptionSettlement() on loans in LIQUIDATION_SETTLING.
+   * The call is permissionless and fail-closed on-chain (reverts until the
+   * adapter's redemption path is ready), so early attempts are harmless
+   * reverts; success moves the loan to its final status.
+   */
+  private async executeFinalizations(): Promise<void> {
+    const loans = await this.prisma.loan.findMany({
+      where: {
+        status: 'LIQUIDATION_SETTLING' as LoanStatus,
+        market: { chainId: this.chainId },
+      },
+      include: { market: true },
+      take: this.config.batchSize,
+    });
+
+    for (const loan of loans) {
+      try {
+        // Gas sanity first — skip the whole batch item when gas is too high
+        const feeData = await this.provider.getFeeData();
+        const maxGasPrice = ethers.parseUnits(this.config.maxGasPriceGwei.toString(), 'gwei');
+        if (feeData.gasPrice && feeData.gasPrice > maxGasPrice) continue;
+
+        const marketContract = new ethers.Contract(
+          loan.marketAddress,
+          LENDING_MARKET_V2_ABI,
+          this.wallet
+        );
+
+        const gasEstimate = await marketContract.finalizeRedemptionSettlement.estimateGas(loan.contractLoanId);
+        const tx = await marketContract.finalizeRedemptionSettlement(loan.contractLoanId, {
+          gasLimit: gasEstimate + 50_000n,
+        });
+        const receipt = await tx.wait();
+
+        logger.info({ loanId: loan.contractLoanId, txHash: receipt?.hash }, 'Redemption settlement finalized');
+
+        const after = await marketContract.getLoanDetails(loan.contractLoanId);
+        const afterMapped = this.mapOnChainStatus(Number(after.status)) || 'LIQUIDATED';
+        await this.prisma.loan.update({
+          where: { id: loan.id },
+          data: {
+            status: afterMapped,
+            ...(afterMapped === 'LIQUIDATED' ? { liquidatedAt: new Date() } : {}),
+          },
+        });
+      } catch (error) {
+        // Expected revert while redemption is not ready — debug, not error
+        logger.debug(
+          { err: error, loanId: loan.contractLoanId, market: loan.marketAddress },
+          'finalizeRedemptionSettlement not ready (revert or gas)'
+        );
+      }
+    }
+  }
+
+  /**
    * Check for loans in LIQUIDATION_SETTLING that have timed out
    * and flag for manual intervention
    */
@@ -330,15 +390,13 @@ export class KeeperService {
           'Settlement timeout exceeded — flagging for manual intervention'
         );
 
-        await this.prisma.alert.create({
-          data: {
-            userId: loan.positionHolderAddress,
-            loanId: loan.id,
-            type: 'SETTLEMENT_TIMEOUT',
-            level: 'CRITICAL',
-            message: `Loan ${loan.contractLoanId} settlement timeout exceeded (${Math.floor(loanAge / 86400)} days). Manual intervention required.`,
-          },
-        });
+        await this.alertService.createAlert(
+          loan.positionHolderAddress,
+          AlertType.SETTLEMENT_TIMEOUT,
+          AlertLevel.CRITICAL,
+          `Loan ${loan.contractLoanId} settlement timeout exceeded (${Math.floor(loanAge / 86400)} days). Manual intervention required.`,
+          loan.id
+        );
       }
     }
   }

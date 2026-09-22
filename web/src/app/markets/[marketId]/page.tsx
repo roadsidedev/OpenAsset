@@ -55,7 +55,7 @@ export default function MarketDetailPage() {
   const { address: userAddress, isAuthenticated, ready: sessionReady } = useSession();
   const { login: privyLogin } = usePrivy();
   const { data: market, isLoading, isFetching, error, refetch } = useMarket(marketId);
-  const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
+  const { requestLoan, pauseMarket, unpauseMarket, isLoading: isTxLoading, error: txError } = useContractInteraction();
   const { nudgeChain } = useChainOrchestrator();
   const recordTx = useTxTrail((s) => s.record);
   // Hooks must remain unconditional: the market query starts empty, then populates
@@ -410,6 +410,32 @@ export default function MarketDetailPage() {
   const marketStatus = market.status ?? (market.active ? 0 : 3);
   const statusLabel = MARKET_STATUS[marketStatus as keyof typeof MARKET_STATUS] || "Unknown";
   const isPaused = statusLabel !== "ACTIVE";
+  const isOwner = !!userAddress && !!market.owner && userAddress.toLowerCase() === market.owner.toLowerCase();
+
+  // Owner risk controls: pause/unpause are on-chain onlyMarketOwner calls;
+  // status + CB config refresh from the market query after each write.
+  const handlePauseMarket = async () => {
+    try {
+      await pauseMarket(market.marketAddress, market.chainId);
+      toast.success("Market paused. New originations are blocked; repayments and liquidations remain open.");
+      void queryClient.invalidateQueries({ queryKey: ["market", marketId] });
+      void queryClient.invalidateQueries({ queryKey: ["markets"] });
+      void refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Pause failed.");
+    }
+  };
+  const handleUnpauseMarket = async () => {
+    try {
+      await unpauseMarket(market.marketAddress, market.chainId);
+      toast.success("Market resumed.");
+      void queryClient.invalidateQueries({ queryKey: ["market", marketId] });
+      void queryClient.invalidateQueries({ queryKey: ["markets"] });
+      void refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Resume failed. Owner resume only clears a manual pause; volatility and stale-oracle pauses clear automatically after cooldown.");
+    }
+  };
 
   // Brand-agnostic identity derived from adapter + collateral metadata (same as MarketCard)
   const identity = resolveAssetIdentity({
@@ -573,6 +599,90 @@ export default function MarketDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Owner-only risk controls: on-chain pause/unpause + the market's
+                configured risk parameters (immutable after deploy). */}
+            {isOwner && (
+              <div className="p-6 rounded-3xl border border-border bg-card space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-4">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Risk Controls · Owner
+                  </h3>
+                  <span
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-full font-semibold",
+                      isPaused
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                    )}
+                  >
+                    {statusLabel.replace("_", " ")}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3 rounded-2xl bg-muted/50">
+                    <span className="text-muted-foreground block text-xs mb-1">Health factor</span>
+                    <span className="font-bold text-foreground">
+                      {market.enableHealthFactor === false
+                        ? "Expiry-only (off)"
+                        : `${((market.healthFactorThreshold ?? 12000) / 10000).toFixed(2)}x threshold`}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-muted/50">
+                    <span className="text-muted-foreground block text-xs mb-1">Circuit breaker</span>
+                    <span className="font-bold text-foreground">
+                      {market.cbConfig?.enabled
+                        ? `±${(market.cbConfig.pauseThresholdBps / 100).toFixed(1)}% pause`
+                        : market.cbConfig
+                          ? "Disabled"
+                          : "—"}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-muted/50">
+                    <span className="text-muted-foreground block text-xs mb-1">Lookback / cooldown</span>
+                    <span className="font-bold text-foreground">
+                      {market.cbConfig?.enabled
+                        ? `${(market.cbConfig.lookbackPeriodSeconds / 3600).toFixed(1)}h / ${(market.cbConfig.cooldownSeconds / 3600).toFixed(1)}h`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-muted/50">
+                    <span className="text-muted-foreground block text-xs mb-1">Grace (recorded)</span>
+                    <span className="font-bold text-foreground">
+                      {market.gracePeriodHours !== undefined ? `${market.gracePeriodHours}h` : "—"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {marketStatus === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handlePauseMarket()}
+                      disabled={isTxLoading}
+                      className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {isTxLoading ? "Confirming…" : "Pause market"}
+                    </button>
+                  )}
+                  {marketStatus === 3 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleUnpauseMarket()}
+                      disabled={isTxLoading}
+                      className="rounded-2xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {isTxLoading ? "Confirming…" : "Resume market"}
+                    </button>
+                  )}
+                  {(marketStatus === 1 || marketStatus === 2) && (
+                    <p className="text-xs text-muted-foreground">
+                      Auto-paused ({statusLabel.replace("PAUSED_", "")}). New originations resume automatically
+                      once prices recover and the cooldown passes; repayments and liquidations stay open.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column: Borrow Form */}
@@ -793,6 +903,101 @@ export default function MarketDetailPage() {
                   </div>
                 </div>
               )}
+
+              {/* Risk preview: projected health factor at the entered amount,
+                  liquidation distance, and pool utilization. Estimate only:
+                  uses the live oracle price and this loan's principal alone. */}
+              {collateralAmount && oracleTrusted && metadataReliable && (() => {
+                const parsedColl = parseAmountInput(collateralAmount, collateralDecimals);
+                if (!parsedColl.amount || parsedColl.error || !oraclePrice) return null;
+                const collateralValue18 = (parsedColl.amount * oraclePrice) / 10n ** BigInt(collateralDecimals);
+                const maxRaw = calculateMaxBorrowRaw();
+                const principalRaw = requestedBorrow.trim()
+                  ? (parseAmountInput(requestedBorrow, lendingDecimals).amount ?? maxRaw)
+                  : maxRaw;
+                if (principalRaw <= 0n || collateralValue18 <= 0n) return null;
+                const principal18 = (principalRaw * 10n ** 18n) / 10n ** BigInt(lendingDecimals);
+                if (principal18 <= 0n) return null;
+
+                const hfDisabled = market.enableHealthFactor === false;
+                const thresholdBps = BigInt(
+                  market.healthFactorThreshold && market.healthFactorThreshold > 10000
+                    ? market.healthFactorThreshold
+                    : 12000
+                );
+                const projectedHfBps = Number((collateralValue18 * 10000n) / principal18);
+                const thresholdNum = Number(thresholdBps);
+
+                // Collateral value can fall until value == threshold/10000 * debt.
+                const requiredValue = (thresholdBps * principal18) / 10000n;
+                const dropPct =
+                  requiredValue < collateralValue18
+                    ? Number(((collateralValue18 - requiredValue) * 100n) / collateralValue18)
+                    : 0;
+
+                const availableRaw = BigInt(market.liquidity.available || "0");
+                const utilPct =
+                  availableRaw > 0n ? Number((principalRaw * 100n) / availableRaw) : null;
+
+                return (
+                  <div className="p-3 rounded-2xl bg-muted/30 border border-border/50 text-xs space-y-1.5">
+                    {hfDisabled ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Projected health factor</span>
+                        <span className="font-medium text-foreground">Expiry-based (HF off)</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Projected health factor</span>
+                          <span
+                            className={cn(
+                              "font-semibold tabular-nums",
+                              projectedHfBps < thresholdNum
+                                ? "text-red-500"
+                                : projectedHfBps < thresholdNum * 1.2
+                                  ? "text-amber-500"
+                                  : "text-emerald-500",
+                            )}
+                          >
+                            {(projectedHfBps / 10000).toFixed(2)} (min {(thresholdNum / 10000).toFixed(2)})
+                          </span>
+                        </div>
+                        {projectedHfBps < thresholdNum ? (
+                          <p className="text-[11px] text-red-500">
+                            This borrow would open below the market&apos;s liquidation threshold. Reduce the
+                            amount or add collateral.
+                          </p>
+                        ) : (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Liquidation distance</span>
+                            <span className="font-medium text-foreground tabular-nums">
+                              collateral value can fall ~{dropPct}%
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {utilPct !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Liquidity used</span>
+                        <span
+                          className={cn(
+                            "font-medium tabular-nums",
+                            utilPct > 80 ? "text-amber-500" : "text-foreground",
+                          )}
+                        >
+                          {utilPct}% of available
+                          {utilPct > 80 ? " (high)" : ""}
+                        </span>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      Estimate at the current oracle price. Ignores accrued interest and positions in other markets.
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* CTA — auth-aware and chain-aware: every state is actionable.
                   Logged-in users never see a dead "Sign in" wall: the button

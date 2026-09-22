@@ -12,6 +12,22 @@ interface UserAlertPrefs {
   dedupWindowSec?: number;
 }
 
+/**
+ * Alert-type → delivery bucket, matching the Account "Config & Rules" toggles.
+ * A bucket set to false on the user skips CHANNEL delivery only; the Alert row
+ * is still recorded (Activity log stays complete).
+ */
+function alertBucket(type: AlertType): 'liquidation' | 'marketPaused' {
+  switch (type) {
+    case AlertType.MARKET_PAUSED:
+      return 'marketPaused';
+    default:
+      // HEALTH_FACTOR, LIQUIDATION_RISK, LOAN_EXPIRING, LIQUIDATION_CURE_WARNING,
+      // CURE_WINDOW_EXPIRING, SETTLEMENT_TIMEOUT — all position/liquidation risk
+      return 'liquidation';
+  }
+}
+
 export class AlertService {
   private emailService: EmailService;
   private smsService: SmsService;
@@ -63,6 +79,22 @@ export class AlertService {
           where: { id: alert.id },
           data: { status: 'FAILED' }
         });
+        return alert;
+      }
+
+      // Per-bucket user opt-out (Account → Config & Rules): record the alert,
+      // skip all outbound channels. Unknown/legacy users default to enabled.
+      const bucket = alertBucket(alert.type as AlertType);
+      const bucketEnabled =
+        bucket === 'marketPaused'
+          ? user.alertMarketPaused !== false
+          : user.alertLiquidation !== false;
+      if (!bucketEnabled) {
+        await this.prisma.alert.update({
+          where: { id: alert.id },
+          data: { status: 'SENT', sentVia: [] },
+        });
+        logger.info({ userId: alert.userId, type: alert.type, bucket }, 'Alert recorded, channels disabled by user preference');
         return alert;
       }
 

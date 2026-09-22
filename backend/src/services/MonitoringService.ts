@@ -55,12 +55,16 @@ export class MonitoringService {
             }
         });
 
-        if (healthFactor < 1.2) {
+        // Per-market threshold (bps); 1.2 fallback when unset/invalid.
+        const configuredThreshold = loan.market?.healthFactorThreshold ?? 0;
+        const thresholdBps = configuredThreshold > 10000 ? configuredThreshold : 12000;
+        const healthFactorEnabled = loan.market?.enableHealthFactor !== false;
+        if (healthFactorEnabled && healthFactor < thresholdBps / 10000) {
           await this.alertService.createAlert(
             loan.borrowerAddress,
             AlertType.LIQUIDATION_RISK, 
             AlertLevel.WARNING, 
-            `Loan ${loan.contractLoanId} health is low (${healthFactor.toFixed(2)})`,
+            `Loan ${loan.contractLoanId} health is low (${healthFactor.toFixed(2)}, threshold ${(thresholdBps / 10000).toFixed(2)})`,
             String(loan.id)
           );
         }

@@ -68,7 +68,7 @@ const STEPS = [
   },
   {
     title: "Set the terms. Deploy.",
-    copy: "LTV, rate, duration, grace period, circuit breaker: your parameters, enforced on-chain. The factory validates every combination and tells you, in plain language, if something won't work.",
+    copy: "LTV, rate, duration, health factor, circuit breaker: your parameters, enforced on-chain. The factory validates every combination and tells you, in plain language, if something won't work.",
   },
 ];
 

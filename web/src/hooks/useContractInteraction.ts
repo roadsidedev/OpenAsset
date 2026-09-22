@@ -436,6 +436,64 @@ export const useContractInteraction = () => {
     [walletClient, clientForChain, clearError, ensureChain]
   );
 
+  /**
+   * Market-owner circuit-breaker control: pause/unpause a live market
+   * (on-chain onlyMarketOwner; surfaced in the owner Risk Controls panel).
+   */
+  const pauseMarket = useCallback(
+    async (marketAddress: string, targetChainId?: number) => {
+      setIsLoading(true);
+      clearError();
+      try {
+        if (!walletClient) throw new Error('Wallet not connected');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
+        const hash = await walletClient.writeContract({
+          address: marketAddress as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'pause',
+        });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
+      } catch (err) {
+        const error = new Error(decodeContractError(err));
+        setError(error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [walletClient, clientForChain, clearError, ensureChain]
+  );
+
+  const unpauseMarket = useCallback(
+    async (marketAddress: string, targetChainId?: number) => {
+      setIsLoading(true);
+      clearError();
+      try {
+        if (!walletClient) throw new Error('Wallet not connected');
+        await ensureChain(targetChainId);
+        const activeClient = clientForChain(targetChainId);
+        if (!activeClient) throw new Error('Public client not available');
+        const hash = await walletClient.writeContract({
+          address: marketAddress as Address,
+          abi: parseAbi(LENDING_MARKET_ABI),
+          functionName: 'unpause',
+        });
+        const receipt = await activeClient.waitForTransactionReceipt({ hash });
+        return { txHash: hash, receipt };
+      } catch (err) {
+        const error = new Error(decodeContractError(err));
+        setError(error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [walletClient, clientForChain, clearError, ensureChain]
+  );
+
   const getAdapterMetadata = useCallback(
     async (registryAddress: string, adapterAddress: string) => {
       if (!fallbackClient) throw new Error('Public client not available');
@@ -508,6 +566,8 @@ export const useContractInteraction = () => {
     requestLoan,
     repay,
     liquidate,
+    pauseMarket,
+    unpauseMarket,
     registerAdapter,
     registerAdapterWithMetadata,
     getAdapterMetadata,

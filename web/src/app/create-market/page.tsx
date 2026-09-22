@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMarketStore, WIZARD_STEPS } from "@/store/useMarketStore";
-import { usePublicClient } from "wagmi";
 import { parseUnits, formatUnits, isAddress, encodeAbiParameters, type Address } from "viem";
 import { toast } from "sonner";
 import { AdapterSelect } from "@/components/adapters/AdapterSelect";
@@ -16,6 +15,7 @@ import { useChainOrchestrator } from "@/hooks/useChainOrchestrator";
 import { useTxTrail } from "@/store/useTxTrail";
 import { Confetti } from "@/components/Confetti";
 import { getContracts } from "@/lib/contracts";
+import { createChainClient } from "@/lib/chains";
 import { buildAssetCatalog, findCatalogAsset } from "@/lib/assetCatalog";
 import { getChainLabel } from "@/lib/chainLabels";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
@@ -34,7 +34,6 @@ export default function CreateMarketPage() {
   const router = useRouter();
   const session = useSession();
   const { address: userAddress } = session;
-  const publicClient = usePublicClient();
   const walletChainId = session.chainId ?? undefined;
   const { step, formData, setStep, setFormData, reset } = useMarketStore();
   const { createMarket, clearError } = useContractInteraction();
@@ -56,6 +55,25 @@ export default function CreateMarketPage() {
   const [showConfetti, setShowConfetti] = useState(false);
 
   const contracts = useMemo(() => (chainId ? getContracts(chainId) : undefined), [chainId]);
+  // Chain-scoped read client for the TARGET chain. Every read, validation, and
+  // dry-run below must resolve against the asset's chain — never the wallet's
+  // current network — so the wizard works while the wallet is mid-switch.
+  const targetClient = useMemo(() => (chainId ? createChainClient(chainId) : undefined), [chainId]);
+
+  // Continuous network alignment: whenever the wallet sits on a different
+  // chain than the selected asset, align it automatically (silent for embedded
+  // wallets, the wallet's own switch popup for external ones). No in-app
+  // "switch network" button; the orchestrator dedupes concurrent attempts and
+  // falls back to the global banner if the user rejects the popup.
+  useEffect(() => {
+    if (selectedCatalogAsset && walletChainId !== undefined && walletChainId !== selectedCatalogAsset.chainId) {
+      nudgeChain(
+        selectedCatalogAsset.chainId,
+        `${selectedCatalogAsset.symbol} lives on ${getChainLabel(selectedCatalogAsset.chainId)}`,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCatalogAsset, walletChainId]);
 
   const { data: collateralToken } = useTokenMetadata(
     isAddress(formData.collateralAsset) ? formData.collateralAsset : undefined,
@@ -88,7 +106,7 @@ export default function CreateMarketPage() {
   const [allowlistMap, setAllowlistMap] = useState<Record<string, boolean>>({});
   useEffect(() => {
     let cancelled = false;
-    if (!publicClient || !contracts?.marketFactory || stablecoins.length === 0) {
+    if (!targetClient || !contracts?.marketFactory || stablecoins.length === 0) {
       setAllowlistMap({});
       return;
     }
@@ -96,7 +114,7 @@ export default function CreateMarketPage() {
       const results: Record<string, boolean> = {};
       await Promise.all(stablecoins.map(async (s) => {
         try {
-          const allowed = await publicClient.readContract({
+          const allowed = await targetClient.readContract({
             address: contracts.marketFactory as Address,
             abi: [{ name: 'isAllowedLendingAsset', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] }],
             functionName: 'isAllowedLendingAsset',
@@ -110,7 +128,7 @@ export default function CreateMarketPage() {
       if (!cancelled) setAllowlistMap(results);
     })();
     return () => { cancelled = true; };
-  }, [publicClient, contracts?.marketFactory, chainId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [targetClient, contracts?.marketFactory, stablecoins]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -127,7 +145,7 @@ export default function CreateMarketPage() {
   const [registryVerification, setRegistryVerification] = useState<Record<string, { verified: boolean; deprecated: boolean }>>({});
 
   useEffect(() => {
-    if (!contracts?.adapterRegistry || !publicClient || contracts.adapterRegistry === "0x0000000000000000000000000000000000000000") return;
+    if (!contracts?.adapterRegistry || !targetClient || contracts.adapterRegistry === "0x0000000000000000000000000000000000000000") return;
     const registry = contracts.adapterRegistry as Address;
     const allAddrs = [
       contracts.erc20Adapter, contracts.erc721Adapter, contracts.b20AssetAdapter,
@@ -142,7 +160,7 @@ export default function CreateMarketPage() {
       const results = await Promise.allSettled(allAddrs.map(async (addr) => {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const info: any = await publicClient.readContract({
+          const info: any = await targetClient.readContract({
             address: registry,
             abi: [{ name: 'getAdapterInfo', type: 'function', stateMutability: 'view', inputs: [{ name: 'adapter', type: 'address' }], outputs: [{ name: 'adapterAddress', type: 'address' }, { name: 'adapterType', type: 'uint8' }, { name: 'registeredBy', type: 'address' }, { name: 'verified', type: 'bool' }, { name: 'deprecated', type: 'bool' }, { name: 'auditReference', type: 'string' }, { name: 'registeredAt', type: 'uint256' }, { name: 'totalValueSecured', type: 'uint256' }] }],
             functionName: 'getAdapterInfo',
@@ -160,7 +178,7 @@ export default function CreateMarketPage() {
       setRegistryVerification(next);
     })();
     return () => { cancelled = true; };
-  }, [contracts?.adapterRegistry, publicClient, contracts]);
+  }, [contracts?.adapterRegistry, targetClient, contracts]);
 
   const getVerification = (addr: string): { verified: boolean; deprecated: boolean } => {
     const key = addr.toLowerCase();
@@ -239,15 +257,25 @@ export default function CreateMarketPage() {
     if (formData.apr < 0 || formData.apr > 100) return "APR must be between 0% and 100%.";
     if (formData.duration <= 0 || formData.duration > 365) return "Duration must be between 1 and 365 days.";
     if (formData.gracePeriod <= 0) return "Grace period must be greater than zero.";
+    if (formData.enableCircuitBreaker) {
+      if (formData.pauseThresholdBps <= 0) return "Circuit breaker pause threshold must be greater than zero.";
+      if (formData.resumeThresholdBps <= 0) return "Circuit breaker resume threshold must be greater than zero.";
+      if (formData.resumeThresholdBps > formData.pauseThresholdBps) return "Circuit breaker resume threshold must be at or below the pause threshold.";
+      if (formData.lookbackPeriodSeconds <= 0) return "Circuit breaker lookback window must be greater than zero.";
+      if (formData.cooldownSeconds < 300) return "Circuit breaker cooldown must be at least 5 minutes.";
+    }
 
     const liquidityCheck = validateInitialLiquidityUSD(formData.liquidity);
     if (!liquidityCheck.ok) return liquidityCheck.error ?? "Invalid liquidity.";
 
-    if (!publicClient) return "Network client not available. Connect your wallet.";
+    // Validate against the TARGET chain (the asset's chain), not whatever
+    // network the wallet happens to be on — the auto-switch may still be
+    // in flight when the user hits deploy.
+    if (!targetClient) return "Network client not available for this chain.";
     if (!contracts?.marketFactory) return "Factory not configured for this chain.";
 
     // Validate collateral is a deployed contract on this chain
-    const collateralCode = await publicClient.getBytecode({
+    const collateralCode = await targetClient.getBytecode({
       address: formData.collateralAsset as Address,
     });
     if (!collateralCode || collateralCode === "0x") {
@@ -255,7 +283,7 @@ export default function CreateMarketPage() {
     }
 
     // Validate lending asset is allowlisted by the factory
-    const allowed = await publicClient.readContract({
+    const allowed = await targetClient.readContract({
       address: contracts.marketFactory as Address,
       abi: [{ name: 'isAllowedLendingAsset', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'bool' }] }],
       functionName: 'isAllowedLendingAsset',
@@ -404,7 +432,9 @@ export default function CreateMarketPage() {
           </p>
         </div>
 
-        {/* Chain indicator — asset-native target, actionable when wallet lags */}
+        {/* Chain indicator — asset-native target. Network alignment is
+            automatic (see the auto-nudge effect above): no manual switch
+            button, just a passive status while the wallet converges. */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2 flex-wrap">
           <Wallet className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">
@@ -413,31 +443,16 @@ export default function CreateMarketPage() {
               ? `Target: ${getChainLabel(selectedCatalogAsset.chainId)}`
               : getChainLabel(chainId)}
             {walletChainId !== undefined &&
-              selectedCatalogAsset &&
-              walletChainId !== selectedCatalogAsset.chainId && (
+              chainId !== undefined &&
+              walletChainId !== chainId && (
                 <span className="text-amber-600 dark:text-amber-400"> (wallet on {getChainLabel(walletChainId)} — switching…)</span>
               )}
           </span>
-          {!contracts ? (
-            <>
-              <span className="text-amber-500 font-medium truncate">(unsupported)</span>
-              <button
-                type="button"
-                onClick={() => nudgeChain(chainId ?? 84532, `Market creation targets ${getChainLabel(chainId ?? 84532)}`)}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors shrink-0"
-              >
-                Switch to {getChainLabel(chainId ?? 84532)}
-              </button>
-            </>
-          ) : walletChainId !== undefined && chainId !== undefined && walletChainId !== chainId ? (
-            <button
-              type="button"
-              onClick={() => nudgeChain(chainId, `${selectedCatalogAsset?.symbol ?? 'Asset'} lives on ${getChainLabel(chainId)}`)}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ice-300 dark:bg-ice-400 px-3 py-1 text-[11px] font-bold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors shrink-0"
-            >
-              Switch to {getChainLabel(chainId)}
-            </button>
-          ) : null}
+          {!contracts && (
+            <span className="text-amber-500 font-medium truncate">
+              (unsupported · pick an asset to choose its network)
+            </span>
+          )}
         </div>
 
         {/* Step Indicator */}
@@ -821,13 +836,11 @@ export default function CreateMarketPage() {
                         </button>
                       </div>
                       <div className="text-[11px] text-muted-foreground">hours</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Recorded on-chain with the market. Not yet enforced: loans become liquidatable at expiry.
+                      </div>
                     </div>
                   </div>
-                  {formData.gracePeriod < 6 && (
-                    <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
-                      Short grace window: {formData.gracePeriod}h gives borrowers little time to repay after expiry.
-                    </div>
-                  )}
                   {formData.duration > 90 && (
                     <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
                       Long duration locks liquidity for {formData.duration} days. Consider shorter terms for volatile assets.
@@ -870,7 +883,7 @@ export default function CreateMarketPage() {
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground bg-amber-500/5 border border-amber-500/20 rounded-xl p-2">
-                      Expiry-only: loans liquidate only after {formData.duration} days + {formData.gracePeriod}h grace. Enable for volatile collateral.
+                      Expiry-only: loans become liquidatable at expiry ({formData.duration} days). Enable health factor for volatile collateral.
                     </p>
                   )}
                 </div>
@@ -896,15 +909,79 @@ export default function CreateMarketPage() {
                       <span className="text-sm text-foreground">Enable Circuit Breaker</span>
                     </div>
                     {formData.enableCircuitBreaker && (
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-xl bg-muted/60 p-2">
-                          <div className="text-muted-foreground">Pause threshold</div>
-                          <div className="font-semibold text-foreground">{formData.pauseThresholdBps / 100}% swing</div>
+                      <div className="space-y-3">
+                        <p className="text-[11px] text-muted-foreground">
+                          New loans pause automatically when the collateral price moves more than the pause threshold inside the lookback window, or the oracle goes untrusted. Repayments and liquidations keep running.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <label className="rounded-xl bg-muted/60 p-2 block space-y-1">
+                            <span className="text-muted-foreground block">Pause threshold (%)</span>
+                            <input
+                              type="number"
+                              min={0.5}
+                              max={50}
+                              step={0.5}
+                              value={formData.pauseThresholdBps / 100}
+                              onChange={(e) =>
+                                setFormData({
+                                  pauseThresholdBps: Math.max(50, Math.min(5000, Math.round(Number(e.target.value) * 100) || 50)),
+                                })
+                              }
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-ice-400"
+                            />
+                          </label>
+                          <label className="rounded-xl bg-muted/60 p-2 block space-y-1">
+                            <span className="text-muted-foreground block">Lookback window (hours)</span>
+                            <input
+                              type="number"
+                              min={0.1}
+                              step={0.5}
+                              value={formData.lookbackPeriodSeconds / 3600}
+                              onChange={(e) =>
+                                setFormData({
+                                  lookbackPeriodSeconds: Math.max(60, Math.round(Number(e.target.value) * 3600) || 60),
+                                })
+                              }
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-ice-400"
+                            />
+                          </label>
+                          <label className="rounded-xl bg-muted/60 p-2 block space-y-1">
+                            <span className="text-muted-foreground block">Resume threshold (%)</span>
+                            <input
+                              type="number"
+                              min={0.25}
+                              max={50}
+                              step={0.5}
+                              value={formData.resumeThresholdBps / 100}
+                              onChange={(e) =>
+                                setFormData({
+                                  resumeThresholdBps: Math.max(25, Math.min(5000, Math.round(Number(e.target.value) * 100) || 25)),
+                                })
+                              }
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-ice-400"
+                            />
+                          </label>
+                          <label className="rounded-xl bg-muted/60 p-2 block space-y-1">
+                            <span className="text-muted-foreground block">Cooldown (hours)</span>
+                            <input
+                              type="number"
+                              min={0.1}
+                              step={0.5}
+                              value={formData.cooldownSeconds / 3600}
+                              onChange={(e) =>
+                                setFormData({
+                                  cooldownSeconds: Math.max(300, Math.round(Number(e.target.value) * 3600) || 300),
+                                })
+                              }
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-ice-400"
+                            />
+                          </label>
                         </div>
-                        <div className="rounded-xl bg-muted/60 p-2">
-                          <div className="text-muted-foreground">Resume / cooldown</div>
-                          <div className="font-semibold text-foreground">{formData.resumeThresholdBps / 100}% + {formData.cooldownSeconds / 3600}h</div>
-                        </div>
+                        {formData.resumeThresholdBps > formData.pauseThresholdBps && (
+                          <p className="text-xs text-destructive">
+                            Resume threshold must be at or below the pause threshold.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1023,8 +1100,8 @@ export default function CreateMarketPage() {
                     onClick={async () => {
                       try {
                         const raw = parseUnits(formData.liquidity, lendingDecimals);
-                        if (userAddress && formData.lendingAsset && publicClient && contracts.marketFactory) {
-                          const allowance = await publicClient.readContract({
+                        if (userAddress && formData.lendingAsset && targetClient && contracts.marketFactory) {
+                          const allowance = await targetClient.readContract({
                             address: formData.lendingAsset as Address,
                             abi: [{ name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }],
                             functionName: 'allowance',
@@ -1061,7 +1138,7 @@ export default function CreateMarketPage() {
                           cooldownSeconds: BigInt(formData.cooldownSeconds),
                         };
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        await (publicClient as any).simulateContract({
+                        await (targetClient as any).simulateContract({
                           address: contracts.marketFactory as Address,
                           abi: [{ name: 'createMarket', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'config', type: 'tuple', components: [{ name: 'lpAddress', type: 'address' }, { name: 'collateralAsset', type: 'address' }, { name: 'assetAdapter', type: 'address' }, { name: 'oracleAdapter', type: 'address' }, { name: 'complianceAdapter', type: 'address' }, { name: 'liquidationAdapter', type: 'address' }, { name: 'positionAdapter', type: 'address' }, { name: 'lendingAsset', type: 'address' }, { name: 'ltvBasisPoints', type: 'uint256' }, { name: 'aprBasisPoints', type: 'uint256' }, { name: 'durationSeconds', type: 'uint256' }, { name: 'gracePeriodHours', type: 'uint256' }, { name: 'enableHealthFactor', type: 'bool' }, { name: 'healthFactorThreshold', type: 'uint256' }, { name: 'enableCircuitBreaker', type: 'bool' }, { name: 'pauseThresholdBps', type: 'uint256' }, { name: 'lookbackPeriodSeconds', type: 'uint256' }, { name: 'resumeThresholdBps', type: 'uint256' }, { name: 'cooldownSeconds', type: 'uint256' }] }, { name: 'initialLiquidity', type: 'uint256' }], outputs: [{ name: 'marketAddress', type: 'address' }] }],
                           functionName: 'createMarket',
@@ -1117,7 +1194,7 @@ export default function CreateMarketPage() {
               <div className="rounded-2xl border border-border bg-card overflow-hidden">
                 <div className="bg-muted/50 px-4 py-2.5 border-b border-border flex items-center justify-between">
                   <span className="text-sm font-semibold text-foreground">Market Summary</span>
-                  <span className="text-xs text-muted-foreground">Chain {chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : chainId}</span>
+                  <span className="text-xs text-muted-foreground">{getChainLabel(chainId)}</span>
                 </div>
                 <div className="p-4 space-y-4">
                   {/* Adapters with verification */}
@@ -1202,7 +1279,7 @@ export default function CreateMarketPage() {
                 </ul>
                 <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
                   <input type="checkbox" id="deploy-confirm" className="h-4 w-4 rounded border-border mt-0.5 shrink-0" required />
-                  <span className="text-sm text-foreground">I have reviewed the summary above and confirm deployment on <strong>{chainId === 84532 ? "Base Sepolia" : chainId === 11155111 ? "Sepolia" : `Chain ${chainId}`}</strong>. I understand parameters cannot be changed after deployment.</span>
+                  <span className="text-sm text-foreground">I have reviewed the summary above and confirm deployment on <strong>{getChainLabel(chainId)}</strong>. I understand parameters cannot be changed after deployment.</span>
                 </label>
               </div>
             </div>
