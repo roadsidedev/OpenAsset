@@ -150,25 +150,39 @@ function AlertPrefsCard() {
 
       <div className="space-y-3 text-xs">
         {rows.map(({ key, label, desc }) => (
-          <label
+          <div
             key={key}
-            className={cn(
-              "flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-muted/50",
-              !controlsDisabled && "cursor-pointer",
-            )}
+            className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-muted/50"
           >
             <span className="min-w-0">
               <span className="block font-bold text-foreground">{label}</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">{desc}</span>
             </span>
-            <input
-              type="checkbox"
-              checked={prefs[key]}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={prefs[key]}
+              aria-label={label}
               disabled={controlsDisabled}
-              onChange={() => setPref({ [key]: !prefs[key] })}
-              className="w-4 h-4 shrink-0 accent-ice-500 rounded disabled:opacity-50"
-            />
-          </label>
+              onClick={() => setPref({ [key]: !prefs[key] })}
+              className={cn(
+                "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 outline-none",
+                "focus-visible:ring-2 focus-visible:ring-ice-400 focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                prefs[key]
+                  ? "bg-ice-300 dark:bg-ice-400"
+                  : "bg-muted-foreground/30 dark:bg-muted",
+                controlsDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200",
+                  prefs[key] && "translate-x-5",
+                )}
+              />
+            </button>
+          </div>
         ))}
         {isLoading ? (
           <p className="text-[11px] text-muted-foreground">Loading saved preferences…</p>
