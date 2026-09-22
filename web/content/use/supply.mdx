@@ -10,8 +10,16 @@ Liquidity providers fund one isolated market at a time. Your stablecoins serve o
 ## How supplying works
 
 - **Seed at creation.** When a market is created, the creator supplies initial stablecoin liquidity from the allowlisted stablecoins. See [Create a market](/docs/curate/create-market).
+- **Anyone can supply after creation.** Depositing into a live market is permissionless — open the market detail page (or Account → Deposit) and supply the lending asset. You receive LP shares representing your claim on that market's liquidity.
 - **One market, one risk surface.** Liquidity, collateral, risk parameters, and the adapter stack all belong to a single `LendingMarket` contract.
 - **Borrowers pay per loan.** Each originated loan carries a 0.5% origination fee enforced on-chain; market creation carries a 0.5% fee on initial liquidity. Both are shown before signing.
+
+## Withdrawing (exit hatch)
+
+- **Burn shares for the lending asset.** Withdrawals convert a USDC (or lending-asset) amount into LP shares (`shares = amount × totalSupply / totalLiquidity`) and call `withdrawLiquidity(shares)`.
+- **Capped by available liquidity.** Only unlent liquidity can leave the pool. Active borrows lock funds until repayment or settlement; async-settling loans further reserve principal so LPs cannot exit ahead of write-offs.
+- **Idle markets.** When there are no active borrows, you can exit your full position subject to free (available) liquidity.
+- **Busy markets.** When capital is lent out, only the unlent portion is withdrawable until loans repay.
 
 ## What to check before supplying
 

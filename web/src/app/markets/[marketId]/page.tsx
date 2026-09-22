@@ -11,11 +11,13 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useChainOrchestrator } from "@/hooks/useChainOrchestrator";
 import { useTxTrail } from "@/store/useTxTrail";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Warning, CheckCircle, ArrowsClockwise, Wallet, Info } from "@phosphor-icons/react";
+import { ArrowLeft, Warning, CheckCircle, ArrowsClockwise, Wallet, Info, Bank } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
-import { formatUnits, isAddress, parseUnits } from "viem";
-import { IORACLE_ADAPTER_ABI, ERC20_ABI, ICOMPLIANCE_ADAPTER_ABI, MARKET_STATUS } from "@/lib/contractAbis";
+import { formatUnits, isAddress, parseUnits, parseAbi, type Address } from "viem";
+import { IORACLE_ADAPTER_ABI, ERC20_ABI, ICOMPLIANCE_ADAPTER_ABI, MARKET_STATUS, LENDING_MARKET_ABI, LP_TOKEN_ABI } from "@/lib/contractAbis";
+import { DepositModal } from "@/components/modals/DepositModal";
+import { WithdrawModal } from "@/components/modals/WithdrawModal";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
 import { resolveAssetIdentity } from "@/lib/assetIdentity";
 import { getChainLabel } from "@/lib/chainLabels";
@@ -130,6 +132,11 @@ export default function MarketDetailPage() {
   const [requestedBorrow, setRequestedBorrow] = useState("");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [lpShares, setLpShares] = useState<bigint | null>(null);
+  const [lpClaimable, setLpClaimable] = useState<bigint | null>(null);
+  const [supplyAmount, setSupplyAmount] = useState("");
 
   // Collateral balance (chain-scoped to the market). Keeps the CTA honest before any wallet popup.
   const [collateralBalance, setCollateralBalance] = useState<bigint | null>(null);
@@ -156,6 +163,59 @@ export default function MarketDetailPage() {
       clearInterval(interval);
     };
   }, [publicClient, userAddress, market?.collateralAsset, market?.marketAddress]);
+
+
+  // LP shares for the connected wallet (supply / withdraw panel).
+  useEffect(() => {
+    let active = true;
+    setLpShares(null);
+    setLpClaimable(null);
+    const readLp = async () => {
+      if (!publicClient || !userAddress || !market?.marketAddress || !isAddress(market.marketAddress)) return;
+      try {
+        const marketAbi = parseAbi(LENDING_MARKET_ABI);
+        const lpToken = (await publicClient.readContract({
+          address: market.marketAddress as Address,
+          abi: marketAbi,
+          functionName: "lpToken",
+        })) as Address;
+        if (!lpToken || !isAddress(lpToken)) return;
+        const lpAbi = parseAbi(LP_TOKEN_ABI);
+        const [shares, totalSupply, totalLiquidity] = await Promise.all([
+          publicClient.readContract({
+            address: lpToken,
+            abi: lpAbi,
+            functionName: "balanceOf",
+            args: [userAddress as Address],
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: lpToken,
+            abi: lpAbi,
+            functionName: "totalSupply",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: market.marketAddress as Address,
+            abi: marketAbi,
+            functionName: "totalLiquidity",
+          }) as Promise<bigint>,
+        ]);
+        if (!active) return;
+        setLpShares(shares);
+        setLpClaimable(totalSupply > 0n ? (shares * totalLiquidity) / totalSupply : 0n);
+      } catch {
+        if (active) {
+          setLpShares(null);
+          setLpClaimable(null);
+        }
+      }
+    };
+    void readLp();
+    const interval = setInterval(() => void readLp(), 30_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [publicClient, userAddress, market?.marketAddress]);
 
   // Compliance pre-check (soft): surface ineligibility before the wallet popup.
   const [complianceNotice, setComplianceNotice] = useState<string | null>(null);
@@ -1062,8 +1122,119 @@ export default function MarketDetailPage() {
                 );
               })()}
             </div>
+
+
+            {/* Supply Liquidity */}
+            <div className="p-6 rounded-3xl border border-border bg-card space-y-5 shadow-soft">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Bank className="h-5 w-5 text-ice-500" />
+                  <h2 className="text-lg font-bold text-foreground">Supply liquidity</h2>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Anyone can supply {loanToken?.symbol || "USDC"} to this market. Your deposit stays isolated to this market&apos;s risk surface.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-muted/50 text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-xs">Pool available</span>
+                  <span className="font-bold text-foreground">
+                    {formatLiquidity(market.liquidity.available, lendingDecimals)} {loanToken?.symbol || "USDC"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs">Total liquidity</span>
+                  <span className="font-bold text-foreground">
+                    {formatLiquidity(market.liquidity.total, lendingDecimals)} {loanToken?.symbol || "USDC"}
+                  </span>
+                </div>
+              </div>
+
+              {lpShares !== null && lpShares > 0n && (
+                <div className="rounded-2xl border border-ice-500/20 bg-ice-500/5 p-3 text-xs space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Your LP position</span>
+                    <span className="font-bold font-mono">{formatUnits(lpShares, lendingDecimals)} shares</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Claimable value</span>
+                    <span className="font-bold text-ice-600 dark:text-ice-300">
+                      {lpClaimable !== null ? formatLiquidity(lpClaimable.toString(), lendingDecimals) : "—"} {loanToken?.symbol || "USDC"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground">
+                  Deposit amount · {loanToken?.symbol || "USDC"}
+                </label>
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-muted/50 border border-border">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={supplyAmount}
+                    onChange={(e) => setSupplyAmount(e.target.value)}
+                    disabled={isPaused}
+                    className="bg-transparent text-lg font-bold w-1/2 focus:outline-none placeholder:text-muted-foreground disabled:opacity-50"
+                  />
+                  <span className="text-xs font-bold text-foreground">{loanToken?.symbol || "USDC"}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDepositOpen(true)}
+                  disabled={isPaused}
+                  className={cn(
+                    "flex-1 rounded-2xl font-bold text-sm py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                    isPaused
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-ice-300 dark:bg-ice-400 text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300",
+                  )}
+                >
+                  {isPaused ? "Market Paused" : "Supply"}
+                </button>
+                {lpShares !== null && lpShares > 0n && (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawOpen(true)}
+                    className="flex-1 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold hover:bg-accent transition-colors"
+                  >
+                    Withdraw
+                  </button>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
+
+        <DepositModal
+          open={depositOpen}
+          onOpenChange={(o) => {
+            setDepositOpen(o);
+            if (!o) setSupplyAmount("");
+          }}
+          marketAddress={market.marketAddress}
+          chainId={market.chainId}
+          lendingAsset={market.loanAsset}
+          lendingSymbol={loanToken?.symbol || "USDC"}
+          lendingDecimals={lendingDecimals}
+          initialAmount={supplyAmount}
+        />
+        <WithdrawModal
+          open={withdrawOpen}
+          onOpenChange={setWithdrawOpen}
+          marketAddress={market.marketAddress}
+          chainId={market.chainId}
+          lendingAsset={market.loanAsset}
+          lendingSymbol={loanToken?.symbol || "USDC"}
+          lendingDecimals={lendingDecimals}
+        />
       </main>
     </div>
   );

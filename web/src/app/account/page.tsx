@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
 import { useMarkets } from "@/hooks/useMarkets";
@@ -177,6 +179,7 @@ function AccountContent() {
   const [subTab, setSubTab] = useState<SubTab>("overview");
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [browsePrompt, setBrowsePrompt] = useState(false);
   const [exportPassword, setExportPassword] = useState("");
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const { user, exportWallet, logout: privyLogout } = usePrivy();
@@ -265,19 +268,56 @@ function AccountContent() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setDepositOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:bg-slate-800 dark:hover:bg-white transition-premium active-press"
-            >
-              <ArrowDownLeft className="h-4 w-4" /> Deposit Funds
-            </button>
-            <button
-              onClick={() => setWithdrawOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl border border-border text-xs font-semibold hover:bg-accent transition-colors"
-            >
-              <ArrowUpRight className="h-4 w-4" /> Withdraw
-            </button>
+          <div className="flex flex-col items-stretch sm:items-end gap-2">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  // Open with market picker when user has created markets or any markets exist
+                  // (picker prefers created-by-user). Otherwise prompt to browse/create.
+                  if (myMarkets.length > 0 || allMarkets.length > 0) {
+                    setBrowsePrompt(false);
+                    setDepositOpen(true);
+                  } else {
+                    setBrowsePrompt(true);
+                    toast.message("No markets yet", {
+                      description: "Browse markets or create one to supply liquidity.",
+                    });
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold hover:bg-slate-800 dark:hover:bg-white transition-premium active-press"
+              >
+                <ArrowDownLeft className="h-4 w-4" /> Deposit Funds
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (myMarkets.length > 0 || allMarkets.length > 0) {
+                    setBrowsePrompt(false);
+                    setWithdrawOpen(true);
+                  } else {
+                    setBrowsePrompt(true);
+                    toast.message("No markets yet", {
+                      description: "Browse markets to find an LP position to withdraw.",
+                    });
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl border border-border text-xs font-semibold hover:bg-accent transition-colors"
+              >
+                <ArrowUpRight className="h-4 w-4" /> Withdraw
+              </button>
+            </div>
+            {browsePrompt && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Link href="/markets" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
+                  Browse markets
+                </Link>
+                <span>·</span>
+                <Link href="/create-market" className="font-semibold text-ice-600 dark:text-ice-300 hover:underline">
+                  Create a market
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -577,6 +617,7 @@ function AccountContent() {
         )}
       </main>
 
+      {/* No marketAddress → modals show market picker (created-by-user first). */}
       <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
       <WithdrawModal open={withdrawOpen} onOpenChange={setWithdrawOpen} />
     </div>

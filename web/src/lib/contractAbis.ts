@@ -153,6 +153,7 @@ export const LENDING_MARKET_ABI = [
   'function status() external view returns (uint8)',
   'function totalLiquidity() external view returns (uint256)',
   'function availableLiquidity() external view returns (uint256)',
+  'function reservedSettling() external view returns (uint256)',
   'function lpToken() external view returns (address)',
   'function marketOwner() external view returns (address)',
   'function collateralAsset() external view returns (address)',
