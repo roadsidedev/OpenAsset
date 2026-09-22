@@ -105,38 +105,42 @@ export function Navbar() {
     <>
       {/* Desktop Top Nav */}
       <header className="sticky top-0 z-40 hidden border-b border-border/70 glass md:block">
-        <div className="mx-auto flex h-[56px] max-w-[1160px] items-center justify-between px-5 md:px-6">
-          <div className="flex items-center gap-7">
-            <Link href="/" className="flex items-center gap-2.5 group focus:outline-none" aria-label="OpenAsset — back to landing">
-              <Image
-                src="/openasset-logo.png"
-                alt="OpenAsset Market"
-                width={32}
-                height={32}
-                className="brand-logo"
-              />
-              <span className="text-[17px] font-semibold tracking-[-0.025em] text-foreground">
-                OpenAsset
-              </span>
-            </Link>
+        <div className="relative mx-auto flex h-[56px] max-w-[1160px] items-center justify-between px-5 md:px-6">
+          <Link href="/" className="flex items-center gap-2.5 group focus:outline-none" aria-label="OpenAsset — back to landing">
+            <Image
+              src="/openasset-logo.png"
+              alt="OpenAsset Market"
+              width={32}
+              height={32}
+              className="brand-logo"
+            />
+            <span className="text-[17px] font-semibold tracking-[-0.025em] text-foreground">
+              OpenAsset
+            </span>
+          </Link>
 
-            <nav className="flex items-center gap-1 text-[13.5px] font-medium text-muted-foreground">
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 transition-colors",
-                    pathname === item.href || pathname?.startsWith(item.href + "/")
-                      ? "bg-foreground text-background"
-                      : "hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
+          {/* Centered nav — absolutely centered on the header so Markets /
+              Earn / Portfolio / Account sit at true center regardless of
+              left/right content widths. Desktop only (parent is md:block). */}
+          <nav
+            aria-label="Primary"
+            className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 text-[13.5px] font-medium text-muted-foreground"
+          >
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "rounded-full px-3.5 py-1.5 transition-colors",
+                  pathname === item.href || pathname?.startsWith(item.href + "/")
+                    ? "bg-foreground text-background"
+                    : "hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
           <div className="flex items-center gap-2">
             <Button
