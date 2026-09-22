@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
+import { useSession } from "@/context/SessionContext";
 import { useLoans } from "@/hooks/useLoans";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useAccountRisk } from "@/hooks/useAccountRisk";
@@ -51,16 +52,22 @@ function timeUntil(timestampSec: string | number): string {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { authenticated, ready } = usePrivy();
-  const { login } = usePrivy();
+  const { authenticated, ready, login } = usePrivy();
+  const session = useSession();
 
-  // Show login if Privy is not ready, not configured, or user is not authenticated.
-  if (ready !== true || !authenticated) {
+  // Universal session gate — same truth as the navbar avatar — so Privy
+  // social, Privy external (MetaMask), and plain-wagmi users all pass
+  // consistently instead of diverging per wallet type.
+  const signedIn = session.ready
+    ? session.isAuthenticated
+    : ready === true && authenticated;
+
+  if (!signedIn) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <div className="text-center space-y-4">
           <Wallet className="h-12 w-12 text-muted-foreground mx-auto" />
-            <h1 className="text-2xl font-bold text-foreground text-balance">Portfolio</h1>
+            <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
           <p className="text-muted-foreground text-sm max-w-md">
             Connect your wallet to view your active loans and markets you&apos;ve created.
           </p>

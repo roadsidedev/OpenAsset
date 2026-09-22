@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
+import { useSession } from "@/context/SessionContext";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLoans } from "@/hooks/useLoans";
 import { useActivity } from "@/hooks/useActivity";
@@ -51,12 +52,17 @@ function formatAmount(value: string | undefined, decimals = 18): string {
 type SubTab = "overview" | "config" | "activity" | "settings";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { authenticated, ready } = usePrivy();
-  const { login } = usePrivy();
+  const { authenticated, ready, login } = usePrivy();
+  const session = useSession();
 
-  // Show login if Privy is not ready, not configured, or user is not authenticated.
-  // This covers: Privy loading, Privy missing, and genuinely unauthenticated.
-  if (ready !== true || !authenticated) {
+  // Gate on the UNIVERSAL session (Privy social, Privy-connected external
+  // wallet, or plain wagmi) — the same truth the navbar avatar uses — with
+  // Privy's raw state as a belt-and-suspenders fallback during init.
+  const signedIn = session.ready
+    ? session.isAuthenticated
+    : ready === true && authenticated;
+
+  if (!signedIn) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -90,12 +96,14 @@ export default function AccountPage() {
 
 /**
  * Config & Rules: persisted alert preferences. Toggles map 1:1 to delivery
- * buckets on the backend (users.alertLiquidation / users.alertMarketPaused);
- * requires a one-time backend wallet signature (JWT) before the first save.
+ * buckets on the backend (users.alertLiquidation / users.alertMarketPaused).
+ * Identity is already established by the page gate — NEVER re-ask "sign in"
+ * here. The first SAVE transparently obtains the backend JWT (one wallet
+ * signature, embedded or external); afterwards it's silent.
  */
 function AlertPrefsCard() {
   const { address } = useAccount();
-  const { isAuthenticated, signLoginMessage, isSigning } = useAuth();
+  const { isAuthenticated: hasBackendSession, isSigning } = useAuth();
   const { prefs, isLoading, isUnavailable, isSaving, setPref } = useUserAlertPrefs(address);
 
   const rows: Array<{ key: "alertLiquidation" | "alertMarketPaused"; label: string; desc: string }> = [
@@ -111,7 +119,7 @@ function AlertPrefsCard() {
     },
   ];
 
-  const controlsDisabled = !isAuthenticated || isLoading || isSaving || isUnavailable;
+  const controlsDisabled = isLoading || isSaving || isUnavailable;
 
   return (
     <div className="p-6 rounded-3xl border border-border bg-card space-y-6 max-w-2xl">
@@ -123,23 +131,18 @@ function AlertPrefsCard() {
         </p>
       </div>
 
-      {!isAuthenticated ? (
-        <div className="rounded-2xl bg-muted/50 p-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Sign in with your wallet once to sync these preferences to your account.
-          </p>
-          <button
-            type="button"
-            onClick={() => void signLoginMessage()}
-            disabled={isSigning}
-            className="rounded-2xl bg-ice-300 dark:bg-ice-400 text-slate-900 px-4 py-2 text-xs font-bold hover:bg-ice-400 dark:hover:bg-ice-300 transition-colors disabled:opacity-60"
-          >
-            {isSigning ? "Signing in…" : "Sign in to sync preferences"}
-          </button>
-        </div>
-      ) : isUnavailable ? (
+      {isUnavailable ? (
         <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
           Preferences could not be loaded (backend unreachable). Try again shortly.
+        </p>
+      ) : null}
+      {isSigning ? (
+        <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
+          Waiting for your wallet signature…
+        </p>
+      ) : !hasBackendSession && !isUnavailable ? (
+        <p className="text-[11px] text-muted-foreground">
+          Your first save asks your wallet for a one-time signature to link these preferences to your account.
         </p>
       ) : null}
 
@@ -165,7 +168,7 @@ function AlertPrefsCard() {
             />
           </label>
         ))}
-        {isAuthenticated && isLoading ? (
+        {isLoading ? (
           <p className="text-[11px] text-muted-foreground">Loading saved preferences…</p>
         ) : null}
       </div>

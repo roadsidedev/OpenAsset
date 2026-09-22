@@ -1,20 +1,37 @@
 "use client";
 
+/**
+ * Backend JWT (SIWE-style nonce + wallet signature) for authenticated API
+ * calls (PUT /users/:address, GET activity, …).
+ *
+ * Identity itself lives in SessionContext — this context never decides WHO
+ * you are, only whether an API-capability token exists. Address and signing
+ * both come from the session, so behavior is identical for Privy social
+ * (embedded) logins, Privy-connected external wallets (MetaMask), and plain
+ * wagmi connections. Use `ensureAuthenticated()` before authenticated calls:
+ * it no-ops when a token exists and requests one signature when it doesn't.
+ */
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { toast } from 'sonner';
 import { fetchFromApi } from '../lib/api';
+import { useSession } from './SessionContext';
 
 const AUTH_STORAGE_KEY = 'openasset_auth_token';
 
 interface AuthContextType {
+  /** True when a backend JWT is present (API capability, NOT identity). */
   isAuthenticated: boolean;
   isSigning: boolean;
   isLoading: boolean;
-  signLoginMessage: () => Promise<void>;
+  /** Establish the JWT via one wallet signature. Resolves true on success. */
+  signLoginMessage: () => Promise<boolean>;
+  /** No-op success if JWT exists; otherwise signLoginMessage(). */
+  ensureAuthenticated: () => Promise<boolean>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- response shape varies per endpoint; callers narrow.
   authenticatedFetch: (endpoint: string, options?: RequestInit) => Promise<any>;
   logout: () => void;
-  user: any;
+  user: unknown;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,16 +51,14 @@ function decodeJwtAddress(token: string): string | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, authenticated, ready } = usePrivy();
-  const { wallets } = useWallets();
+  const session = useSession();
+  const { address: sessionAddress, signMessage: sessionSignMessage } = session;
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
 
-  const activeAddress = useMemo(() => {
-    const fromUser = user?.wallet?.address?.toLowerCase();
-    if (fromUser) return fromUser;
-    return null;
-  }, [user?.wallet?.address]);
+  // Universal active address: whatever SessionContext resolved for the
+  // connected wallet (Privy social, Privy external, or plain wagmi).
+  const activeAddress = session.address?.toLowerCase() ?? null;
 
   // Load auth token from local storage on mount
   useEffect(() => {
@@ -53,13 +68,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Sync: If Privy has finished initializing and says not authenticated, clear our local state.
+  // Session signed out (Privy logout / disconnect) → drop the API token too,
+  // so backend auth can never outlive the visible session.
   useEffect(() => {
-    if (ready && !authenticated && authToken) {
+    if (session.ready && !session.isAuthenticated && authToken) {
       setAuthToken(null);
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
-  }, [ready, authenticated, authToken]);
+  }, [session.ready, session.isAuthenticated, authToken]);
 
   // On wallet change / mount: if JWT address !== active address, clear token and require re-login
   useEffect(() => {
@@ -72,47 +88,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authToken, activeAddress]);
 
-  const signLoginMessage = useCallback(async () => {
-    if (!authenticated || !user?.wallet?.address || !wallets.length) return;
+  const signLoginMessage = useCallback(async (): Promise<boolean> => {
+    if (!sessionAddress || !sessionSignMessage) {
+      toast.error('Connect a wallet to continue.');
+      return false;
+    }
 
     setIsSigning(true);
     try {
-      const userAddress = user.wallet.address.toLowerCase();
-      const wallet = wallets.find((w) => w.address.toLowerCase() === userAddress);
-
-      if (!wallet) {
-        // Active address exists but is not in the connected wallets list — do NOT fall back to wallets[0]
-        console.error('Wallet not found for active address:', userAddress);
-        toast.error('Connected wallet does not match your active address. Switch wallets and try again.');
-        return;
-      }
-
-      const activeWallet = wallet;
+      const userAddress = sessionAddress;
 
       // 1. Fetch nonce from backend
-      const { nonce } = await fetchFromApi(`/auth/nonce/${activeWallet.address}`);
+      const { nonce } = await fetchFromApi(`/auth/nonce/${userAddress}`);
 
       const message = `Login to OpenAsset Market: ${nonce}`;
-      const signature = await activeWallet.sign(message);
+      const signature = await sessionSignMessage(message);
 
       // 2. Login to get JWT
       const { token } = await fetchFromApi('/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          address: activeWallet.address,
+          address: userAddress,
           signature
         })
       });
 
       localStorage.setItem(AUTH_STORAGE_KEY, token);
       setAuthToken(token);
+      return true;
     } catch (err) {
       console.error('Failed to sign message:', err);
       toast.error('Failed to sign in. Please try again.');
+      return false;
     } finally {
       setIsSigning(false);
     }
-  }, [authenticated, user, wallets]);
+  }, [sessionAddress, sessionSignMessage]);
+
+  const ensureAuthenticated = useCallback(async (): Promise<boolean> => {
+    if (authToken) return true;
+    return signLoginMessage();
+  }, [authToken, signLoginMessage]);
 
   const authenticatedFetch = useCallback(async (endpoint: string, options: RequestInit = {}) => {
     if (!authToken) {
@@ -141,15 +157,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authToken]);
 
-  const value = {
-    isAuthenticated: !!authToken,
-    isSigning,
-    isLoading: !ready,
-    signLoginMessage,
-    authenticatedFetch,
-    logout,
-    user
-  };
+  const value = useMemo<AuthContextType>(
+    () => ({
+      isAuthenticated: !!authToken,
+      isSigning,
+      isLoading: !session.ready,
+      signLoginMessage,
+      ensureAuthenticated,
+      authenticatedFetch,
+      logout,
+      user: null,
+    }),
+    [authToken, isSigning, session.ready, signLoginMessage, ensureAuthenticated, authenticatedFetch, logout],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -161,7 +181,8 @@ export function useAuth() {
       isAuthenticated: false,
       isSigning: false,
       isLoading: false,
-      signLoginMessage: async () => {},
+      signLoginMessage: async () => false,
+      ensureAuthenticated: async () => false,
       authenticatedFetch: async () => null,
       logout: () => {},
       user: null,

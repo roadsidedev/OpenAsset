@@ -6,9 +6,9 @@
  * backend result are pruned so nothing double-reports.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetchJson } from '@/lib/apiClient';
+import { useAuth } from '@/context/AuthContext';
 import { useTxTrail, txTrailToActivityEvents } from '@/store/useTxTrail';
 
 export interface ActivityEvent {
@@ -20,18 +20,36 @@ export interface ActivityEvent {
 export const useActivity = (address: string | undefined, { enabled = true }: { enabled?: boolean } = {}) => {
   const trailEntries = useTxTrail((s) => s.entries);
   const pruneMerged = useTxTrail((s) => s.pruneMerged);
+  const { isAuthenticated: hasJwt, ensureAuthenticated, authenticatedFetch } = useAuth();
+  // Ask for a signature at most once per mount: background refetches (15s)
+  // must never re-prompt after a rejection.
+  const ensureAttemptedRef = useRef(false);
 
   const query = useQuery<{ events: ActivityEvent[]; total: number }>({
-    queryKey: ['activity', address],
+    queryKey: ['activity', address, hasJwt],
     queryFn: async () => {
       if (!address) return { events: [], total: 0 };
-      const data = await apiFetchJson<{ events: ActivityEvent[]; total: number }>(`/api/v1/users/${address}/activity`);
-      return data ?? { events: [], total: 0 };
+      if (!hasJwt) {
+        // GET /users/:address/activity is requireAuth — without a JWT this
+        // would 401 silently. Establish it ONCE (wallet signature), then use
+        // the Bearer fetch. If declined/skipped, fall back to the local trail.
+        if (!ensureAttemptedRef.current) {
+          ensureAttemptedRef.current = true;
+          const ok = await ensureAuthenticated();
+          if (ok) {
+            const data = await authenticatedFetch(`/users/${address}/activity`);
+            return (data ?? { events: [], total: 0 }) as { events: ActivityEvent[]; total: number };
+          }
+        }
+        return { events: [], total: 0 };
+      }
+      const data = await authenticatedFetch(`/users/${address}/activity`);
+      return (data ?? { events: [], total: 0 }) as { events: ActivityEvent[]; total: number };
     },
     enabled: !!address && address.startsWith('0x') && enabled,
     staleTime: 30000,
     gcTime: 300000,
-    refetchInterval: 15_000,
+    refetchInterval: hasJwt ? 15_000 : false,
     retry: 1,
     placeholderData: (prev) => prev,
   });

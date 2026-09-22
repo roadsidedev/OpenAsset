@@ -96,7 +96,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ChainPrewarmer />
         <QueryClientProvider client={queryClient}>
           <SessionProviderPlain>
-            {children}
+            {/* Same AuthProvider as the Privy tree: it only depends on
+                SessionContext now, so JWT flows work identically for
+                plain-wagmi (external) wallets. */}
+            <AuthProvider>
+              {children}
+            </AuthProvider>
           </SessionProviderPlain>
           <ChainSwitchBanner />
           <ThemedToaster />

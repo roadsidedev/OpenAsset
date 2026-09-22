@@ -15,7 +15,8 @@
  */
 
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
-import { useAccount, useConnect } from 'wagmi';
+import { useAccount, useConnect, useConfig } from 'wagmi';
+import { getWalletClient } from '@wagmi/core';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 
 export type WalletType = 'embedded' | 'external' | null;
@@ -35,6 +36,13 @@ export interface SessionState {
   isConnected: boolean;
   /** Native Privy embedded-wallet chain switch, when available. */
   switchChain?: (chainId: number) => Promise<unknown>;
+  /**
+   * Sign an arbitrary message with the ACTIVE session wallet, whichever kind
+   * it is (Privy embedded, Privy-connected external, or plain wagmi).
+   * Lets AuthContext establish its backend JWT without depending on Privy
+   * hooks directly — one signing path for every wallet type.
+   */
+  signMessage?: (message: string) => Promise<string>;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -45,6 +53,8 @@ interface WalletLike {
   connectorType?: string;
   chainId?: number | string;
   switchChain?: (chainId: number) => Promise<unknown>;
+  /** Privy wallet API: sign an arbitrary message (embedded + external). */
+  sign?: (message: string) => Promise<string>;
 }
 
 function resolveWalletType(
@@ -121,6 +131,22 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
     });
   }, [ready, authenticated, privyAddress, isConnected, connectPending, connectors, connectAsync]);
 
+  // Sign with whichever wallet is ACTIVE (not just user.wallet, which is the
+  // legacy embedded-only field): covers social-embedded AND external MetaMask
+  // connected through Privy — both expose .sign() via useWallets().
+  const activeAddress = address ?? privyAddress ?? null;
+  const signMessage = useMemo<SessionState['signMessage']>(() => {
+    if (!activeAddress) return undefined;
+    const lower = activeAddress.toLowerCase();
+    return async (message: string): Promise<string> => {
+      const wallet = wallets.find((w) => w.address?.toLowerCase() === lower);
+      if (!wallet?.sign) {
+        throw new Error('Active wallet cannot sign messages');
+      }
+      return wallet.sign(message);
+    };
+  }, [activeAddress, wallets]);
+
   const state = useMemo<SessionState>(
     () => ({
       ready,
@@ -136,8 +162,9 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
       chainId: chainId ?? (embeddedWallet?.chainId ? Number(embeddedWallet.chainId) : null),
       isConnected: isConnected || !!address || !!privyAddress,
       switchChain: embeddedWallet?.switchChain,
+      signMessage,
     }),
-    [ready, authenticated, address, privyAddress, wallets, embeddedWallet, isConnected, chainId, connector],
+    [ready, authenticated, address, privyAddress, wallets, embeddedWallet, isConnected, chainId, connector, signMessage],
   );
 
   return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
@@ -145,6 +172,7 @@ export function SessionProviderPrivy({ children }: { children: React.ReactNode }
 
 export function SessionProviderPlain({ children }: { children: React.ReactNode }) {
   const { address, chainId, isConnected } = useAccount();
+  const wagmiConfig = useConfig();
 
   const state = useMemo<SessionState>(
     () => ({
@@ -154,8 +182,16 @@ export function SessionProviderPlain({ children }: { children: React.ReactNode }
       walletType: resolveWalletType([], address ?? null, isConnected),
       chainId: chainId ?? null,
       isConnected,
+      // Plain-wagmi signer: injected wallet (MetaMask etc) via wagmi.
+      signMessage: isConnected
+        ? async (message: string): Promise<string> => {
+            const client = await getWalletClient(wagmiConfig);
+            if (!client) throw new Error('No wallet available to sign');
+            return client.signMessage({ message });
+          }
+        : undefined,
     }),
-    [address, isConnected, chainId],
+    [address, isConnected, chainId, wagmiConfig],
   );
 
   return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
@@ -174,5 +210,6 @@ export function useSession(): SessionState {
     chainId: null,
     isConnected: false,
     switchChain: undefined,
+    signMessage: undefined,
   };
 }

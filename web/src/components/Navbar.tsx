@@ -19,7 +19,7 @@ import Image from "next/image";
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { login, logout: privyLogout, authenticated, ready: privyReady } = usePrivy();
+  const { login, logout: privyLogout, ready: privyReady } = usePrivy();
   const {
     logout: backendLogout,
     isLoading: authLoading,
@@ -79,7 +79,7 @@ export function Navbar() {
     if (!isReady) {
       return <div className={cn("animate-pulse rounded-2xl bg-muted", compact ? "h-8 w-16" : "h-9 w-28")} />;
     }
-    if (!authenticated) {
+    if (!identity.authenticated) {
       return (
         <button
           type="button"

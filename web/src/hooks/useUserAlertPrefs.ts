@@ -25,7 +25,7 @@ function normalize(user: Partial<UserAlertPrefs> | null | undefined): UserAlertP
 }
 
 export function useUserAlertPrefs(address?: string | null) {
-  const { isAuthenticated, authenticatedFetch } = useAuth();
+  const { isAuthenticated, authenticatedFetch, ensureAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const normalizedAddress = address?.toLowerCase() ?? '';
   const key = ['userAlertPrefs', normalizedAddress];
@@ -44,6 +44,11 @@ export function useUserAlertPrefs(address?: string | null) {
 
   const mutation = useMutation({
     mutationFn: async (patch: Partial<UserAlertPrefs>) => {
+      // Identity already established by the page gate; this only ensures the
+      // API-capability JWT exists (one wallet signature on the FIRST save,
+      // silent no-op afterwards) — works for embedded and external wallets.
+      const ok = await ensureAuthenticated();
+      if (!ok) throw new Error('SIGNATURE_REQUIRED');
       const updated = await authenticatedFetch(`/users/${normalizedAddress}`, {
         method: 'PUT',
         body: JSON.stringify(patch),
@@ -57,9 +62,12 @@ export function useUserAlertPrefs(address?: string | null) {
       queryClient.setQueryData(key, (cur: UserAlertPrefs | undefined) => ({ ...normalize(cur ?? prev ?? DEFAULT_PREFS), ...patch }));
       return { prev };
     },
-    onError: (_err, _patch, ctx) => {
+    onError: (err, _patch, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(key, ctx.prev);
-      toast.error('Could not save alert preference. Please try again.');
+      // Signature rejection already toasted inside signLoginMessage — don't double-toast.
+      if (!(err instanceof Error && err.message.includes('SIGNATURE_REQUIRED'))) {
+        toast.error('Could not save alert preference. Please try again.');
+      }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
