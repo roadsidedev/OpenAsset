@@ -15,6 +15,7 @@ import { GuillochePlate } from "@/components/landing/GuillochePlate";
 import { GuillocheField } from "@/components/landing/GuillocheField";
 import { AssemblyFlow } from "@/components/landing/AssemblyFlow";
 import { Faq } from "@/components/landing/Faq";
+import { LandingThemeToggle } from "@/components/landing/LandingThemeToggle";
 
 export const metadata: Metadata = {
   title: "OpenAsset: Any asset. Its own market. Your terms.",
@@ -124,16 +125,19 @@ export default function LandingPage() {
             <a href="#faq" className="cert-nav-link">FAQ</a>
             <Link href="/docs" className="cert-nav-link">Docs</Link>
           </nav>
-          <Link href="/markets" className="cert-button-ghost px-4! py-2! text-[13px]!">
-            Open app <ArrowUpRight className="size-3.5" weight="bold" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <LandingThemeToggle />
+            <Link href="/markets" className="cert-button-ghost px-4! py-2! text-[13px]!">
+              Open app <ArrowUpRight className="size-3.5" weight="bold" />
+            </Link>
+          </div>
         </div>
       </header>
 
       <main id="cert-main">
         {/* ============================ HERO ============================ */}
         <section className="cert-section relative">
-          <GuillochePlate className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.5]" />
+          <GuillochePlate className="pointer-events-none absolute inset-0 h-full w-full text-[var(--oa-ink)] opacity-[0.5]" />
           <GuillocheField className="pointer-events-none absolute inset-0 h-full w-full" bands={6} />
           <div className="relative mx-auto grid max-w-[1160px] items-end gap-10 px-4 pb-16 pt-14 md:min-h-[calc(100dvh-56px)] md:grid-cols-[1.15fr_0.85fr] md:gap-12 md:px-6 md:pb-20 md:pt-20">
             <div className="relative">
@@ -473,7 +477,7 @@ export default function LandingPage() {
 
         {/* ======================== FINAL CTA ======================== */}
         <section className="cert-section relative border-t border-[var(--oa-rule)]">
-          <GuillochePlate className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.55]" />
+          <GuillochePlate className="pointer-events-none absolute inset-0 h-full w-full text-[var(--oa-ink)] opacity-[0.55]" />
           <GuillocheField className="pointer-events-none absolute inset-0 h-full w-full" bands={4} />
           <div className="relative mx-auto max-w-[1160px] px-4 py-24 text-center md:px-6 md:py-32">
             <h2 className="cert-display mx-auto max-w-3xl text-[clamp(2.4rem,5vw,4.5rem)] leading-[1.02] tracking-[-0.045em]">

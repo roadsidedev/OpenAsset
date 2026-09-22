@@ -13,7 +13,8 @@
  * the assembled end state statically.
  */
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useTheme } from "@/components/ThemeProvider";
 import {
   motion,
   useScroll,
@@ -141,6 +142,7 @@ function DeploymentStamp({
 export function AssemblyFlow() {
   const containerRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
+  const { theme } = useTheme();
   const [activeStep, setActiveStep] = useState(reduced ? STEPS.length - 1 : -1);
 
   const { scrollYProgress } = useScroll({
@@ -158,10 +160,24 @@ export function AssemblyFlow() {
   });
 
   const statusOpacity = useTransform(smooth, [0.78, 0.88], [0, 1]);
+  const ruleStrong = useMemo(
+    () =>
+      theme === "dark"
+        ? "rgba(246, 243, 236, 0.28)"
+        : "rgba(20, 37, 29, 0.38)",
+    [theme],
+  );
+  const liveBorder = useMemo(
+    () =>
+      theme === "dark"
+        ? "rgba(61, 207, 142, 0.65)"
+        : "rgba(15, 123, 79, 0.65)",
+    [theme],
+  );
   const cellBorderColor = useTransform(
     smooth,
     [0, 0.8, 0.92],
-    ["rgba(20, 37, 29, 0.38)", "rgba(20, 37, 29, 0.38)", "rgba(15, 123, 79, 0.65)"]
+    [ruleStrong, ruleStrong, liveBorder],
   );
 
   return (

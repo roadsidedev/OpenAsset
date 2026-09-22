@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Permissionless asset lending markets.",
     start_url: "/markets",
     display: "standalone",
-    background_color: "#F7FAFC",
-    theme_color: "#F7FAFC",
+    background_color: "#F6F3EC",
+    theme_color: "#F6F3EC",
     icons: [
       {
         src: "/openasset-icon-192.png",
