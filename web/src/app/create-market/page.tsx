@@ -434,23 +434,34 @@ export default function CreateMarketPage() {
 
         {/* Chain indicator — asset-native target. Network alignment is
             automatic (see the auto-nudge effect above): no manual switch
-            button, just a passive status while the wallet converges. */}
+            button, just a passive status while the wallet converges.
+            Before an asset is picked — or while an embedded wallet's chain
+            is still resolving — the unknown state is NORMAL, not an error:
+            only a DEFINED chain without factory contracts gets the amber
+            unsupported flag. */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-2xl px-4 py-2 flex-wrap">
           <Wallet className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">
             {session.walletType === 'embedded' ? 'Embedded wallet' : session.walletType === 'external' ? 'External wallet' : 'No wallet'} ·{' '}
             {selectedCatalogAsset
               ? `Target: ${getChainLabel(selectedCatalogAsset.chainId)}`
-              : getChainLabel(chainId)}
+              : chainId !== undefined
+                ? getChainLabel(chainId)
+                : 'no network selected'}
             {walletChainId !== undefined &&
               chainId !== undefined &&
               walletChainId !== chainId && (
                 <span className="text-amber-600 dark:text-amber-400"> (wallet on {getChainLabel(walletChainId)} — switching…)</span>
               )}
           </span>
-          {!contracts && (
+          {chainId !== undefined && !contracts && (
             <span className="text-amber-500 font-medium truncate">
-              (unsupported · pick an asset to choose its network)
+              (unsupported network · pick an asset to choose its network)
+            </span>
+          )}
+          {chainId === undefined && !selectedCatalogAsset && (
+            <span className="text-muted-foreground truncate">
+              (pick an asset to choose its network)
             </span>
           )}
         </div>
