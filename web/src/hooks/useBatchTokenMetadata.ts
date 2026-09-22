@@ -39,7 +39,8 @@ async function getLogoMap(chainId: number): Promise<Map<string, string>> {
     const res = await fetch(url);
     if (!res.ok) return new Map();
     const data = await res.json();
-    const tokens: any[] = Array.isArray(data) ? data : (data?.tokens || []);
+    type TokenListEntry = { address?: string; logoURI?: string; image?: string; logo?: string };
+    const tokens: TokenListEntry[] = Array.isArray(data) ? data : (data?.tokens || []);
     const m = new Map<string, string>();
     for (const t of tokens) {
       const logo = t.logoURI || t.image || t.logo;
@@ -68,6 +69,48 @@ function localLogo(symbol: string): string | null {
   return getBrandLogoUrl(symbol);
 }
 
+/** Shared fetcher: name/symbol/decimals/logo for one address on ONE chain. */
+async function fetchTokenInfo(chainId: number, rawAddr: string): Promise<BatchTokenInfo> {
+  const addr = rawAddr.toLowerCase();
+  const invalid = (): BatchTokenInfo => ({ address: addr, symbol: null, name: null, decimals: null, logoUri: null, isValid: false });
+  let publicClient;
+  try {
+    publicClient = createChainClient(chainId);
+  } catch {
+    return invalid();
+  }
+  if (!publicClient) return invalid();
+  let checksum: string;
+  try {
+    checksum = getAddress(addr);
+  } catch {
+    return invalid();
+  }
+  try {
+    const [nameRes, symbolRes, decimalsRes] = await Promise.allSettled([
+      publicClient.readContract({ address: checksum as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'name' }),
+      publicClient.readContract({ address: checksum as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'symbol' }),
+      publicClient.readContract({ address: checksum as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'decimals' }),
+    ]);
+    const symbol = symbolRes.status === 'fulfilled' ? String(symbolRes.value) : null;
+    const name = nameRes.status === 'fulfilled' ? String(nameRes.value) : null;
+    const decimals = decimalsRes.status === 'fulfilled' ? Number(decimalsRes.value) : null;
+    if (!symbol && !name) {
+      return { address: checksum, symbol: null, name: null, decimals, logoUri: null, isValid: false };
+    }
+    let logoUri: string | null = null;
+    try {
+      const map = await getLogoMap(chainId);
+      logoUri = map.get(checksum.toLowerCase()) || (symbol ? localLogo(symbol) : null);
+    } catch {
+      logoUri = symbol ? localLogo(symbol) : null;
+    }
+    return { address: checksum, symbol, name, decimals, logoUri, isValid: true };
+  } catch {
+    return { address: checksum, symbol: null, name: null, decimals: null, logoUri: null, isValid: false };
+  }
+}
+
 /**
  * Batch hook: fetches name/symbol/decimals/logo for many addresses on a single chain.
  * Uses the market's chainId, NOT wallet chain.
@@ -75,8 +118,6 @@ function localLogo(symbol: string): string | null {
  */
 export function useBatchTokenMetadata(addresses: string[], chainId: number | undefined) {
   const effectiveChainId = chainId ?? 84532;
-  // Standalone client (not wagmi lazy per-chain) — chain-agnostic, never throws on render.
-  const publicClient = useMemo(() => createChainClient(effectiveChainId), [effectiveChainId]);
 
   // Dedupe + valid addresses only
   const unique = Array.from(
@@ -86,41 +127,8 @@ export function useBatchTokenMetadata(addresses: string[], chainId: number | und
   const queries = useQueries({
     queries: unique.map((addr) => ({
       queryKey: ['batchTokenMeta', addr, effectiveChainId],
-      queryFn: async (): Promise<BatchTokenInfo> => {
-        if (!publicClient) {
-          return { address: addr, symbol: null, name: null, decimals: null, logoUri: null, isValid: false };
-        }
-        let checksum: string;
-        try {
-          checksum = getAddress(addr);
-        } catch {
-          return { address: addr, symbol: null, name: null, decimals: null, logoUri: null, isValid: false };
-        }
-        try {
-          const [nameRes, symbolRes, decimalsRes] = await Promise.allSettled([
-            publicClient.readContract({ address: checksum as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'name' }),
-            publicClient.readContract({ address: checksum as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'symbol' }),
-            publicClient.readContract({ address: checksum as `0x${string}`, abi: ERC20_READ_ABI, functionName: 'decimals' }),
-          ]);
-          const symbol = symbolRes.status === 'fulfilled' ? String(symbolRes.value) : null;
-          const name = nameRes.status === 'fulfilled' ? String(nameRes.value) : null;
-          const decimals = decimalsRes.status === 'fulfilled' ? Number(decimalsRes.value) : null;
-          if (!symbol && !name) {
-            return { address: checksum, symbol: null, name: null, decimals, logoUri: null, isValid: false };
-          }
-          let logoUri: string | null = null;
-          try {
-            const map = await getLogoMap(effectiveChainId);
-            logoUri = map.get(checksum.toLowerCase()) || (symbol ? localLogo(symbol) : null);
-          } catch {
-            logoUri = symbol ? localLogo(symbol) : null;
-          }
-          return { address: checksum, symbol, name, decimals, logoUri, isValid: true };
-        } catch {
-          return { address: checksum!, symbol: null, name: null, decimals: null, logoUri: null, isValid: false };
-        }
-      },
-      enabled: !!publicClient && isAddress(addr as `0x${string}`),
+      queryFn: () => fetchTokenInfo(effectiveChainId, addr),
+      enabled: isAddress(addr as `0x${string}`),
       staleTime: 5 * 60 * 1000,
       gcTime: 30 * 60 * 1000,
       retry: false,
@@ -139,4 +147,55 @@ export function useBatchTokenMetadata(addresses: string[], chainId: number | und
   const isFetched = queries.every((q) => q.isFetched || q.isError || q.isPending === false);
 
   return { data: map, isLoading, isFetched, queries };
+}
+
+export interface ChainAddressItem {
+  chainId: number;
+  address: string;
+}
+
+/**
+ * Batch hook for MULTICHAIN lists: each address is read on its OWN chain.
+ * Returns a map keyed by `${chainId}:${addressLower}` so callers can look up
+ * metadata per market without collapsing everything onto one chain (the old
+ * majority-chain shortcut returned wrong/missing metadata for minority chains).
+ */
+export function useMultiChainTokenMetadata(items: ChainAddressItem[]) {
+  const pairs = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ chainId: number; address: string; key: string }> = [];
+    for (const item of items) {
+      if (!item.address || !isAddress(item.address)) continue;
+      const address = item.address.toLowerCase();
+      const key = `${item.chainId}:${address}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ chainId: item.chainId, address, key });
+    }
+    return out;
+  }, [items]);
+
+  const queries = useQueries({
+    queries: pairs.map((pair) => ({
+      queryKey: ['batchTokenMeta', pair.address, pair.chainId],
+      queryFn: () => fetchTokenInfo(pair.chainId, pair.address),
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      retry: false,
+    })),
+  });
+
+  const map = new Map<string, BatchTokenInfo>();
+  pairs.forEach((pair, idx) => {
+    const q = queries[idx];
+    if (q?.data) map.set(pair.key, q.data);
+    else if (q?.isError) {
+      map.set(pair.key, { address: pair.address, symbol: null, name: null, decimals: null, logoUri: null, isValid: false });
+    }
+  });
+
+  const isLoading = queries.some((q) => q.isLoading);
+  const isFetched = queries.every((q) => q.isFetched || q.isError || q.isPending === false);
+
+  return { data: map, isLoading, isFetched };
 }

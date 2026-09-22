@@ -56,6 +56,7 @@ declare module 'wagmi/connectors' {
 declare module '@wagmi/core' {
   export function getPublicClient(config: any, opts?: { chainId?: number }): any;
   export function getWalletClient(config: any): any;
+  export function getAccount(config: any): { chainId?: number; address?: string; isConnected: boolean };
 }
 
 declare module 'viem/utils' {

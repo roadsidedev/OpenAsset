@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { usePublicClient, useWalletClient } from 'wagmi';
+import { useWalletClient } from 'wagmi';
 import { type Address, formatUnits, parseAbi, parseUnits } from 'viem';
 import { toast } from 'sonner';
 import { useSession } from '@/context/SessionContext';
 import { useLoan } from '@/hooks/useLoans';
+import { useMarket } from '@/hooks/useMarkets';
+import { useChainOrchestrator } from '@/hooks/useChainOrchestrator';
+import { createChainClient, DEFAULT_CHAIN_ID } from '@/lib/chains';
+import { getChainLabel } from '@/lib/chainLabels';
 import { LENDING_MARKET_ABI, ERC20_APPROVE_ABI, LOAN_STATUS } from '@/lib/contractAbis';
 import { decodeContractError } from '@/lib/contractErrors';
 import { ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
@@ -33,12 +37,34 @@ export default function RepayPage() {
   const loanAddress = (params.loanAddress as string || '').toLowerCase();
   const { address: userAddress, isAuthenticated, ready } = useSession();
   const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
 
   const { data: indexedLoan, isLoading: loanLoading, error: loanError, refetch: refetchLoan } = useLoan(loanAddress);
 
   const marketAddress = indexedLoan?.marketAddress;
   const contractLoanId = indexedLoan?.contractLoanId ? BigInt(indexedLoan.contractLoanId) : null;
+
+  // Resolve which chain the loan's market lives on (probes all supported
+  // chains), then read/write against THAT chain — never the wallet's
+  // arbitrary current network.
+  const { data: market } = useMarket(marketAddress || '');
+  const marketChainId = market?.chainId;
+  const { ensureChain, nudgeChain } = useChainOrchestrator();
+
+  // Standalone read client scoped to the market's chain: works regardless of
+  // which network the wallet happens to be on.
+  const chainClient = useMemo(
+    () => createChainClient(marketChainId ?? DEFAULT_CHAIN_ID),
+    [marketChainId],
+  );
+
+  // Auto-align the wallet as soon as the loan's chain is known (silent for
+  // embedded wallets, the wallet's own switch popup for external ones).
+  useEffect(() => {
+    if (marketChainId) {
+      nudgeChain(marketChainId, `This loan lives on ${getChainLabel(marketChainId)}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketChainId]);
 
   const [loan, setLoan] = useState<LoanDetails | null>(null);
   const [aprBps, setAprBps] = useState<bigint>(0n);
@@ -52,20 +78,20 @@ export default function RepayPage() {
   // Live loan state + market config from the chain
   useEffect(() => {
     let cancelled = false;
-    if (!publicClient || !marketAddress || contractLoanId === null) return;
+    if (!marketAddress || contractLoanId === null) return;
     (async () => {
       try {
-        const market = marketAddress as Address;
+        const marketAddr = marketAddress as Address;
         const [details, apr, lending, decimals] = await Promise.all([
-          publicClient.readContract({
-            address: market,
+          chainClient.readContract({
+            address: marketAddr,
             abi: parseAbi(LENDING_MARKET_ABI),
             functionName: 'getLoanDetails',
             args: [contractLoanId],
           }) as Promise<[bigint, bigint, bigint, bigint, bigint, number, bigint, string]>,
-          publicClient.readContract({ address: market, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'aprBps' }) as Promise<bigint>,
-          publicClient.readContract({ address: market, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingAsset' }) as Promise<string>,
-          publicClient.readContract({ address: market, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingDecimals' }).catch(() => 18n) as Promise<bigint | number>,
+          chainClient.readContract({ address: marketAddr, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'aprBps' }) as Promise<bigint>,
+          chainClient.readContract({ address: marketAddr, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingAsset' }) as Promise<string>,
+          chainClient.readContract({ address: marketAddr, abi: parseAbi(LENDING_MARKET_ABI), functionName: 'lendingDecimals' }).catch(() => 18n) as Promise<bigint | number>,
         ]);
         if (cancelled) return;
         setLoan({
@@ -86,15 +112,15 @@ export default function RepayPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [publicClient, marketAddress, contractLoanId, refreshKey]);
+  }, [chainClient, marketAddress, contractLoanId, refreshKey]);
 
   // Allowance of the repayer for the market
   useEffect(() => {
     let cancelled = false;
-    if (!publicClient || !lendingAsset || !userAddress || !marketAddress) return;
+    if (!lendingAsset || !userAddress || !marketAddress) return;
     (async () => {
       try {
-        const a = await publicClient.readContract({
+        const a = await chainClient.readContract({
           address: lendingAsset as Address,
           abi: parseAbi(ERC20_APPROVE_ABI),
           functionName: 'allowance',
@@ -104,7 +130,7 @@ export default function RepayPage() {
       } catch { if (!cancelled) setAllowance(0n); }
     })();
     return () => { cancelled = true; };
-  }, [publicClient, lendingAsset, userAddress, marketAddress, refreshKey, isBusy]);
+  }, [chainClient, lendingAsset, userAddress, marketAddress, refreshKey, isBusy]);
 
   // Mirror of LendingMarketV2._calculateInterest + CURE penalty
   const { interest, penalty, totalDebt } = useMemo(() => {
@@ -128,10 +154,23 @@ export default function RepayPage() {
   const isHolder = loan !== null && userAddress !== undefined && userAddress !== null && loan.positionHolder.toLowerCase() === userAddress.toLowerCase();
 
   const executeRepay = useCallback(async (amount: bigint | null) => {
-    if (!walletClient || !publicClient || !marketAddress || contractLoanId === null || !lendingAsset) return;
+    if (!walletClient || !marketAddress || contractLoanId === null || !lendingAsset) return;
     setIsBusy(true);
     const toastId = toast.loading(amount === null ? 'Repaying loan...' : 'Repaying partial amount...');
     try {
+      // Auto-align the wallet to the loan's chain first (silent for embedded
+      // wallets; the wallet's own switch popup for external ones). No
+      // in-app "switch network" button — if the user rejects the popup the
+      // orchestrator raises the fallback banner and this throws.
+      if (marketChainId) {
+        const chainResult = await ensureChain(
+          marketChainId,
+          `This loan lives on ${getChainLabel(marketChainId)}`,
+        );
+        if (!chainResult.ok) {
+          throw new Error(`Approve the switch to ${getChainLabel(marketChainId)} in your wallet to repay.`);
+        }
+      }
       const required = amount ?? totalDebt;
       if (required > allowance) {
         toast.loading('Approving stablecoin spend...', { id: toastId });
@@ -141,7 +180,7 @@ export default function RepayPage() {
           functionName: 'approve',
           args: [marketAddress as Address, required],
         });
-        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        await chainClient.waitForTransactionReceipt({ hash: approveHash });
         toast.loading('Executing repayment...', { id: toastId });
       }
       const hash = await walletClient.writeContract({
@@ -150,7 +189,7 @@ export default function RepayPage() {
         functionName: amount === null ? 'repay' : 'repayPartial',
         args: amount === null ? [contractLoanId] : [contractLoanId, amount],
       });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      const receipt = await chainClient.waitForTransactionReceipt({ hash });
       toast.success('Loan repayment confirmed!', {
         id: toastId,
         description: `Tx: ${receipt.transactionHash.slice(0, 14)}...`,
@@ -163,7 +202,7 @@ export default function RepayPage() {
     } finally {
       setIsBusy(false);
     }
-  }, [walletClient, publicClient, marketAddress, contractLoanId, lendingAsset, allowance, totalDebt, refetchLoan]);
+  }, [walletClient, chainClient, marketChainId, ensureChain, marketAddress, contractLoanId, lendingAsset, allowance, totalDebt, refetchLoan]);
 
   const handlePartial = useCallback(() => {
     if (!partialAmount || !lendingDecimals) return;
@@ -219,7 +258,7 @@ export default function RepayPage() {
         {!loan ? (
           <div className="rounded-3xl border border-border bg-card p-6">
             <p className="text-sm text-muted-foreground">
-              Loan #{contractLoanId?.toString()} is indexed but could not be read on-chain. Check your network connection and that you are on the correct chain.
+              Loan #{contractLoanId?.toString()} is indexed but could not be read on-chain. The RPC may be temporarily unavailable, or this market has not finished indexing.
             </p>
           </div>
         ) : (

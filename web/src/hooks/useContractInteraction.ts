@@ -2,23 +2,26 @@
 
 import { useState, useCallback } from 'react';
 import { usePublicClient, useWalletClient, useChainId, useConfig } from 'wagmi';
-import { getPublicClient } from '@wagmi/core';
+import { getPublicClient, getAccount } from '@wagmi/core';
 import { parseAbi, type Address, type Hex } from 'viem';
 import { MARKET_FACTORY_ABI_TYPED, MARKET_FACTORY_B20_ABI, MARKET_FACTORY_PROVIDER_ABI, LENDING_MARKET_ABI, ADAPTER_REGISTRY_ABI_TYPED, ERC20_APPROVE_ABI } from '@/lib/contractAbis';
 import { decodeContractError } from '@/lib/contractErrors';
-import { useSession } from '@/context/SessionContext';
+import { useChainOrchestrator } from '@/hooks/useChainOrchestrator';
+import { getChainLabel } from '@/lib/chainLabels';
 
 /**
  * Chain guard: before every write, resolve the wallet onto `targetChainId`
- * (market.chainId or the chain whose factory hosts the config). Embedded
- * (Privy) wallets switch silently; external wallets raise a typed error the
- * UI converts into the one-click switch banner.
+ * (market.chainId or the chain whose factory hosts the config) via the
+ * shared orchestrator — embedded (Privy) wallets switch silently, external
+ * wallets get the wallet's own switch popup automatically. If that fails
+ * (user rejected), the orchestrator raises the one-click banner and this
+ * guard throws a typed error the UI can surface.
  */
 class ChainGuardError extends Error {
   readonly targetChainId: number;
   readonly currentChainId: number | null;
   constructor(targetChainId: number, currentChainId: number | null) {
-    super(`This action requires the ${targetChainId} network. Switch networks to continue.`);
+    super(`This action runs on ${getChainLabel(targetChainId)}. Approve the network switch in your wallet to continue.`);
     this.name = 'ChainGuardError';
     this.targetChainId = targetChainId;
     this.currentChainId = currentChainId;
@@ -32,7 +35,7 @@ export const useContractInteraction = () => {
   const fallbackClient = usePublicClient();
   const currentChainId = useChainId();
   const config = useConfig();
-  const { switchChain: switchEmbeddedChain } = useSession();
+  const { ensureChain: ensureWalletChain } = useChainOrchestrator();
 
   const clientForChain = useCallback(
     (targetChainId: number | undefined | null) => {
@@ -49,19 +52,16 @@ export const useContractInteraction = () => {
   const ensureChain = useCallback(
     async (targetChainId: number | undefined | null) => {
       if (!targetChainId || !walletClient) return;
-      const current = currentChainId ?? walletClient.chain?.id ?? null;
+      // Store-fresh chain id: catches a switch that resolved moments ago.
+      const current = getAccount(config).chainId ?? currentChainId ?? walletClient.chain?.id ?? null;
       if (current === targetChainId) return;
-      if (switchEmbeddedChain) {
-        try {
-          await switchEmbeddedChain(targetChainId);
-          return;
-        } catch {
-          // fall through to typed error
-        }
-      }
-      throw new ChainGuardError(targetChainId, current);
+      const result = await ensureWalletChain(
+        targetChainId,
+        `This action runs on ${getChainLabel(targetChainId)}`,
+      );
+      if (!result.ok) throw new ChainGuardError(targetChainId, current);
     },
-    [walletClient, currentChainId, switchEmbeddedChain],
+    [walletClient, config, currentChainId, ensureWalletChain],
   );
 
   const clearError = useCallback(() => setError(null), []);

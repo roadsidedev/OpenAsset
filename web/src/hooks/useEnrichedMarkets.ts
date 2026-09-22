@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useBatchTokenMetadata } from './useBatchTokenMetadata';
+import { useMultiChainTokenMetadata } from './useBatchTokenMetadata';
 import { resolveAssetIdentity, type AssetIdentity, getOracleLabel } from '@/lib/assetIdentity';
+import { DEFAULT_CHAIN_ID } from '@/lib/chains';
 import type { Market } from './useMarkets';
 
 export interface EnrichedMarket {
@@ -12,40 +13,40 @@ export interface EnrichedMarket {
   loanAssetSymbol: string | null;
 }
 
+/**
+ * Display enrichment (token metadata + identity) for a UNIFIED multichain
+ * market list. Every address is read on its own market's chain — never on
+ * the wallet chain and never on a majority-chain shortcut, which used to
+ * return wrong or missing metadata for markets on minority chains.
+ */
 export function useEnrichedMarkets(markets: Market[], defaultChainId?: number) {
-  // Collect collateral + loan addresses per chain group
-  // Group by chainId to avoid cross-chain token reads causing wrong metadata
-  // For simplicity, use per-market default chain (market.chainId || defaultChainId)
-  const addresses = useMemo(() => markets.map((m) => m.collateralAsset).filter(Boolean), [markets]);
-  const loanAddresses = useMemo(() => markets.map((m) => m.loanAsset).filter(Boolean), [markets]);
+  const fallbackChain = defaultChainId ?? DEFAULT_CHAIN_ID;
 
-  // Use most common chainId among markets (or default)
-  const effectiveChainId = useMemo(() => {
-    if (markets.length === 0) return defaultChainId;
-    const counts = new Map<number, number>();
-    for (const m of markets) {
-      const id = m.chainId ?? defaultChainId;
-      if (!id) continue;
-      counts.set(id, (counts.get(id) || 0) + 1);
-    }
-    let best: number | undefined = defaultChainId;
-    let max = -1;
-    for (const [id, c] of counts) {
-      if (c > max) {
-        max = c;
-        best = id;
-      }
-    }
-    return best;
-  }, [markets, defaultChainId]);
+  const collateralItems = useMemo(
+    () =>
+      markets
+        .filter((m) => m.collateralAsset)
+        .map((m) => ({ chainId: m.chainId ?? fallbackChain, address: m.collateralAsset })),
+    [markets, fallbackChain],
+  );
+  const loanItems = useMemo(
+    () =>
+      markets
+        .filter((m) => m.loanAsset)
+        .map((m) => ({ chainId: m.chainId ?? fallbackChain, address: m.loanAsset as string })),
+    [markets, fallbackChain],
+  );
 
-  const batchCollateral = useBatchTokenMetadata(addresses, effectiveChainId);
-  const batchLoan = useBatchTokenMetadata(loanAddresses, effectiveChainId);
+  const collateralBatch = useMultiChainTokenMetadata(collateralItems);
+  const loanBatch = useMultiChainTokenMetadata(loanItems);
 
   const enriched: EnrichedMarket[] = useMemo(() => {
     return markets.map((market) => {
-      const collMeta = batchCollateral.data.get(market.collateralAsset.toLowerCase());
-      const loanMeta = batchLoan.data.get((market.loanAsset || '').toLowerCase());
+      const chainId = market.chainId ?? fallbackChain;
+      const collKey = market.collateralAsset ? `${chainId}:${market.collateralAsset.toLowerCase()}` : '';
+      const loanKey = market.loanAsset ? `${chainId}:${market.loanAsset.toLowerCase()}` : '';
+      const collMeta = collKey ? collateralBatch.data.get(collKey) : undefined;
+      const loanMeta = loanKey ? loanBatch.data.get(loanKey) : undefined;
       const loanAssetSymbol = loanMeta?.symbol || (market.loanAsset ? market.loanAsset.slice(0, 6).toUpperCase() : null);
 
       const identity = resolveAssetIdentity({
@@ -63,10 +64,10 @@ export function useEnrichedMarkets(markets: Market[], defaultChainId?: number) {
         loanAssetSymbol,
       };
     });
-  }, [markets, batchCollateral.data, batchLoan.data]);
+  }, [markets, collateralBatch.data, loanBatch.data, fallbackChain]);
 
   return {
     enriched,
-    isLoading: batchCollateral.isLoading || batchLoan.isLoading,
+    isLoading: collateralBatch.isLoading || loanBatch.isLoading,
   };
 }

@@ -1,9 +1,11 @@
 'use client';
 
 /**
- * Global one-click network-switch banner. Appears whenever any code path
- * (asset selection, market page, pre-write check) needs the wallet on a
- * different chain but cannot switch silently (external wallets).
+ * Global one-click network-switch banner. Normally never appears: chain
+ * alignment happens automatically (silent for embedded wallets, the wallet's
+ * own switch popup for external ones). It only shows as a FALLBACK when that
+ * automatic switch was rejected or unavailable, giving the user a one-click
+ * retry from any screen.
  */
 
 import { useAccount } from 'wagmi';

@@ -56,7 +56,7 @@ export default function MarketDetailPage() {
   const { login: privyLogin } = usePrivy();
   const { data: market, isLoading, isFetching, error, refetch } = useMarket(marketId);
   const { requestLoan, isLoading: isTxLoading, error: txError } = useContractInteraction();
-  const { nudgeChain, isOnChain } = useChainOrchestrator();
+  const { nudgeChain } = useChainOrchestrator();
   const recordTx = useTxTrail((s) => s.record);
   // Hooks must remain unconditional: the market query starts empty, then populates
   // asynchronously. Keeping metadata queries here avoids a hook-order crash when
@@ -115,8 +115,9 @@ export default function MarketDetailPage() {
   }, [publicClient, market?.oracleAdapter, market?.marketAddress]);
 
   // Anticipatory chain resolution: as soon as a market loads on a different
-  // chain than the wallet, start switching (silent for embedded wallets,
-  // one-click banner for external).
+  // chain than the wallet, align the wallet automatically (silent for
+  // embedded wallets; the wallet's own switch popup for external ones).
+  // If the user rejects it, the global banner appears as a fallback.
   const marketChainId = market?.chainId;
   const marketLabel = market?.collateralAsset?.slice(0, 6);
   useEffect(() => {
@@ -409,7 +410,6 @@ export default function MarketDetailPage() {
   const marketStatus = market.status ?? (market.active ? 0 : 3);
   const statusLabel = MARKET_STATUS[marketStatus as keyof typeof MARKET_STATUS] || "Unknown";
   const isPaused = statusLabel !== "ACTIVE";
-  const wrongChain = !isOnChain(market.chainId);
 
   // Brand-agnostic identity derived from adapter + collateral metadata (same as MarketCard)
   const identity = resolveAssetIdentity({
@@ -796,14 +796,15 @@ export default function MarketDetailPage() {
 
               {/* CTA — auth-aware and chain-aware: every state is actionable.
                   Logged-in users never see a dead "Sign in" wall: the button
-                  fires Privy login when unauthenticated, and fires the chain
-                  switch (silent for embedded wallets) when on the wrong network. */}
+                  fires Privy login when unauthenticated. Network is handled
+                  automatically inside the submit (silent switch for embedded
+                  wallets, the wallet's own switch popup for external ones) —
+                  there is no "switch network" button state. */}
               {(() => {
                 const trimmed = collateralAmount.trim();
                 const parsedForGate = trimmed ? parseAmountInput(trimmed, collateralDecimals) : null;
                 const exceedsBalance = parsedForGate?.amount !== undefined && collateralBalance !== null && parsedForGate.amount > collateralBalance;
                 const needsAuth = sessionReady && (!isAuthenticated || !userAddress);
-                const needsSwitch = !needsAuth && wrongChain;
                 const formBlocked =
                   isPaused ||
                   !metadataReliable ||
@@ -811,7 +812,7 @@ export default function MarketDetailPage() {
                   !trimmed ||
                   !!parsedForGate?.error ||
                   exceedsBalance;
-                const disabled = isTxLoading || (!needsAuth && !needsSwitch && formBlocked);
+                const disabled = isTxLoading || (!needsAuth && formBlocked);
                 const handleCta = () => {
                   if (needsAuth) {
                     try {
@@ -820,10 +821,6 @@ export default function MarketDetailPage() {
                       // Privy unavailable (plain-wagmi fallback) — session
                       // bridge will surface the connect CTA instead.
                     }
-                    return;
-                  }
-                  if (needsSwitch) {
-                    nudgeChain(market.chainId, `This market lives on ${getChainLabel(market.chainId)}`);
                     return;
                   }
                   void handleRequestLoan();
@@ -843,8 +840,6 @@ export default function MarketDetailPage() {
                       ? "Processing..."
                       : needsAuth
                       ? "Sign in to borrow"
-                      : needsSwitch
-                      ? `Switch to ${getChainLabel(market.chainId)} to borrow`
                       : isPaused
                       ? "Market Paused"
                       : !metadataReliable
@@ -861,11 +856,6 @@ export default function MarketDetailPage() {
                   </button>
                 );
               })()}
-              {wrongChain && (isAuthenticated || userAddress) && (
-                <p className="text-xs text-muted-foreground text-center">
-                  This market is on {getChainLabel(market.chainId)} — switch networks using the prompt below to borrow.
-                </p>
-              )}
             </div>
           </div>
         </div>

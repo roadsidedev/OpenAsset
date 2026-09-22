@@ -31,7 +31,7 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
     const toastId = toast.loading("Depositing liquidity...");
     try {
       const parsed = parseUnits(amount, 6);
-      const result = await depositLiquidity(market.marketAddress, market.loanAsset, parsed);
+      const result = await depositLiquidity(market.marketAddress, market.loanAsset, parsed, market.chainId);
       toast.success("Deposit confirmed!", {
         id: toastId,
         description: `Tx: ${result.txHash.slice(0, 10)}...`,

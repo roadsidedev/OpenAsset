@@ -7,6 +7,7 @@ import { TokenIcon } from "@/components/tokens/TokenPreview";
 import type { Market } from "@/hooks/useMarkets";
 import type { AssetIdentity } from "@/lib/assetIdentity";
 import { isWithinB20TradingWindow } from "@/lib/b20";
+import { getChainLabel, getChainAccent } from "@/lib/chainLabels";
 
 function formatLtv(ltvBps: number) {
   return `${(ltvBps / 100).toFixed(1)}%`;
@@ -122,17 +123,32 @@ export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, cla
               )}
             </div>
           </div>
-          <Badge
-            variant={market.active ? "default" : "secondary"}
-            className={cn(
-              "shrink-0 rounded-full px-2 py-1 text-[11px] font-medium leading-none",
-              market.active
-                ? "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
-                : "border border-border bg-muted text-muted-foreground"
-            )}
-          >
-            {market.active ? "Active" : "Inactive"}
-          </Badge>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            {market.chainId ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2 py-1 text-[10px] font-medium leading-none text-muted-foreground"
+                title={`Market lives on ${getChainLabel(market.chainId)}`}
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: getChainAccent(market.chainId) }}
+                  aria-hidden="true"
+                />
+                {getChainLabel(market.chainId)}
+              </span>
+            ) : null}
+            <Badge
+              variant={market.active ? "default" : "secondary"}
+              className={cn(
+                "shrink-0 rounded-full px-2 py-1 text-[11px] font-medium leading-none",
+                market.active
+                  ? "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  : "border border-border bg-muted text-muted-foreground"
+              )}
+            >
+              {market.active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/50 bg-muted/40 p-3">

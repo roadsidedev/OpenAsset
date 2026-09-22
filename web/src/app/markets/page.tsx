@@ -16,6 +16,7 @@ import { MarketCardSkeleton } from "@/components/skeletons/MarketCardSkeleton";
 import { PlatformStatsDashboard } from "@/components/PlatformStatsDashboard";
 import { cn } from "@/lib/utils";
 import { assetSearchHaystack, ASSET_CATEGORY_LABELS } from "@/lib/assetIdentity";
+import { getChainLabel, getChainAccent } from "@/lib/chainLabels";
 
 // Tab values are canonical AssetCategory values (compared against identity.category).
 // Labels are display-only — 'Tokenized Equities' renders as 'Tokenized Stocks'.
@@ -37,7 +38,8 @@ type FilterKey =
   | "ltvMax"
   | "aprMax"
   | "minLiquidityUsd"
-  | "creatorSearch";
+  | "creatorSearch"
+  | "network";
 
 type FilterState = {
   activeOnly: boolean;
@@ -47,6 +49,8 @@ type FilterState = {
   aprMax: number;
   minLiquidityUsd: number;
   creatorSearch: string;
+  /** null = all networks; otherwise a chainId the markets must live on. */
+  network: number | null;
 };
 
 type ControlsState = {
@@ -85,6 +89,7 @@ function createDefaultFilters(): FilterState {
     aprMax: 10000,
     minLiquidityUsd: 0,
     creatorSearch: "",
+    network: null,
   };
 }
 
@@ -164,6 +169,7 @@ function countActiveFilters(filters: FilterState): number {
     filters.aprMax !== 10000,
     filters.minLiquidityUsd > 0,
     filters.creatorSearch.trim() !== "",
+    filters.network !== null,
   ].filter(Boolean).length;
 }
 
@@ -195,9 +201,11 @@ type ControlBarProps = {
   state: ControlsState;
   dispatch: React.Dispatch<ControlsAction>;
   filterCount: number;
+  /** ChainIds that actually have markets right now (drives the Network filter). */
+  availableNetworks: number[];
 };
 
-function ControlBar({ state, dispatch, filterCount }: ControlBarProps) {
+function ControlBar({ state, dispatch, filterCount, availableNetworks }: ControlBarProps) {
   const controlBarRef = useRef<HTMLDivElement>(null);
   const selectedSort = SORT_OPTIONS.find((option) => option.value === state.sortBy) || SORT_OPTIONS[0];
 
@@ -342,6 +350,36 @@ function ControlBar({ state, dispatch, filterCount }: ControlBarProps) {
               ))}
             </div>
 
+            {availableNetworks.length > 0 && (
+              <div className="border-b border-border py-4">
+                <p className="px-0.5 pb-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Network</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[{ id: null as number | null, label: "All networks" }, ...availableNetworks.map((id) => ({ id: id as number | null, label: getChainLabel(id) }))].map((option) => (
+                    <button
+                      key={option.id ?? "all"}
+                      type="button"
+                      onClick={() => dispatch({ type: "SET_DRAFT_FILTERS", patch: { network: option.id } })}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                        state.draftFilters.network === option.id
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-card text-foreground hover:bg-muted",
+                      )}
+                    >
+                      {option.id !== null && (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: getChainAccent(option.id) }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 border-b border-border py-4 sm:grid-cols-2">
               <label className="space-y-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 LTV Limit
@@ -416,8 +454,18 @@ export default function MarketsPage() {
   const { category, search, sortBy, filters } = controls;
   const filterCount = countActiveFilters(filters);
 
-  const allMarkets = data?.markets || [];
+  const allMarkets = useMemo(() => data?.markets || [], [data]);
   const { enriched } = useEnrichedMarkets(allMarkets);
+
+  // Chains that actually host markets right now (markets list stays unified
+  // across networks; this only powers the Network filter options).
+  const availableNetworks = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const m of allMarkets) {
+      if (m.chainId) counts.set(m.chainId, (counts.get(m.chainId) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  }, [allMarkets]);
 
   const filteredEnriched = useMemo(() => {
     let list = enriched;
@@ -426,6 +474,9 @@ export default function MarketsPage() {
 
     if (category !== "All Markets") {
       list = list.filter((entry) => entry.identity.category === category);
+    }
+    if (filters.network !== null) {
+      list = list.filter((entry) => entry.market.chainId === filters.network);
     }
     if (normalizedSearch) {
       list = list.filter((entry) => assetSearchHaystack(entry.identity, entry.market).includes(normalizedSearch));
@@ -494,6 +545,9 @@ export default function MarketsPage() {
           key: "creatorSearch" as FilterKey,
         }
       : null,
+    filters.network !== null
+      ? { label: `Network · ${getChainLabel(filters.network)}`, key: "network" as FilterKey }
+      : null,
   ].filter((chip): chip is { label: string; key: FilterKey } => chip !== null);
 
   return (
@@ -506,7 +560,7 @@ export default function MarketsPage() {
             </h1>
             <span className="hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground md:inline-flex">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Network · Active
+              {availableNetworks.length} {availableNetworks.length === 1 ? "network" : "networks"} · unified
             </span>
           </div>
           <PlatformStatsDashboard />
@@ -522,7 +576,7 @@ export default function MarketsPage() {
             </span>
           </div>
 
-          <ControlBar state={controls} dispatch={dispatch} filterCount={filterCount} />
+          <ControlBar state={controls} dispatch={dispatch} filterCount={filterCount} availableNetworks={availableNetworks} />
 
           {/* Category navigation and applied filter chips */}
           <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
