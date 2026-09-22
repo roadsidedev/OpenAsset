@@ -14,6 +14,7 @@ export type TxTrailType =
   | 'LOAN_REQUESTED'
   | 'LOAN_REPAID'
   | 'LIQUIDITY_DEPOSITED'
+  | 'LIQUIDITY_WITHDRAWN'
   | 'ADAPTER_REGISTERED';
 
 export interface TxTrailEntry {

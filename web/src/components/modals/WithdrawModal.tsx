@@ -18,6 +18,8 @@ import { useMarket, useMarkets, type Market } from "@/hooks/useMarkets";
 import { LENDING_MARKET_ABI, LP_TOKEN_ABI } from "@/lib/contractAbis";
 import { createChainClient, DEFAULT_CHAIN_ID } from "@/lib/chains";
 import { cn } from "@/lib/utils";
+import { useTxTrail } from "@/store/useTxTrail";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface WithdrawModalProps {
   open: boolean;
@@ -75,6 +77,8 @@ export function WithdrawModal({
   const routeMarketId = (params?.marketId as string) || "";
   const { address: userAddress } = useAccount();
   const { withdrawLiquidity, isLoading } = useContractInteraction();
+  const recordTx = useTxTrail((s) => s.record);
+  const queryClient = useQueryClient();
   const { data: marketsData } = useMarkets(0, 100);
   const allMarkets: Market[] = marketsData?.markets || [];
 
@@ -259,6 +263,23 @@ export function WithdrawModal({
       if (shares <= 0n) throw new Error("Share amount is zero — check pool liquidity.");
 
       const result = await withdrawLiquidity(marketAddress, shares, chainId);
+      if (userAddress) {
+        recordTx({
+          type: "LIQUIDITY_WITHDRAWN",
+          txHash: result.txHash,
+          chainId: chainId ?? 0,
+          address: userAddress,
+          summary: `Withdrew ${amount} ${lendingSymbol}`,
+          details: {
+            market: marketAddress,
+            amount,
+            txHash: result.txHash,
+            message: `Withdrew ${amount} ${lendingSymbol}`,
+          },
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["lpPositions"] });
+      void queryClient.invalidateQueries({ queryKey: ["markets"] });
       toast.success("Withdrawal confirmed!", {
         id: toastId,
         description: `Tx: ${result.txHash.slice(0, 10)}...`,

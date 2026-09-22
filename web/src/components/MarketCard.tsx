@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { TokenIcon } from "@/components/tokens/TokenPreview";
@@ -50,6 +51,7 @@ interface MarketCardProps {
 }
 
 export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, className }: MarketCardProps) {
+  const router = useRouter();
   const id: AssetIdentity | null = identity || null;
   const displaySymbol = id?.displaySymbol || (market.collateralAsset ? market.collateralAsset.slice(2, 6).toUpperCase() : market.marketAddress.slice(2, 6).toUpperCase());
   const displayName = id?.name || "Unknown Asset";
@@ -193,17 +195,26 @@ export function MarketCard({ market, identity, oracleLabel, loanAssetSymbol, cla
         </div>
       )}
 
-      <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs">
         <span className="text-muted-foreground">Duration · {formatDuration(market.durationSeconds)}</span>
-        {market.owner ? (
-          <span className="inline-flex items-center gap-1 text-muted-foreground" title={`Created by ${market.owner}`}>
-            <span className="h-1.5 w-1.5 rounded-full bg-ice-400" />
-            {shortAddr(market.owner)}
+        <div className="flex items-center gap-2">
+          {market.active ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push(`/earn?market=${market.marketAddress}`);
+              }}
+              className="rounded-xl bg-ice-300 px-3 py-1.5 text-[11px] font-bold text-slate-900 transition-colors hover:bg-ice-400 dark:bg-ice-400 dark:hover:bg-ice-300"
+            >
+              Supply
+            </button>
+          ) : null}
+          <span className="inline-flex items-center gap-1 font-medium text-foreground transition-transform group-hover:translate-x-0.5">
+            View pool <span aria-hidden>→</span>
           </span>
-        ) : null}
-        <span className="inline-flex items-center gap-1 font-medium text-foreground transition-transform group-hover:translate-x-0.5">
-          View pool <span aria-hidden>→</span>
-        </span>
+        </div>
       </div>
 
     </Link>

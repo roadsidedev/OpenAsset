@@ -214,7 +214,7 @@ function AccountContent() {
     { enabled: !!address }
   );
   const { data: marketsData, isLoading: marketsLoading } = useMarkets(0, 100);
-  const { data: activityData, isLoading: activityLoading } = useActivity(address);
+  const { events: activityEvents, isLoading: activityLoading } = useActivity(address);
   const { risk: accountRisk, isLoading: riskLoading } = useAccountRisk(address);
 
   const activeLoans: any[] = loansData?.loans || [];
@@ -475,20 +475,22 @@ function AccountContent() {
                   </div>
                 ))}
               </div>
-            ) : !activityData?.events?.length ? (
+            ) : !activityEvents?.length ? (
               <div className="text-center py-12 text-muted-foreground text-xs">
                 <ClockCounterClockwise className="h-12 w-12 mx-auto mb-4 opacity-40" />
                 <p>Transaction history will appear here once you have activity.</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {activityData.events.map((event, idx) => {
+                {activityEvents.map((event, idx) => {
                   const icon = event.type === "MARKET_CREATED"
                     ? <StackSimple className="h-4 w-4 text-emerald-500" />
                     : event.type.startsWith("LOAN_")
                     ? <ArrowDownLeft className="h-4 w-4 text-blue-500" />
                     : event.type === "LIQUIDITY_DEPOSITED"
                     ? <TrendUp className="h-4 w-4 text-ice-500" />
+                    : event.type === "LIQUIDITY_WITHDRAWN"
+                    ? <ArrowUpRight className="h-4 w-4 text-amber-500" />
                     : <Shield className="h-4 w-4 text-amber-500" />;
 
                   const label = event.type === "MARKET_CREATED"
@@ -502,7 +504,9 @@ function AccountContent() {
                     : event.type === "LOAN_LIQUIDATED"
                     ? "Loan Liquidated"
                     : event.type === "LIQUIDITY_DEPOSITED"
-                    ? "Liquidity Deposited"
+                    ? "Supplied liquidity"
+                    : event.type === "LIQUIDITY_WITHDRAWN"
+                    ? "Withdrew liquidity"
                     : event.type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
 
                   const txHash = event.details?.txHash || event.details?.transactionHash || event.details?.tx || "";
@@ -512,8 +516,8 @@ function AccountContent() {
                     ? `Market ${event.details.market?.slice(0, 8)}...`
                     : event.type.startsWith("LOAN_")
                     ? `Loan #${event.details.loanId} on ${event.details.market?.slice(0, 8)}...`
-                    : event.type === "LIQUIDITY_DEPOSITED"
-                    ? `Market ${event.details.market?.slice(0, 8)}...`
+                    : event.type === "LIQUIDITY_DEPOSITED" || event.type === "LIQUIDITY_WITHDRAWN"
+                    ? `${event.details.amount ? event.details.amount + " · " : ""}Market ${event.details.market?.slice(0, 8)}...`
                     : event.details.message || "";
 
                   return (

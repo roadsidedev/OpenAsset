@@ -7,6 +7,9 @@ import { useAccount } from "wagmi";
 import { useSession } from "@/context/SessionContext";
 import { useLoans } from "@/hooks/useLoans";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useLpPositions } from "@/hooks/useLpPositions";
+import { DepositModal } from "@/components/modals/DepositModal";
+import { WithdrawModal } from "@/components/modals/WithdrawModal";
 import { useAccountRisk } from "@/hooks/useAccountRisk";
 import { LOAN_STATUS } from "@/lib/contractAbis";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,13 +18,14 @@ import { TokenIcon } from "@/components/tokens/TokenPreview";
 import { isB20Token, getB20Info } from "@/lib/b20";
 import { resolveTokenLogo } from "@/lib/brandLogos";
 import { useTokenMetadata } from "@/lib/tokenMetadata";
-import { isAddress } from "viem";
+import { isAddress, formatUnits } from "viem";
 import {
   Wallet,
   Briefcase,
   StackSimple,
   Clock,
   ArrowSquareOut,
+  Coins,
 } from "@phosphor-icons/react";
 
 function formatAmount(value: string | undefined, decimals = 18): string {
@@ -69,7 +73,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           <Wallet className="h-12 w-12 text-muted-foreground mx-auto" />
             <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
           <p className="text-muted-foreground text-sm max-w-md">
-            Connect your wallet to view your active loans and markets you&apos;ve created.
+            Connect your wallet to view your loans, supplied liquidity, and markets you&apos;ve created.
           </p>
           <button
             type="button"
@@ -86,7 +90,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-type PositionsTab = "loans" | "markets";
+type PositionsTab = "loans" | "supplied" | "markets";
 
 export default function PortfolioPage() {
   return (
@@ -107,6 +111,10 @@ function PortfolioContent() {
     { enabled: borrowerQueryEnabled }
   );
   const { data: marketsData, isLoading: marketsLoading } = useMarkets(0, 100);
+  const { positions: lpPositions, totalClaimable, isLoading: lpLoading } = useLpPositions(address);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [selectedMarket, setSelectedMarket] = useState<any>(null);
 
   const activeLoans: any[] = loansData?.loans || [];
   const allMarkets: any[] = marketsData?.markets || [];
@@ -122,7 +130,7 @@ function PortfolioContent() {
           <div>
             <h1 className="font-display text-[28px] leading-none tracking-[-0.025em] text-foreground md:text-[30px]">Portfolio</h1>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Track active debt positions and markets you have launched
+              Track loans, supplied liquidity, and markets you have launched
             </p>
           </div>
 
@@ -137,7 +145,18 @@ function PortfolioContent() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              My loans
+              Borrowed
+            </button>
+            <button
+              onClick={() => setTab("supplied")}
+              className={cn(
+                "rounded-full px-4 py-1.5 transition-colors",
+                tab === "supplied"
+                  ? "bg-foreground text-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Supplied
             </button>
             <button
               onClick={() => setTab("markets")}
@@ -148,7 +167,7 @@ function PortfolioContent() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              My markets
+              Created
             </button>
           </div>
         </div>
@@ -294,6 +313,128 @@ function PortfolioContent() {
           </div>
         )}
 
+        {/* Tab: Supplied liquidity */}
+        {tab === "supplied" && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              <div className="p-5 rounded-2xl border border-border bg-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <Coins className="h-4 w-4 text-ice-500" />
+                  <span className="text-xs text-muted-foreground">Positions</span>
+                </div>
+                <span className="text-xl font-bold text-foreground">
+                  {lpLoading ? <Skeleton className="h-7 w-12 bg-muted inline-block" /> : lpPositions.length}
+                </span>
+              </div>
+              <div className="p-5 rounded-2xl border border-border bg-card">
+                <div className="flex items-center gap-2 mb-2">
+                  <Briefcase className="h-4 w-4 text-ice-500" />
+                  <span className="text-xs text-muted-foreground">Total supplied</span>
+                </div>
+                <span className="text-xl font-bold text-foreground">
+                  {lpLoading ? (
+                    <Skeleton className="h-7 w-24 bg-muted inline-block" />
+                  ) : (
+                    `${Number(formatUnits(totalClaimable, 6)).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC`
+                  )}
+                </span>
+              </div>
+              <div className="p-5 rounded-2xl border border-border bg-card col-span-2 md:col-span-1">
+                <span className="text-xs text-muted-foreground block mb-2">Earn more</span>
+                <Link href="/earn" className="text-sm font-semibold text-ice-600 hover:underline dark:text-ice-300">
+                  Browse Earn markets →
+                </Link>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-border bg-card">
+              <div className="border-b border-border px-6 py-4">
+                <h3 className="font-bold text-sm">Supplied liquidity</h3>
+              </div>
+              <div className="p-6">
+                {lpLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-24 rounded-2xl bg-muted" />
+                    ))}
+                  </div>
+                ) : lpPositions.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <Coins className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground text-sm mb-2">No supplied positions yet.</p>
+                    <Link href="/earn" className="text-sm text-ice-500 hover:text-ice-600 font-medium">
+                      Supply liquidity on Earn
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {lpPositions.map((pos) => {
+                      const m = pos.market;
+                      const isB20 = isB20Token(m.collateralAsset, m.chainId);
+                      const b20 = isB20 ? getB20Info(m.collateralAsset, m.chainId) : undefined;
+                      const sym = b20?.symbol || m.collateralAsset?.slice(0, 6) || m.marketAddress.slice(0, 6);
+                      const claimable = Number(formatUnits(pos.claimable, 6));
+                      const sharePct = (pos.shareOfPoolBps / 100).toFixed(2);
+                      return (
+                        <div
+                          key={m.marketAddress}
+                          className="flex flex-col gap-4 rounded-2xl border border-border bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex items-center gap-4">
+                            <TokenIcon symbol={sym} logoUri={b20 ? null : undefined} className="h-10 w-10 shrink-0" />
+                            <div>
+                              <p className="font-medium text-foreground">
+                                {b20 ? `${b20.symbol} Market` : `Market ${m.marketAddress.slice(0, 8)}…`}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {sharePct}% of pool · APR {(m.aprBps / 100).toFixed(1)}%
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-left sm:text-right">
+                            <p className="font-medium text-foreground">
+                              {claimable.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
+                            </p>
+                            <p className="text-sm text-muted-foreground">Claimable value</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMarket(m);
+                                setDepositOpen(true);
+                              }}
+                              className="inline-flex items-center justify-center rounded-xl bg-ice-300 dark:bg-ice-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-ice-400 dark:hover:bg-ice-300"
+                            >
+                              Supply more
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMarket(m);
+                                setWithdrawOpen(true);
+                              }}
+                              className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+                            >
+                              Withdraw
+                            </button>
+                            <Link
+                              href={`/markets/${m.marketAddress}`}
+                              className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+                            >
+                              View <ArrowSquareOut className="h-3.5 w-3.5" />
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tab: My Created Markets */}
         {tab === "markets" && (
           <div className="space-y-4">
@@ -389,6 +530,24 @@ function PortfolioContent() {
             </div>
           </div>
         )}
+        <DepositModal
+          open={depositOpen}
+          onOpenChange={setDepositOpen}
+          marketAddress={selectedMarket?.marketAddress}
+          chainId={selectedMarket?.chainId}
+          lendingAsset={selectedMarket?.loanAsset}
+          lendingSymbol="USDC"
+          lendingDecimals={6}
+        />
+        <WithdrawModal
+          open={withdrawOpen}
+          onOpenChange={setWithdrawOpen}
+          marketAddress={selectedMarket?.marketAddress}
+          chainId={selectedMarket?.chainId}
+          lendingAsset={selectedMarket?.loanAsset}
+          lendingSymbol="USDC"
+          lendingDecimals={6}
+        />
       </main>
     </div>
   );

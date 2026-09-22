@@ -17,6 +17,8 @@ import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { useMarket, useMarkets, type Market } from "@/hooks/useMarkets";
 import { MARKET_STATUS } from "@/lib/contractAbis";
 import { cn } from "@/lib/utils";
+import { useTxTrail } from "@/store/useTxTrail";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface DepositModalProps {
   open: boolean;
@@ -59,6 +61,8 @@ export function DepositModal({
   const routeMarketId = (params?.marketId as string) || "";
   const { address: userAddress } = useAccount();
   const { depositLiquidity, isLoading } = useContractInteraction();
+  const recordTx = useTxTrail((s) => s.record);
+  const queryClient = useQueryClient();
   const { data: marketsData } = useMarkets(0, 100);
   const allMarkets: Market[] = marketsData?.markets || [];
 
@@ -121,6 +125,23 @@ export function DepositModal({
       const parsed = parseUnits(amount, decimals);
       if (parsed <= 0n) throw new Error("Amount must be greater than zero.");
       const result = await depositLiquidity(marketAddress, lendingAsset, parsed, chainId);
+      if (userAddress) {
+        recordTx({
+          type: "LIQUIDITY_DEPOSITED",
+          txHash: result.txHash,
+          chainId: chainId ?? 0,
+          address: userAddress,
+          summary: `Supplied ${amount} ${lendingSymbol}`,
+          details: {
+            market: marketAddress,
+            amount,
+            txHash: result.txHash,
+            message: `Supplied ${amount} ${lendingSymbol}`,
+          },
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["lpPositions"] });
+      void queryClient.invalidateQueries({ queryKey: ["markets"] });
       toast.success("Deposit confirmed!", {
         id: toastId,
         description: `Tx: ${result.txHash.slice(0, 10)}...`,
