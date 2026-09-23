@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Navbar } from "@/components/Navbar";
 import { CreateMarketFAB } from "@/components/CreateMarketFAB";
+import { TxTrailBridge } from "@/components/TxTrailBridge";
 import Link from "next/link";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* Invalidates all tx-derived queries the moment a confirmation is
+          recorded, wherever the tx happened in the app. */}
+      <TxTrailBridge />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-2xl focus:bg-ice-300 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-slate-900"

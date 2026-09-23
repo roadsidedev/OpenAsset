@@ -10,6 +10,7 @@ import { useSession } from '@/context/SessionContext';
 import { useLoan } from '@/hooks/useLoans';
 import { useMarket } from '@/hooks/useMarkets';
 import { useChainOrchestrator } from '@/hooks/useChainOrchestrator';
+import { useTxTrail } from '@/store/useTxTrail';
 import { createChainClient, DEFAULT_CHAIN_ID } from '@/lib/chains';
 import { getChainLabel } from '@/lib/chainLabels';
 import { LENDING_MARKET_ABI, ERC20_APPROVE_ABI, LOAN_STATUS } from '@/lib/contractAbis';
@@ -74,6 +75,7 @@ export default function RepayPage() {
   const [partialAmount, setPartialAmount] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const recordTx = useTxTrail((s) => s.record);
 
   // Live loan state + market config from the chain
   useEffect(() => {
@@ -190,6 +192,27 @@ export default function RepayPage() {
         args: amount === null ? [contractLoanId] : [contractLoanId, amount],
       });
       const receipt = await chainClient.waitForTransactionReceipt({ hash });
+      // Record in the local trail so the Activity tab shows it instantly and
+      // the TxTrail bridge invalidates loans/risk/deposits across the app.
+      if (userAddress) {
+        const summary =
+          amount === null
+            ? 'Repaid loan in full'
+            : `Repaid ${formatUnits(amount, lendingDecimals)} toward debt`;
+        recordTx({
+          type: 'LOAN_REPAID',
+          txHash: receipt.transactionHash,
+          chainId: marketChainId ?? 0,
+          address: userAddress,
+          summary,
+          details: {
+            market: marketAddress,
+            loanId: contractLoanId.toString(),
+            txHash: receipt.transactionHash,
+            message: summary,
+          },
+        });
+      }
       toast.success('Loan repayment confirmed!', {
         id: toastId,
         description: `Tx: ${receipt.transactionHash.slice(0, 14)}...`,
@@ -202,7 +225,7 @@ export default function RepayPage() {
     } finally {
       setIsBusy(false);
     }
-  }, [walletClient, chainClient, marketChainId, ensureChain, marketAddress, contractLoanId, lendingAsset, allowance, totalDebt, refetchLoan]);
+  }, [walletClient, chainClient, marketChainId, ensureChain, marketAddress, contractLoanId, lendingAsset, allowance, totalDebt, refetchLoan, userAddress, lendingDecimals, recordTx]);
 
   const handlePartial = useCallback(() => {
     if (!partialAmount || !lendingDecimals) return;

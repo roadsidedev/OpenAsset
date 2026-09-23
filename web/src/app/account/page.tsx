@@ -34,6 +34,7 @@ import {
   Pulse,
   Key,
   CheckCircle,
+  ChartLineUp,
 } from "@phosphor-icons/react";
 
 function formatAmount(value: string | undefined, decimals = 18): string {
@@ -203,7 +204,7 @@ function AccountContent() {
   const { address } = useAccount();
   const router = useRouter();
   const identity = useUserIdentity();
-  const { positions: lpPositions, isLoading: lpPositionsLoading } = useLpPositions(address);
+  const { positions: lpPositions, totalClaimable, isLoading: lpPositionsLoading } = useLpPositions(address);
 
   // Detect embedded wallet (Privy-managed) vs external wallet (MetaMask, etc.)
   const isEmbeddedWallet = user?.wallet?.walletClientType === "privy" || user?.wallet?.connectorType === "embedded";
@@ -240,7 +241,23 @@ function AccountContent() {
     : [];
 
   const totalBorrowed = activeLoans.reduce((s: bigint, l: any) => s + BigInt(l.principal || 0), BigInt(0));
-  const totalLiquidity = myMarkets.reduce((s: bigint, m: any) => s + BigInt(m.liquidity?.available || 0), BigInt(0));
+
+  // Supply-side stats from LP positions (realtime: 30s refetch + TxTrail
+  // invalidation after every deposit/withdraw/borrow confirmation).
+  // Active Deposits = the user's own supplied value (claimable, includes
+  // accrued interest) — NOT the available liquidity of markets they created.
+  const supplyApyPct = (() => {
+    if (lpPositions.length === 0) return 0;
+    const weights = lpPositions.map((p) => Number(p.claimable) / 1e6);
+    const anyWeight = weights.some((w) => w > 0);
+    const totalW = anyWeight ? weights.reduce((a, b) => a + b, 0) : lpPositions.length;
+    if (totalW <= 0) return 0;
+    const weighted = lpPositions.reduce((acc, p, i) => {
+      const w = anyWeight ? weights[i] : 1;
+      return acc + ((p.market.aprBps || 0) / 100) * w;
+    }, 0);
+    return weighted / totalW;
+  })();
 
   const SUB_TABS: { id: SubTab; label: string; icon: any }[] = [
     { id: "overview", label: "Overview", icon: Pulse },
@@ -342,7 +359,7 @@ function AccountContent() {
         </div>
 
         {/* Stats Bar */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
           <div className="p-5 rounded-2xl border border-border bg-card">
             <div className="flex items-center gap-2 mb-2">
               <TrendUp className="h-4 w-4 text-ice-500" />
@@ -351,7 +368,7 @@ function AccountContent() {
             <span className="text-xl font-bold text-foreground">
               {loansLoading || marketsLoading ? (
                 <Skeleton className="h-7 w-28 bg-muted inline-block" />
-              ) : `$${formatAmount(totalBorrowed.toString())}`}
+              ) : `$${formatAmount(totalBorrowed.toString(), 6)}`}
             </span>
           </div>
           <div className="p-5 rounded-2xl border border-border bg-card">
@@ -360,10 +377,37 @@ function AccountContent() {
               <span className="text-xs text-muted-foreground">Active Deposits</span>
             </div>
             <span className="text-xl font-bold text-foreground">
-              {marketsLoading ? (
+              {lpPositionsLoading ? (
                 <Skeleton className="h-7 w-24 bg-muted inline-block" />
-              ) : `${formatAmount(totalLiquidity.toString())} USDC`}
+              ) : (
+                `${formatAmount(totalClaimable.toString(), 6)} USDC`
+              )}
             </span>
+            {!lpPositionsLoading && lpPositions.length > 0 ? (
+              <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground">
+                across {lpPositions.length} market{lpPositions.length === 1 ? "" : "s"} · updates live
+              </span>
+            ) : null}
+          </div>
+          <div className="p-5 rounded-2xl border border-border bg-card">
+            <div className="flex items-center gap-2 mb-2">
+              <ChartLineUp className="h-4 w-4 text-ice-500" />
+              <span className="text-xs text-muted-foreground">Supply APY</span>
+            </div>
+            <span className="text-xl font-bold text-ice-600 dark:text-ice-300">
+              {lpPositionsLoading ? (
+                <Skeleton className="h-7 w-20 bg-muted inline-block" />
+              ) : lpPositions.length > 0 ? (
+                `+${supplyApyPct.toFixed(2)}%`
+              ) : (
+                "0%"
+              )}
+            </span>
+            {!lpPositionsLoading && lpPositions.length > 0 ? (
+              <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground">
+                weighted by deposit
+              </span>
+            ) : null}
           </div>
           <div className="p-5 rounded-2xl border border-border bg-card">
             <div className="flex items-center gap-2 mb-2">
